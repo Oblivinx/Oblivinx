@@ -1,0 +1,15 @@
+{
+  "name": "oblivinx3x",
+  "version": "0.1.0",
+  "description": "Oblivinx3x — High-Performance Embedded Document Database Engine",
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "cargo build --release -p ovn-neon",
+    "build:debug": "cargo build -p ovn-neon",
+    "test": "node --test test/"
+  },
+  "keywords": ["database", "embedded", "document", "nosql", "mvcc"],
+  "author": "Natz",
+  "license": "MIT"
+}

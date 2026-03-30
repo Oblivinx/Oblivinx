@@ -1,0 +1,33 @@
+[package]
+name = "ovn-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Oblivinx3x core storage engine — Hybrid B+/LSM embedded document database"
+
+[dependencies]
+crc32fast.workspace = true
+lz4_flex.workspace = true
+zstd.workspace = true
+uuid.workspace = true
+bytes.workspace = true
+crossbeam-skiplist.workspace = true
+crossbeam-epoch.workspace = true
+crossbeam-utils.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+memmap2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+rand.workspace = true
+criterion.workspace = true
+env_logger.workspace = true
+
+[[bench]]
+name = "storage_bench"
+harness = false

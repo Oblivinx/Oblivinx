@@ -1,0 +1,16 @@
+[package]
+name = "ovn-neon"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Oblivinx3x Node.js native addon via Neon"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ovn-core = { path = "../ovn-core" }
+neon.workspace = true
+serde_json.workspace = true
+log.workspace = true

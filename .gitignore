@@ -1,0 +1,38 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Node
+node_modules/
+*.node
+packages/oblivinx3x/native/*.node
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# Build artifacts
+/dist/
+*.ovn
+*.ovn-rlog
+*.ovn-wal
+
+# Neon
+# intelegence
+.agents
+.claude
+.cursor
+.windsurf
+.gemini
+.gpt

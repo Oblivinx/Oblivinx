@@ -1,0 +1,50 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ovn-core",
+    "crates/ovn-neon",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Natz"]
+license = "MIT"
+description = "Oblivinx3x — Embedded Document Database Engine"
+
+[workspace.dependencies]
+# Serialization & encoding
+crc32fast = "1.4"
+lz4_flex = "0.11"
+zstd = "0.13"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+bytes = "1.7"
+
+# Concurrency
+crossbeam-skiplist = "0.1"
+crossbeam-epoch = "0.9"
+crossbeam-utils = "0.8"
+parking_lot = "0.12"
+
+# Error handling & logging
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Memory-mapping
+memmap2 = "0.9"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Node.js bindings
+neon = { version = "1", features = ["napi-6"] }
+
+# Testing
+tempfile = "3.12"
+rand = "0.8"
+criterion = "0.5"
