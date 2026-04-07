@@ -43,12 +43,16 @@ pub enum PageType {
     Wal = 0x04,
     /// Free page available for reuse
     Free = 0x05,
+    /// Blob Segment chunk page
+    BlobChunk = 0x06,
+    /// Change Stream Log event record
+    ChangeStreamRecord = 0x07,
     /// Segment directory page
-    SegmentDirectory = 0x06,
+    SegmentDirectory = 0x08,
     /// Metadata page (collection schemas, statistics)
-    Metadata = 0x07,
+    Metadata = 0x09,
     /// Index page (SSTable index blocks)
-    Index = 0x08,
+    Index = 0x0A,
 }
 
 impl PageType {
@@ -60,9 +64,11 @@ impl PageType {
             0x03 => Some(Self::Overflow),
             0x04 => Some(Self::Wal),
             0x05 => Some(Self::Free),
-            0x06 => Some(Self::SegmentDirectory),
-            0x07 => Some(Self::Metadata),
-            0x08 => Some(Self::Index),
+            0x06 => Some(Self::BlobChunk),
+            0x07 => Some(Self::ChangeStreamRecord),
+            0x08 => Some(Self::SegmentDirectory),
+            0x09 => Some(Self::Metadata),
+            0x0A => Some(Self::Index),
             _ => None,
         }
     }

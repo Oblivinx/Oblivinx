@@ -1,6 +1,3 @@
-
-
-
 OBLIVINX3X
 Experimental Embedded Document Database Engine
 
@@ -13,10 +10,10 @@ Technical Architecture Specification
 Designed for: Embedded Systems  •  Serverless  •  Edge Computing  •  Microservices
 
 
-Version 1.0.0 — Architecture Draft
+Version 1.1.0 — Architecture Draft (Updated: MongoDB Feature Integration)
 
 Classification: Internal Technical Reference
- 
+
 Table of Contents
 Table of Contents	2
 Section 1 — Ecosystem Analysis	6
@@ -61,86 +58,43 @@ Section 5 — .OVN Database File Format	20
 5.4 OVN Binary Encoding Format	21
 5.5 Compression	22
 Section 6 — Write Path Micro Process	23
-6.1 Write Pipeline Overview	23
-6.2 Step-by-Step Write Path Detail	23
-Step 1 — Client Request	23
-Step 2 — Query Parsing	23
-Step 3 — Document Validation	23
-Step 4 — MVCC Snapshot and TxID Assignment	24
-Step 5 — OBE Serialization	24
-Step 6 — Write-Ahead Log	24
-Step 7 — MemTable Insert	24
-Step 8 — MemTable Flush (Background)	24
-Step 9 — AHIT Index Update	24
-Step 10 — Compaction (Background)	24
-Step 11 — Client Acknowledgment	25
-6.3 Failure Recovery	25
 Section 7 — Read Path Micro Process	26
-7.1 Read Pipeline Overview	26
-7.2 Query Optimizer — Plan Costing	26
-7.3 MVCC Snapshot Semantics	27
-7.4 Bloom Filter Optimization	27
-7.5 Complexity Analysis	27
 Section 8 — Indexing System	28
 8.1 Primary Document Index	28
 8.2 Secondary Indexes	28
 8.3 Compound Indexes and the Skip-Column Optimization	28
 8.4 Full-Text Index	28
+8.4.1 Fuzzy Matching	29
+8.4.2 Autocomplete Index	29
 8.5 Optional Vector Index (ANN Search)	29
 8.6 AHIT Hot Zone / Cold Zone Promotion	29
-Section 9 — Memory Management	30
-9.1 Buffer Pool	30
-9.2 Working Set Estimator	30
-9.3 MemTable Memory	30
-9.4 AHIT Hot Zone Memory	30
-9.5 Garbage Collection and Version Purging	30
-9.6 Anti-Fragmentation Strategy	31
+8.7 Geospatial Index [NEW]	30
+Section 9 — Memory Management	31
 Section 10 — Concurrency Control	32
 10.1 MVCC Implementation	32
 10.2 Snapshot Isolation	32
 10.3 Optimistic Concurrency Control	32
 10.4 Lock-Free Read Strategy	32
 10.5 Write Conflict Resolution	33
+10.6 Retryable Writes [NEW]	33
 Section 11 — Background Systems	34
-11.1 Background Worker Registry	34
-11.2 Compaction Strategy	34
-11.3 Scheduling and Throttling	35
 Section 12 — Optional Distributed Extension	36
-12.1 Replication Model	36
-12.2 Leader Election	36
-12.3 Distributed Query Execution	36
-12.4 Sharding Strategy	36
 Section 13 — Library API Design	37
 13.1 Database Lifecycle	37
 13.2 Collection Management	37
 13.3 Document CRUD Operations	38
 13.4 Indexing API	39
-13.5 Transactions	39
+13.5 Transactions	40
 13.6 Aggregation Pipeline	40
-Section 14 — Performance Expectations	41
-14.1 Target Hardware Baseline	41
-14.2 Throughput Estimates	41
-14.3 Storage Efficiency	41
-14.4 Memory Usage	42
-Section 15 — Production Readiness	43
-15.1 Crash Recovery	43
-15.2 Backup Systems	43
-15.3 Durability Guarantees	43
-15.4 Observability	44
-Section 16 — Implementation Roadmap	45
-Phase 1 — Storage Engine Prototype (Weeks 1–8)	45
-Phase 2 — Document Encoding (Weeks 9–14)	45
-Phase 3 — Indexing Engine (Weeks 15–22)	45
-Phase 4 — Query Engine (Weeks 23–30)	46
-Phase 5 — Concurrency Control (Weeks 31–38)	46
-Phase 6 — Performance Optimization (Weeks 39–46)	46
-Phase 7 — Developer API and Production Hardening (Weeks 47–56)	47
-Phase Summary	47
-Appendix A — Glossary	48
-Appendix B — .OVN File Format Quick Reference	49
-Appendix C — Supported MQL Operators	50
+13.7 Change Streams [NEW]	42
+Section 14 — Performance Expectations	43
+Section 15 — Production Readiness	44
+Section 16 — Implementation Roadmap	46
+Appendix A — Glossary	49
+Appendix B — .OVN File Format Quick Reference	50
+Appendix C — Supported MQL Operators	51
 
- 
+
 Section 1 — Ecosystem Analysis
 This section provides a comprehensive architectural analysis of modern database systems across all major paradigms. Each system is examined through the lens of its storage engine, indexing design, query execution, transaction model, and concurrency strategy. This analysis forms the empirical foundation from which the Oblivinx3x architecture is derived.
 
@@ -163,6 +117,10 @@ Strengths:
 •	Rich aggregation pipeline for complex analytics.
 •	Atlas cloud integration with horizontal scaling via sharding.
 •	Change streams for real-time event processing.
+•	GridFS for storing files larger than the 16MB document limit.
+•	Time-series collections with automatic bucketing for IoT and metrics workloads.
+•	Retryable writes for transparent driver-level operation retry.
+•	Geospatial 2dsphere indexes with full GeoJSON support.
 Weaknesses:
 •	High memory footprint — WiredTiger uses a 50% RAM cache by default.
 •	Not suitable for embedded deployment due to system dependency and large binary size (~300MB+).
@@ -363,7 +321,7 @@ SQLite	Relational	B-tree	Yes	No	Moderate
 LevelDB	Key-Value	LSM-tree	Yes	No	Low
 Realm	Object	Memory-mapped	Yes	Partial	Low
 
- 
+
 Section 2 — Gap Discovery
 After exhaustive analysis of the systems described in Section 1, we identify five fundamental architectural gaps that no current system fully resolves. These gaps define the opportunity space for Oblivinx3x.
 
@@ -407,7 +365,7 @@ Impact:
 •	RocksDB-based systems require significant additional engineering for transactions.
 •	No lightweight system provides both LSM write performance and ACID semantics.
 
- 
+
 Section 3 — Design Goals for Oblivinx3x
 Based on the ecosystem gaps identified in Section 2, the following design goals define the requirements for the Oblivinx3x database engine. These goals are non-negotiable and drive every architectural decision in the subsequent sections.
 
@@ -423,23 +381,33 @@ G-08	Sub-10MB library binary	High	SQLite
 G-09	Simple developer API similar to MongoDB MQL	High	MongoDB
 G-10	Concurrent reads with single-writer WAL	High	SQLite WAL mode
 G-11	Custom .ovn file format with compression	Medium	Novel
-G-12	Optional distributed extension (replication)	Low	CouchDB, Realm Sync
+G-12	Change streams for real-time event notification	Medium	MongoDB
+G-13	Large binary object storage (GridFS equivalent)	Medium	MongoDB GridFS
+G-14	Time-series collections with automatic bucketing	Medium	MongoDB Time-Series
+G-15	Geospatial indexing (2dsphere / R-tree)	Medium	MongoDB
+G-16	TTL indexes and capped collections	Medium	MongoDB
+G-17	Retryable writes with session-level idempotency	Medium	MongoDB
+G-18	Optional distributed extension (replication)	Low	CouchDB, Realm Sync
 
 3.1 Target Deployment Environments
 Oblivinx3x is designed to operate efficiently across the following deployment contexts, each with distinct resource and operational constraints:
 
 Backend APIs (Node.js, Go, Python, Rust):
 Loaded as a native library module. Used as a local embedded database for user-specific data, session stores, request caching, and feature flags. Must handle thousands of concurrent read operations per second with single-writer serialization.
+
 Edge Computing (Cloudflare Workers, Fastly Compute@Edge):
 Runs in WASM-compatible sandboxes with 128MB memory limits. The .ovn file is read from object storage (R2, S3) and opened in read-only mode for query resolution. Must support cold-start initialization in under 5ms.
+
 Microservices:
 Each microservice maintains its own .ovn file as a local cache or primary store for its bounded context. Supports sidecar deployment patterns where the .ovn file is a shared volume.
+
 Serverless Functions (AWS Lambda, Google Cloud Functions):
 Packaged within the function deployment bundle. The .ovn file is provisioned from a mounted EFS volume or object storage. Read-heavy workloads dominate; writes occur only on cold-start initialization.
+
 Embedded Systems (ARM Cortex-M4+, RISC-V):
 Cross-compiled with a minimal feature set (no replication, no full-text search). The .ovn file is stored on flash storage. Memory usage must not exceed 2MB at runtime.
 
- 
+
 Section 4 — Oblivinx3x Core Architecture
 Oblivinx3x is organized into eight layered subsystems. Each layer has a single responsibility and communicates with adjacent layers through well-defined interfaces. The architecture is deliberately layered to enable selective compilation — embedded targets can strip distributed, full-text, and vector layers.
 
@@ -467,7 +435,8 @@ Oblivinx3x is organized into eight layered subsystems. Each layer has a single r
 │   (OS File API, mmap, Direct I/O, WASM FS shim)    │
 ├─────────────────────────────────────────────────────┤
 │              Background Worker Layer                │
-│   (Compaction, GC, Index Optimizer, WAL Cleanup)   │
+│   (Compaction, GC, Index Optimizer, WAL Cleanup,   │
+│    Change Stream Emitter, TTL Reaper)              │
 └─────────────────────────────────────────────────────┘
 
 4.2 The Adaptive Hybrid Index Tree (AHIT) — Architectural Innovation
@@ -482,7 +451,11 @@ The storage engine implements a Hybrid B+/LSM architecture. Writes are directed 
 This hybrid design provides LSM-level write throughput while preserving B+ tree read efficiency for the stable, compacted dataset. The transition from LSM intake to B+ permanent storage is transparent to upper layers.
 
 4.4 Document Layer
-The document layer implements the OVN Binary Encoding Format (described in detail in Section 5). It handles document parsing, field extraction, type validation, and the dot-notation path resolver used by the query engine for nested field access. The schema validator enforces optional collection-level JSON Schema rules without requiring them.
+The document layer implements the OVN Binary Encoding Format (described in detail in Section 5). It handles document parsing, field extraction, type validation, and the dot-notation path resolver used by the query engine for nested field access.
+The schema validator enforces optional collection-level JSON Schema rules without requiring them. The validator behavior is controlled by two properties set at collection creation time:
+- validationLevel: Controls which documents are validated. 'strict' (default) validates all inserts and updates. 'moderate' validates inserts and updates to documents that already satisfy the current validator; existing non-conforming documents are not re-validated.
+- validationAction: Controls what happens when a document fails validation. 'error' (default) rejects the write and returns an error to the client. 'warn' allows the write to proceed but logs a validation warning to the observability subsystem.
+These two properties mirror MongoDB's validator behavior and enable incremental schema enforcement on existing collections without requiring a costly migration step.
 
 4.5 MVCC Transaction Layer
 Oblivinx3x implements Multi-Version Concurrency Control (MVCC) at the document level. Each document version is stamped with a transaction ID (TxID). Readers see a consistent snapshot defined by the lowest active TxID at the time the read begins. Writers create new document versions without overwriting existing versions. A garbage collector (GC) thread purges versions no longer visible to any active snapshot.
@@ -490,7 +463,7 @@ Oblivinx3x implements Multi-Version Concurrency Control (MVCC) at the document l
 4.6 Query Engine Layer
 The query engine implements a MongoDB Query Language (MQL)-compatible subset with Oblivinx-specific extensions. The pipeline is: Lexer → Parser → AST → Logical Plan → Physical Plan → Executor. The optimizer applies three classes of transformations: predicate pushdown (filters applied before projection), index selection (substitutes collection scans with index scans), and sort merging (eliminates redundant sorts on indexed fields).
 
- 
+
 Section 5 — .OVN Database File Format
 The .ovn file format is the foundational storage primitive of Oblivinx3x. It is a single-file, page-oriented, self-describing binary format designed for durability, compactness, and efficient random access. All integers are stored in little-endian byte order. All string values in headers and metadata are UTF-8 encoded.
 
@@ -499,7 +472,7 @@ Offset   Size   Field
 ───────────────────────────────────────────────
 0x0000    4     Magic Number: 0x4F564E58 ('OVNX')
 0x0004    2     Format Version Major (e.g., 0x0001)
-0x0006    2     Format Version Minor (e.g., 0x0000)
+0x0006    2     Format Version Minor (e.g., 0x0001)
 0x0008    4     Page Size in bytes (default 4096)
 0x000C    8     Total file size in bytes
 0x0014    8     Root Page Number of Primary B+ Tree
@@ -508,7 +481,8 @@ Offset   Size   Field
 0x002C    8     WAL Segment Size in bytes
 0x0034    4     Number of collections
 0x0038    4     Checksum (CRC32 of bytes 0x0000-0x0034)
-0x003C    4     Flags (Bit 0: WAL active, Bit 1: Encrypted, Bit 2: Compressed)
+0x003C    4     Flags (Bit 0: WAL active, Bit 1: Encrypted, Bit 2: Compressed,
+                       Bit 3: Has Blob Segment, Bit 4: Has Change Stream Log)
 0x0040    8     Creation timestamp (Unix epoch, milliseconds)
 0x0048    8     Last checkpoint timestamp
 0x0050    16    Database UUID (128-bit random)
@@ -517,7 +491,7 @@ Offset   Size   Field
 0x0FF0    16    Shadow copy of magic + version + page size (corruption detection)
 
 5.2 Segment Layout
-The .ovn file is divided into four segment types. Segment boundaries are page-aligned. The Segment Directory resides at a known offset (Page 1) and maps segment type codes to page ranges.
+The .ovn file is divided into segment types. Segment boundaries are page-aligned. The Segment Directory resides at a known offset (Page 1) and maps segment type codes to page ranges.
 
 Segment Type	Code	Contents	Starting Page
 Header Segment	0x01	File header, database metadata, collection registry	0
@@ -525,13 +499,22 @@ Data Segment	0x02	Document pages, overflow pages	2
 Index Segment	0x03	B+ tree index pages, SSTable index blocks	Dynamic
 WAL Segment	0x04	Write-ahead log records, transaction journal	Dynamic
 Metadata Segment	0x05	Collection schemas, statistics, version history	Dynamic
+Blob Segment	0x06	Binary large objects > 16MB, chunked at 255KB boundaries	Dynamic
+Change Stream Log	0x07	Ordered change event records for active stream subscribers	Dynamic
+
+Blob Segment (0x06) Detail:
+The Blob Segment implements GridFS-equivalent storage for binary objects exceeding the default 16MB document size limit. Large binaries are split into 255KB chunks, each stored as an individual page sequence. A Blob Directory B+ tree (stored within the Blob Segment) maps blob_id to chunk page ranges. Blobs are referenced from documents via a special OBE type tag (0x0F — BlobRef), which stores the blob_id and total size. Blob writes follow the same WAL path as documents for durability. Compression (LZ4 or zstd) is applied per-chunk and configured independently from document compression.
+
+Change Stream Log (0x07) Detail:
+The Change Stream Log is an append-only circular buffer of change event records. Each record stores: [8-byte TxID] [4-byte collection ID] [1-byte operation type: insert/update/replace/delete/drop] [16-byte document ID] [varint pre-image length] [pre-image OBE bytes] [varint post-image length] [post-image OBE bytes]. The log has a configurable maximum size (default 64MB). When the log is full, the oldest records are overwritten. Subscribers that fall behind the log tail receive a 'CHANGE_STREAM_INVALIDATE' event and must re-establish their subscription from a fresh snapshot.
 
 5.3 Page Layout
 Each page is exactly [page_size] bytes (default 4096 bytes). Every page begins with a standard 32-byte page header followed by a type-specific payload.
 
 Page Header (32 bytes):
   Offset  Size  Field
-  0x00     4    Page Type (0x01=Leaf, 0x02=Interior, 0x03=Overflow, 0x04=WAL, 0x05=Free)
+  0x00     4    Page Type (0x01=Leaf, 0x02=Interior, 0x03=Overflow, 0x04=WAL,
+                           0x05=Free, 0x06=BlobChunk, 0x07=ChangeStreamRecord)
   0x04     8    Page Number (0-indexed)
   0x0C     8    Transaction ID that last modified this page
   0x14     2    Number of document slots (for leaf pages)
@@ -583,6 +566,9 @@ Tag	Type	Encoding
 0x0C	ObjectId	12 bytes (4-byte time + 5-byte machine + 3-byte counter)
 0x0D	Decimal128	16 bytes IEEE 754 decimal128
 0x0E	Varint	1-9 bytes LEB128 encoded integer
+0x0F	BlobRef	16-byte blob_id + 8-byte total_size (references Blob Segment)
+0x10	GeoPoint	16 bytes (8-byte latitude + 8-byte longitude, IEEE 754 float64)
+0x11	GeoJSON	varint length + GeoJSON bytes (Point/LineString/Polygon/etc.)
 
 5.5 Compression
 Oblivinx3x supports two levels of compression, both optional and configured per-collection:
@@ -591,7 +577,7 @@ Entire pages (excluding the 32-byte header) are compressed using LZ4 before bein
 Document-level compression:
 Individual documents exceeding 512 bytes are optionally compressed using Zstandard (zstd) with a shared per-collection dictionary trained on sample documents. The shared dictionary dramatically improves compression ratio for structurally similar documents (e.g., all user records). The dictionary is stored in the Metadata Segment and loaded into memory on collection open.
 
- 
+
 Section 6 — Write Path Micro Process
 The write path in Oblivinx3x is designed to minimize latency for the client while maintaining ACID guarantees. The path is non-blocking for the client thread beyond the WAL flush, with all heavy I/O work delegated to background threads.
 
@@ -614,36 +600,41 @@ The write path in Oblivinx3x is designed to minimize latency for the client whil
        │                                        ──────→ [8] MemTable Flush (→ L0 SSTable)
   [9] AHIT Index Update (Hot Zone)
        │                                        ──────→ [10] Compaction (L0→Permanent B+ Tree)
-  [11] Return Acknowledgment to Client
+  [11] Return Acknowledgment to Client          ──────→ [12] Change Stream Emitter (async)
+                                                ──────→ [13] TTL Reaper check (timer)
 
 6.2 Step-by-Step Write Path Detail
 Step 1 — Client Request
 The client calls db.insert(), db.update(), or db.delete() via the JavaScript/FFI API. The call marshals the document into the OVN API request format and submits it to the Engine's write queue. The write queue is a lock-free MPSC (multi-producer, single-consumer) queue to prevent thundering herd problems when multiple goroutines or threads submit writes concurrently.
 Step 2 — Query Parsing
-The query parser tokenizes and parses the MQL filter and update operator expressions. For insert operations, parsing validates the document structure. For updates, the parser extracts the filter predicate and the update operators ($set, $inc, $push, $unset, etc.) into an AST. Parsing is O(N) in the document size and is bounded by a configurable maximum document size (default 16MB, minimum 4KB).
+The query parser tokenizes and parses the MQL filter and update operator expressions. For insert operations, parsing validates the document structure. For updates, the parser extracts the filter predicate and the update operators ($set, $inc, $push, $unset, etc.) into an AST. Parsing is O(N) in the document size and is bounded by a configurable maximum document size (default 16MB, minimum 4KB). Documents exceeding 16MB must use the BlobRef type (Section 5.2, Blob Segment) for large binary fields.
 Step 3 — Document Validation
-If the collection has an associated JSON Schema (set via db.setValidator()), the document is validated against the schema using a streaming JSON Schema validator. Validation errors immediately return a structured error to the client without advancing to the write path. Schema validation is optional and has zero overhead when not configured.
+If the collection has an associated JSON Schema (set via db.setValidator()), the document is validated against the schema using a streaming JSON Schema validator. The behavior on validation failure is controlled by the collection's validationAction setting: 'error' rejects the write; 'warn' allows the write and logs the violation. The validationLevel setting controls whether existing documents that do not conform to the current schema are re-validated on update. Schema validation is optional and has zero overhead when not configured.
 Step 4 — MVCC Snapshot and TxID Assignment
-The MVCC controller assigns a monotonically increasing Transaction ID (TxID) to the write operation. The TxID is a 64-bit unsigned integer generated from a hardware clock (rdtsc on x86, cntvct_el0 on ARM) combined with a thread-local sequence counter to ensure uniqueness under high concurrency. The TxID is embedded in the OBE document header and in the WAL record.
+The MVCC controller assigns a monotonically increasing Transaction ID (TxID) to the write operation. The TxID is a 64-bit unsigned integer generated from a hardware clock (rdtsc on x86, cntvct_el0 on ARM) combined with a thread-local sequence counter to ensure uniqueness under high concurrency. The TxID is embedded in the OBE document header and in the WAL record. For retryable writes (Section 10.6), the WAL record also embeds the client session ID (lsid) and operation number (txnNumber) for idempotency detection.
 Step 5 — OBE Serialization
 The document (a JavaScript object, C struct, or language-specific representation) is serialized to the OVN Binary Encoding format described in Section 5.4. Serialization includes field-name-to-field-ID resolution for schema-aware collections (replacing repeated field name strings with 2-byte IDs, reducing storage by 40-60% for typical document schemas). The serialized document is written to a thread-local serialization buffer to avoid heap allocation on the critical write path.
 Step 6 — Write-Ahead Log
-The serialized OBE document and the WAL record header are appended to the WAL segment in the .ovn file. The WAL record format is: [4-byte record type] [8-byte TxID] [4-byte collection ID] [varint document length] [document bytes] [4-byte CRC32]. The WAL writer calls fsync() (or fdatasync()) after each write to guarantee durability. For group commit optimization, the WAL writer batches multiple pending WAL records into a single fsync when multiple clients are writing concurrently, amortizing the fsync cost.
+The serialized OBE document and the WAL record header are appended to the WAL segment in the .ovn file. The WAL record format is: [4-byte record type] [8-byte TxID] [4-byte collection ID] [16-byte lsid (session ID, zeroed if not a retryable write)] [8-byte txnNumber] [varint document length] [document bytes] [4-byte CRC32]. The WAL writer calls fsync() (or fdatasync()) after each write to guarantee durability. For group commit optimization, the WAL writer batches multiple pending WAL records into a single fsync when multiple clients are writing concurrently, amortizing the fsync cost.
 Step 7 — MemTable Insert
 The OBE document is inserted into the active MemTable, which is a concurrent skip list. The skip list provides O(log N) insert and O(log N) lookup with low constant factors. The MemTable is partitioned by collection ID. When the total MemTable size exceeds the configured MemTable threshold (default 64MB), a new MemTable is created and the old one is queued for flush by the background MemTable Flusher thread.
 Step 8 — MemTable Flush (Background)
 The background MemTable Flusher serializes the MemTable contents into an L0 SSTable file within the Index Segment of the .ovn file. The SSTable is sorted by document ID and includes a Bloom filter for O(1) miss detection. The SSTable header records the minimum and maximum keys for range-based pruning. After the SSTable is written and fsync'd, the corresponding WAL records become eligible for reclamation.
 Step 9 — AHIT Index Update
-The indexing subsystem updates all affected AHIT index trees. For each indexed field in the document, the field value is extracted via the OBE decoder and inserted into the Hot Zone of the corresponding AHIT tree. The Hot Zone is an in-memory skip list — insert is O(log N) and non-blocking for readers (using lock-free skip list with compare-and-swap operations).
+The indexing subsystem updates all affected AHIT index trees. For each indexed field in the document, the field value is extracted via the OBE decoder and inserted into the Hot Zone of the corresponding AHIT tree. The Hot Zone is an in-memory skip list — insert is O(log N) and non-blocking for readers (using lock-free skip list with compare-and-swap operations). For geospatial fields, the GeoPoint or GeoJSON value is encoded as an S2 cell token and inserted into the Geospatial Index R-tree (Section 8.7).
 Step 10 — Compaction (Background)
 The background Compaction Worker periodically merges L0 SSTables into the Permanent B+ Tree. The compaction process reads L0 SSTables in sorted order, merges them with the existing B+ tree pages, and writes updated pages back to the Data Segment. During compaction, the B+ tree remains fully readable — readers access the previous version via MVCC snapshots. Upon compaction completion, the old SSTable files are marked free and the MemTable WAL records are purged.
 Step 11 — Client Acknowledgment
 The client receives an acknowledgment as soon as the WAL write completes (Step 6). This is the durability guarantee point. The client does not wait for MemTable flush or compaction. The acknowledgment includes the assigned document _id and the TxID for use in subsequent dependent operations.
+Step 12 — Change Stream Emitter (Background, Asynchronous)
+After the client acknowledgment is sent, the Change Stream Emitter writes a change event record to the Change Stream Log (Segment 0x07). The event record includes the operation type, document ID, pre-image (for updates/deletes, captured from the MVCC version chain), and post-image (the newly written document version). Active stream subscribers are notified asynchronously via their registered callbacks. This step does not block the client write path.
+Step 13 — TTL Reaper (Timer-Based)
+The TTL Reaper background worker runs every 60 seconds and scans all TTL indexes for each collection. For each TTL index, it performs a range scan to find documents where the indexed time field is older than (current_time - expireAfterSeconds). Matching documents are deleted via the standard delete path (tombstone insert + WAL record). This ensures expired documents are removed with minimal I/O impact.
 
 6.3 Failure Recovery
 On process restart, Oblivinx3x scans the WAL segment forward from the last checkpoint. For each WAL record, it re-applies the write to the MemTable if the record's TxID is greater than the last checkpointed TxID. The checkpoint is recorded when the MemTable is fully flushed to SSTable and the SSTable is successfully merged into the Permanent B+ Tree. This ensures that no committed write is lost on restart and no uncommitted write survives a crash.
 
- 
+
 Section 7 — Read Path Micro Process
 The read path is designed for maximum concurrency — multiple readers execute simultaneously without acquiring write locks. Reads interact with the MVCC snapshot system to ensure consistent views of the data.
 
@@ -676,7 +667,7 @@ The read path is designed for maximum concurrency — multiple readers execute s
 The query optimizer assigns a cost to each candidate execution plan using the formula:
   Cost(plan) = (N_pages_read × PAGE_COST) + (N_docs_decoded × DECODE_COST) + (N_comparisons × CMP_COST)
 Where PAGE_COST, DECODE_COST, and CMP_COST are tunable constants calibrated to actual hardware I/O and CPU performance. The optimizer maintains per-collection statistics: document count, average document size, field cardinality histograms, and page fill ratios. These statistics are updated by the background Statistics Collector worker (described in Section 11).
-The optimizer considers the following plan types in order of preference: indexed point lookup (O(log N)), indexed range scan (O(log N + K) where K = result count), covered index scan (no document fetch needed), partial collection scan (if a filter has high selectivity), and full collection scan (fallback).
+The optimizer considers the following plan types in order of preference: indexed point lookup (O(log N)), indexed range scan (O(log N + K) where K = result count), covered index scan (no document fetch needed), geospatial index scan (for $near/$geoWithin queries), partial collection scan (if a filter has high selectivity), and full collection scan (fallback).
 
 7.3 MVCC Snapshot Semantics
 When a read operation begins, it acquires an MVCC snapshot by recording the current minimum active TxID. The reader then only sees document versions whose TxID is less than or equal to the snapshot TxID and greater than the previous compaction TxID. This means readers always see a consistent snapshot of the database, even if a concurrent writer is modifying documents.
@@ -692,12 +683,13 @@ Point lookup (indexed)	O(log N)	O(log N)	O(log N)	B+ tree traversal
 Point lookup (unindexed)	O(1)*	O(N)	O(N)	*if Bloom filter hits
 Range scan (indexed)	O(log N + K)	O(log N + K)	O(log N + K)	K = result count
 Range scan (unindexed)	O(N)	O(N)	O(N)	Full collection scan
+Geospatial ($near)	O(log N + K)	O(log N + K)	O(N)	R-tree / S2 lookup
 Insert	O(log N)	O(log N)	O(log N)	MemTable skip list
 Update (indexed field)	O(log N)	O(log N)	O(log N)	Index update included
 Delete	O(log N)	O(log N)	O(log N)	Tombstone insert
 Aggregation (indexed)	O(K log N)	O(K log N)	O(N log N)	K = matching docs
 
- 
+
 Section 8 — Indexing System
 The Oblivinx3x indexing system is built on the Adaptive Hybrid Index Tree (AHIT), which supports all standard index types while adding adaptive query-pattern optimization not available in traditional B+ tree or pure LSM systems.
 
@@ -707,6 +699,9 @@ Every collection maintains a primary index keyed on the document _id field. The 
 8.2 Secondary Indexes
 Secondary indexes are AHIT structures keyed on one or more document field values. The key format for a secondary index entry is: [field_value_bytes | document_id_bytes]. This composite key allows the index to return the document ID for fetching the full document without a separate lookup step.
 Index entries are stored in OBE-encoded form for consistency with the document store. The index value portion stores the document ID only (not the full document), minimizing index size.
+
+TTL Index:
+A TTL (Time-To-Live) index is a special secondary index on a field of type Timestamp or Int64 (Unix epoch). When created with the expireAfterSeconds option, the TTL Reaper background worker (Section 11.1) periodically scans the index for entries whose indexed time value is older than (current_time - expireAfterSeconds) and deletes the associated documents. TTL indexes are single-field only and cannot be compound. TTL indexes are compatible with all collection types except capped collections (which manage document expiry by size/count, not time).
 
 8.3 Compound Indexes and the Skip-Column Optimization
 Compound indexes in Oblivinx3x use the novel Skip-Column Optimization (SCO), which addresses the leftmost-prefix limitation of traditional compound indexes. In a standard B+ tree compound index on (A, B, C), a query filtering only on (B) or (C) cannot use the index and must fall back to a collection scan.
@@ -718,6 +713,26 @@ The SCO is implemented by maintaining a 64-bit hash fingerprint for each field i
 Full-text search is implemented using an inverted index stored in a dedicated Index Segment region. The inverted index maps stemmed, lowercased tokens to posting lists. Each posting list entry stores: [document_id, field_id, term_frequency, list_of_positions]. Positions enable phrase queries and proximity searches.
 Tokenization uses the Unicode Text Segmentation algorithm (UAX #29) for language-agnostic tokenization. Optional language-specific stemmers (Porter stemmer for English, Snowball for European languages) can be registered via plugins. The inverted index is stored as a B+ tree keyed on token, with overflow pages for high-frequency terms.
 
+8.4.1 Fuzzy Matching
+Fuzzy matching allows queries to find documents even when the search term contains typos or minor spelling differences. Oblivinx3x implements fuzzy matching using a BK-tree (Burkhard-Keller tree) as a companion structure to the inverted index. The BK-tree is keyed on token strings and organizes them by Levenshtein edit distance. A fuzzy query with maxEdits: N retrieves all tokens within edit distance N from the query term, then resolves their posting lists.
+Supported fuzzy options in the $text operator:
+  { $text: { $search: 'wiget', $fuzzy: { maxEdits: 1, prefixLength: 3 } } }
+- maxEdits: Maximum Levenshtein distance (1 or 2; default 0 = exact match).
+- prefixLength: Number of leading characters that must match exactly before fuzzy expansion is applied (improves performance by constraining BK-tree traversal).
+The BK-tree is built lazily during index compaction and stored as a serialized binary tree in a dedicated region of the Index Segment.
+
+8.4.2 Autocomplete Index
+The autocomplete index enables prefix-based token completion for search-as-you-type interfaces. It is implemented as a compressed radix trie (also known as a Patricia trie) stored in the Index Segment. Each trie node stores a compressed edge label and a pointer to the list of document IDs associated with all tokens in the subtree rooted at that node.
+API:
+  const suggestions = await db.autocomplete('products', {
+    field: 'name',
+    query: 'wid',
+    maxResults: 5
+  });
+  // Returns: ['Widget A', 'Widget B', 'Widget Pro', ...]
+
+The autocomplete trie is built incrementally during index updates. Trie construction is O(L) per token where L is the token length. Prefix lookup is O(L + K) where K is the number of results returned. The trie is stored separately from the inverted index and can be disabled per-collection to save memory.
+
 8.5 Optional Vector Index (ANN Search)
 For AI-augmented applications, Oblivinx3x supports an optional vector index based on the HNSW (Hierarchical Navigable Small World) algorithm. The vector index is stored in a dedicated Index Segment as a serialized HNSW graph. HNSW provides approximate nearest neighbor (ANN) search with O(log N) query complexity and configurable recall-precision trade-off.
 The vector index supports float32 vectors with dimensions from 2 to 2048. Distance metrics supported: Euclidean (L2), Cosine, Inner Product (dot product). The vector index is built asynchronously by a background HNSW Builder thread and is available for queries after the build completes.
@@ -726,7 +741,28 @@ The vector index supports float32 vectors with dimensions from 2 to 2048. Distan
 The AHIT Promoter thread monitors index access patterns using a frequency counter stored in each B+ tree node. The counter is incremented on each access using a lock-free atomic increment. When a node's counter exceeds the promotion threshold (default: 1000 accesses in the last 60 seconds), the node and its subtree are promoted to the Hot Zone — a memory-resident mirror of the cold disk-based subtree. Promoted nodes are served entirely from memory, eliminating disk I/O for frequently accessed index ranges.
 Demotion occurs when the frequency counter drops below a configurable eviction threshold (default: 100 accesses in 60 seconds). The Hot Zone enforces a maximum size limit (configurable, default 25% of buffer pool). LRU eviction is applied when the Hot Zone is full.
 
- 
+8.7 Geospatial Index [NEW]
+Oblivinx3x supports geospatial indexing for location-based queries on GeoJSON-encoded fields. The geospatial index is built on a combination of S2 Geometry cell indexing (for spherical / Earth-surface data) and an in-memory R-tree (for 2D planar data).
+
+Index Types:
+- 2dsphere: For Earth-surface coordinates (longitude/latitude). Documents must store coordinates as GeoJSON (Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon, GeometryCollection). Internally, GeoJSON geometries are decomposed into S2 cell tokens at multiple levels (configurable; default levels 1-20). S2 cell tokens are stored as compound index keys in an AHIT structure, enabling fast region containment checks.
+- 2d: For flat 2D plane coordinates. Uses an R-tree for bounding-box and nearest-neighbor queries. Suitable for game maps, floor plans, and other non-spherical coordinate systems.
+
+Supported Operators:
+  { location: { $near: { $geometry: { type: 'Point', coordinates: [106.8456, -6.2088] }, $maxDistance: 5000 } } }
+  { location: { $nearSphere: { $geometry: { type: 'Point', coordinates: [lng, lat] }, $maxDistance: 1000 } } }
+  { location: { $geoWithin: { $geometry: { type: 'Polygon', coordinates: [[[...]]] } } } }
+  { location: { $geoWithin: { $centerSphere: [[lng, lat], radiusInRadians] } } }
+  { location: { $geoIntersects: { $geometry: { type: 'LineString', coordinates: [[...]] } } } }
+
+Index Creation API:
+  await db.createIndex('stores', { location: '2dsphere' });
+  await db.createIndex('tiles', { position: '2d' }, { min: -1000, max: 1000 });
+
+Performance:
+$near queries on a 2dsphere index use S2 cell range scans. The query expands from the center point outward in S2 cell rings, fetching candidate documents and sorting by exact geodesic distance. Query complexity is O(log N + K) for K results. $geoWithin polygon queries use S2 cell covering — the polygon is approximated as a union of S2 cells, and the index is scanned for documents whose cell tokens fall within the cover. False positives from cell over-approximation are filtered by an exact containment test.
+
+
 Section 9 — Memory Management
 Oblivinx3x implements a multi-tier memory architecture that adapts to available system memory and observed workload patterns, reducing the need for manual memory tuning.
 
@@ -749,7 +785,7 @@ MVCC version visibility management is handled by the GC Thread. The GC Thread ma
 9.6 Anti-Fragmentation Strategy
 Memory fragmentation is prevented through three mechanisms: slab allocation for AHIT nodes (fixed-size slots eliminate external fragmentation), page-aligned buffer pool slots (all page allocations are fixed-size, preventing heap fragmentation), and periodic compaction of the Data Segment during low-activity windows (rewrites document pages to eliminate internal fragmentation caused by document updates and deletions).
 
- 
+
 Section 10 — Concurrency Control
 Oblivinx3x implements Multi-Version Concurrency Control (MVCC) as its primary concurrency mechanism, augmented with optimistic locking for write-write conflict detection and lock-free data structures on the critical read path.
 
@@ -770,7 +806,23 @@ Reads on the critical path (Buffer Pool access, AHIT Hot Zone lookup, MemTable s
 10.5 Write Conflict Resolution
 When a write-write conflict is detected during optimistic commit validation, Oblivinx3x applies the following resolution strategy: the transaction with the higher TxID (later writer) wins. The lower TxID transaction is aborted and returned a WRITE_CONFLICT error to the client. The client's retry logic re-executes the entire transaction from the beginning, acquiring a new snapshot and re-evaluating all read operations. This strategy is correct under Snapshot Isolation and avoids the thundering herd problem of pessimistic locking.
 
- 
+10.6 Retryable Writes [NEW]
+Retryable writes provide transparent, driver-level retry for write operations that fail due to transient errors (network interruption, primary failover in distributed mode, or temporary write throttling). Retryable writes are implemented using logical session IDs and per-session operation counters to detect and deduplicate retried operations at the engine level.
+
+Session Management:
+Each client connection is associated with a logical session identified by a 128-bit session ID (lsid). Sessions are created implicitly on first use and expire after a configurable idle timeout (default 30 minutes). The session registry is stored in the Metadata Segment.
+
+Idempotency Key:
+Each retryable write operation includes an idempotency key composed of: [lsid (16 bytes)] + [txnNumber (8-byte monotonically increasing counter per session)]. This key is stored in the WAL record (Section 6.2, Step 6). On retry, the engine checks the WAL and the Idempotency Cache (an in-memory LRU map of recent lsid+txnNumber pairs) before executing the write. If the key is found, the original operation's result is returned without re-executing the write.
+
+Supported Operations:
+Retryable writes apply to: insertOne, insertMany, updateOne (with a unique filter), replaceOne, deleteOne. Operations that are inherently non-idempotent by nature (e.g., $inc, $push on arrays) are not retried automatically — the client must explicitly opt in by setting retryable: true and accepting possible duplicate side effects, or by wrapping the operation in a transaction.
+
+Configuration:
+  const db = await ovn.open('data.ovn', { retryableWrites: true });
+  // All eligible write operations will be automatically retried on transient failure.
+
+
 Section 11 — Background Systems
 Oblivinx3x operates a set of background worker threads that handle maintenance tasks without blocking client operations. All workers operate at configurable priority levels and are throttled during high client load.
 
@@ -785,8 +837,32 @@ AHIT Demoter	Hot Zone > 80% capacity	Low	Evict cold AHIT subtrees
 GC Thread	Timer: every 5 seconds	Low	Purge MVCC version chains beyond horizon
 Statistics Collector	Timer: every 60 seconds	Minimal	Update cardinality histograms
 WSE Adjuster	Timer: every 30 seconds	Minimal	Resize Buffer Pool based on working set
-Checkpoint Writer	Timer: every 60 seconds OR WAL size > 16MB	Medium	Write B+ tree root checkpoint to header
+Checkpoint Writer	Timer: every 60s OR WAL > 16MB	Medium	Write B+ tree root checkpoint to header
 Defragmenter	Fragmentation ratio > 30%	Minimal	Compact Data Segment pages
+Change Stream Emitter	Post-WAL write commit	Medium	Write change events to Stream Log; notify active subscribers
+TTL Reaper	Timer: every 60 seconds	Low	Delete documents where TTL index field < (now - expireAfterSeconds)
+HNSW Builder	New vector index / bulk insert	Low	Build or update HNSW graph asynchronously
+Blob Compactor	Blob Segment fragmentation > 30%	Minimal	Rewrite Blob Segment to reclaim space from deleted blobs
+
+Change Stream Emitter Detail:
+The Change Stream Emitter runs asynchronously after each committed write (post-WAL, post-acknowledgment). It constructs a change event document with the following fields:
+  {
+    _id:           { _data: '<resume_token>' },  // opaque token for stream resumption
+    operationType: 'insert' | 'update' | 'replace' | 'delete' | 'drop' | 'rename',
+    ns:            { db: '<db_name>', coll: '<collection_name>' },
+    documentKey:   { _id: '<document_id>' },
+    fullDocument:  { ... },           // present for insert, replace, and update (if fullDocument: 'updateLookup')
+    updateDescription: {              // present for update operations only
+      updatedFields:   { ... },
+      removedFields:   [ ... ],
+      truncatedArrays: [ ... ]
+    },
+    clusterTime:   <TxID as timestamp>
+  }
+Subscribers registered via db.watch() receive these events in TxID order. Resume tokens allow a subscriber to restart a stream from the last successfully processed event after a disconnect.
+
+TTL Reaper Detail:
+The TTL Reaper iterates over all collections with at least one TTL index. For each TTL index, it performs an AHIT range scan for entries with a time value ≤ (current_unix_ms - expireAfterSeconds * 1000). Matching document IDs are collected in a batch (max 1000 per reaper cycle to limit I/O impact), then deleted via the standard tombstone insert path. Each deletion batch is committed as a single WAL write to minimize fsync overhead.
 
 11.2 Compaction Strategy
 The Compaction Worker implements a tiered compaction strategy specific to the Hybrid B+/LSM architecture. When L0 SSTable count reaches 4, all L0 SSTables are merged into a single sorted run. This sorted run is then incrementally merged into the Permanent B+ Tree using a merge-scan algorithm that reads sorted SSTable pages and the corresponding B+ tree leaf pages in parallel, producing a merged B+ tree structure.
@@ -796,7 +872,7 @@ The compaction process maintains a shadow copy of affected B+ tree subtrees duri
 All background workers use a priority-based cooperative scheduler. Each worker is assigned an I/O budget: a maximum number of page reads/writes per scheduler tick (100ms). When the client write/read rate exceeds 90% of the system's I/O capacity, background workers reduce their I/O budget to 10% of their normal allocation, ensuring client operations are not starved by maintenance work.
 The WAL Cleaner uses a two-phase approach: it first identifies committed WAL records older than the current GC horizon and marks them as reclaimable. In the second phase, it rewrites the WAL segment without the reclaimable records. WAL cleaning is performed during idle periods to avoid impacting write throughput.
 
- 
+
 Section 12 — Optional Distributed Extension
 While Oblivinx3x is fundamentally an embedded database, it is designed with a clean internal API that allows an optional Distributed Extension (OVN-Dist) to be layered on top without modifying the core engine. OVN-Dist provides replication, cluster coordination, and distributed query execution.
 
@@ -813,12 +889,12 @@ Distributed queries in OVN-Dist use a scatter-gather model. The query coordinato
 12.4 Sharding Strategy
 OVN-Dist supports two sharding strategies: Hash Sharding (default) and Range Sharding. Hash Sharding distributes documents by computing a 64-bit hash of the shard key field value and assigning the document to the shard whose hash range covers the result. Range Sharding assigns documents to shards based on lexicographic ranges of the shard key, enabling efficient range queries across shards.
 
- 
+
 Section 13 — Library API Design
 The Oblivinx3x API is designed to be familiar to MongoDB users while being idiomatic for the host language. The primary binding is JavaScript (Node.js native addon), with C, Go, Rust, and Python FFI bindings planned for Phase 7. All async operations return Promises in JavaScript.
 
 13.1 Database Lifecycle
-const ovn = require('oblivinx3x');
+const ovn = require('oblivinix3x');
 
 // Open or create a database
 const db = await ovn.open('data.ovn', {
@@ -826,7 +902,8 @@ const db = await ovn.open('data.ovn', {
   bufferPool: '128MB',     // Buffer pool size
   walMode: true,           // Enable WAL for concurrent reads
   compression: 'lz4',     // Page compression: 'none' | 'lz4' | 'zstd'
-  readOnly: false          // Open in read-only mode
+  readOnly: false,         // Open in read-only mode
+  retryableWrites: true    // Enable retryable writes (Section 10.6)
 });
 
 // Close the database gracefully
@@ -836,7 +913,7 @@ await db.close();
 await db.checkpoint();
 
 13.2 Collection Management
-// Create a collection with optional validator
+// Create a standard collection with optional validator
 await db.createCollection('users', {
   validator: {
     $jsonSchema: {
@@ -848,14 +925,48 @@ await db.createCollection('users', {
         email: { bsonType: 'string' }
       }
     }
-  }
+  },
+  validationLevel: 'strict',   // 'strict' (default) | 'moderate'
+  validationAction: 'error'    // 'error' (default) | 'warn'
 });
+
+// Create a capped collection (fixed-size ring buffer)
+// When the collection is full, the oldest documents are overwritten.
+await db.createCollection('logs', {
+  capped: true,
+  size: 104857600,  // Maximum collection size in bytes (100MB)
+  max: 50000        // Maximum number of documents (optional, combined with size)
+});
+// Note: Capped collections do not support TTL indexes or deletion of individual documents.
+// They are ideal for log buffers, audit trails, and high-throughput event sinks.
+
+// Create a time-series collection
+// Documents are automatically grouped into time-based buckets for efficient range queries.
+await db.createCollection('sensor_readings', {
+  timeseries: {
+    timeField: 'timestamp',   // Required: field name containing the measurement time (must be Timestamp or Int64)
+    metaField: 'sensorId',    // Optional: field used to group measurements (becomes the bucket partition key)
+    granularity: 'seconds'    // 'seconds' | 'minutes' | 'hours' — controls bucket window size
+  },
+  expireAfterSeconds: 2592000  // Optional TTL: delete buckets older than 30 days
+});
+// Time-series collections internally use a Bucket B+ Tree indexed by (metaField, timeField).
+// Each bucket document contains compressed arrays of measurement values for a time window.
+// $match on timeField translates directly to bucket range scans — no full collection scan needed.
 
 // List collections
 const collections = await db.listCollections();
 
 // Drop a collection
 await db.dropCollection('users');
+
+// Modify validator on existing collection
+await db.command({
+  collMod: 'users',
+  validator: { $jsonSchema: { ... } },
+  validationLevel: 'moderate',  // Don't re-validate existing non-conforming docs
+  validationAction: 'warn'
+});
 
 13.3 Document CRUD Operations
 // Insert a single document
@@ -907,6 +1018,15 @@ await db.updateMany('products',
 await db.delete('users', { name: 'Alice Kim' });
 await db.deleteMany('products', { status: 'discontinued' });
 
+// Store a large binary file (> 16MB) using Blob Segment
+const blobId = await db.putBlob('reports', {
+  filename: 'annual_report_2025.pdf',
+  contentType: 'application/pdf',
+  data: fs.readFileSync('report.pdf')  // Buffer or ReadableStream
+});
+const blobMeta = await db.getBlob('reports', blobId);
+const stream = await db.getBlobStream('reports', blobId);
+
 13.4 Indexing API
 // Create secondary index
 await db.createIndex('users', { age: 1 });
@@ -914,14 +1034,57 @@ await db.createIndex('users', { age: 1 });
 // Create compound index
 await db.createIndex('users', { 'address.city': 1, age: -1 });
 
-// Create full-text index
-await db.createIndex('articles', { content: 'text', title: 'text' });
+// Create full-text index with fuzzy and autocomplete support
+await db.createIndex('articles', { content: 'text', title: 'text' }, {
+  fuzzy: { maxEdits: 1, prefixLength: 3 },  // Enable BK-tree fuzzy matching
+  autocomplete: true                          // Enable radix trie autocomplete
+});
+
+// Create TTL index — documents expire after 3600 seconds from the createdAt field
+await db.createIndex('sessions', { createdAt: 1 }, { expireAfterSeconds: 3600 });
+
+// Create geospatial index
+await db.createIndex('stores', { location: '2dsphere' });
+await db.createIndex('gameTiles', { position: '2d' }, { min: -500, max: 500 });
 
 // Create vector index
 await db.createVectorIndex('embeddings', {
   field: 'vector',
   dimensions: 1536,
   metric: 'cosine'
+});
+
+// Geospatial query examples
+const nearbyStores = await db.find('stores', {
+  location: {
+    $near: {
+      $geometry: { type: 'Point', coordinates: [106.8456, -6.2088] },
+      $maxDistance: 5000   // meters
+    }
+  }
+});
+
+const storesInArea = await db.find('stores', {
+  location: {
+    $geoWithin: {
+      $geometry: {
+        type: 'Polygon',
+        coordinates: [[[106.8, -6.3], [106.9, -6.3], [106.9, -6.1], [106.8, -6.1], [106.8, -6.3]]]
+      }
+    }
+  }
+});
+
+// Fuzzy text search
+const results = await db.find('articles', {
+  $text: { $search: 'datbase arcitecture', $fuzzy: { maxEdits: 1 } }
+});
+
+// Autocomplete
+const suggestions = await db.autocomplete('products', {
+  field: 'name',
+  query: 'wid',
+  maxResults: 5
 });
 
 // Vector similarity search
@@ -969,7 +1132,130 @@ const result = await db.aggregate('orders', [
   { $limit: 20 }
 ]);
 
- 
+// $facet — run multiple sub-pipelines in a single pass over the collection
+// Returns a single document with one field per sub-pipeline
+const facetResult = await db.aggregate('products', [
+  { $match: { status: 'active' } },
+  { $facet: {
+    byCategory: [
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ],
+    priceDistribution: [
+      { $bucket: {
+        groupBy: '$price',
+        boundaries: [0, 25, 50, 100, 250, 500],
+        default: 'Other',
+        output: { count: { $sum: 1 }, avgPrice: { $avg: '$price' } }
+      }}
+    ],
+    topBrands: [
+      { $group: { _id: '$brand', revenue: { $sum: '$price' } } },
+      { $sort: { revenue: -1 } },
+      { $limit: 5 }
+    ]
+  }}
+]);
+
+// $bucket / $bucketAuto — group documents into user-defined or auto-computed buckets
+const priceBuckets = await db.aggregate('products', [
+  { $bucketAuto: {
+    groupBy: '$price',
+    buckets: 5,
+    output: { count: { $sum: 1 }, avgPrice: { $avg: '$price' } }
+  }}
+]);
+
+// $setWindowFields — window functions over ordered partitions (equivalent to SQL OVER PARTITION BY)
+const runningTotals = await db.aggregate('sales', [
+  { $setWindowFields: {
+    partitionBy: '$region',
+    sortBy: { date: 1 },
+    output: {
+      runningTotal: {
+        $sum: '$amount',
+        window: { documents: ['unbounded', 'current'] }
+      },
+      movingAvg: {
+        $avg: '$amount',
+        window: { documents: [-2, 0] }   // sliding window of 3 documents
+      },
+      rank: { $rank: {} }
+    }
+  }}
+]);
+
+// $merge — write aggregation results into a target collection
+// Supports: whenMatched (merge | replace | keepExisting | fail), whenNotMatched (insert | discard | fail)
+await db.aggregate('orders', [
+  { $match: { year: 2025 } },
+  { $group: { _id: '$customerId', totalSpend: { $sum: '$amount' } } },
+  { $merge: {
+    into: 'customerSummary',
+    on: '_id',
+    whenMatched: 'merge',
+    whenNotMatched: 'insert'
+  }}
+]);
+
+// $replaceRoot / $replaceWith — promote a nested document to the top level
+const normalized = await db.aggregate('users', [
+  { $replaceRoot: { newRoot: '$address' } }
+]);
+
+// $unwind with preserveNullAndEmptyArrays
+const unwound = await db.aggregate('orders', [
+  { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } }
+]);
+
+13.7 Change Streams [NEW]
+Change streams provide real-time notification of document changes in a collection or database. They are implemented on top of the Change Stream Log (Segment 0x07, Section 5.2) and deliver ordered, resumable event sequences to subscribers.
+
+// Watch a collection for all change events
+const stream = db.watch('users');
+stream.on('change', (event) => {
+  console.log(event.operationType);   // 'insert' | 'update' | 'replace' | 'delete'
+  console.log(event.documentKey);     // { _id: '...' }
+  console.log(event.fullDocument);    // the new document (for insert/replace)
+  console.log(event.updateDescription); // { updatedFields: {...}, removedFields: [...] }
+});
+stream.on('error', (err) => { /* handle stream invalidation */ });
+
+// Watch with a pipeline filter (only receive events matching the filter)
+const filteredStream = db.watch('orders', [
+  { $match: { 'fullDocument.status': 'completed', operationType: 'update' } }
+], {
+  fullDocument: 'updateLookup'  // Fetch the full post-update document
+});
+
+// Resume a stream after a disconnect using a resume token
+const resumeToken = stream.resumeToken; // save this on disconnect
+const resumedStream = db.watch('users', [], { resumeAfter: resumeToken });
+
+// Watch the entire database (all collections)
+const dbStream = db.watchAll([
+  { $match: { 'ns.coll': { $in: ['users', 'orders'] } } }
+]);
+
+// Close a stream
+await stream.close();
+
+// Change event document structure:
+// {
+//   _id:              { _data: '<opaque resume token>' },
+//   operationType:    'insert' | 'update' | 'replace' | 'delete' | 'drop' | 'rename',
+//   ns:               { db: 'mydb', coll: 'users' },
+//   documentKey:      { _id: '...' },
+//   fullDocument:     { ... },          // null for delete; populated for insert, replace, update (if updateLookup)
+//   updateDescription: {                // only for operationType: 'update'
+//     updatedFields:   { 'age': 29, 'tags.2': 'senior' },
+//     removedFields:   ['tempField'],
+//     truncatedArrays: []
+//   },
+//   clusterTime:      <TxID>
+// }
+
+
 Section 14 — Performance Expectations
 The following performance estimates are based on theoretical analysis of the architecture and benchmarking of comparable systems (RocksDB, SQLite, LMDB). Actual performance will vary based on hardware, workload characteristics, document size, and index configuration.
 
@@ -984,6 +1270,8 @@ Random Write (docs/sec)	150,000 – 250,000	60,000 – 100,000	10,000 – 20,000
 Point Read — indexed (docs/sec)	400,000 – 600,000	200,000 – 350,000	300,000 – 500,000	300,000 – 500,000
 Range Scan (docs/sec)	200,000 – 350,000	150,000 – 250,000	200,000 – 350,000	250,000 – 400,000
 Concurrent Reads (8 threads)	1,200,000 – 2,000,000	600,000 – 1,000,000	400,000 – 700,000	1,000,000 – 1,800,000
+Geospatial $near (queries/sec)	80,000 – 150,000	50,000 – 100,000	N/A	N/A
+Change Stream (events/sec)	200,000 – 400,000	100,000 – 200,000	N/A	N/A
 Write Latency p50 (μs)	50 – 150	200 – 500	100 – 300	30 – 80
 Write Latency p99 (μs)	500 – 2,000	2,000 – 10,000	1,000 – 5,000	200 – 1,000
 Read Latency p50 (μs)	10 – 50	50 – 200	20 – 100	10 – 50
@@ -995,27 +1283,32 @@ Storage overhead per document	~15%	~35-50%	~20-30%	~10-15%
 Index size / data size ratio	~25%	~30-40%	~15-25%	~20-30%
 Write amplification factor	2x – 4x	5x – 10x	3x – 6x	5x – 30x
 Compression ratio (lz4)	2.5x – 4x	2x – 3x	N/A native	2x – 4x
+Blob storage overhead	~3%	~5% (GridFS)	N/A	N/A
+Geospatial index overhead	~8% of indexed data	~10%	N/A	N/A
+Change Stream Log (default)	64MB (circular, fixed)	Variable	N/A	N/A
 
 14.4 Memory Usage
 
 Metric	Oblivinx3x	MongoDB	SQLite	RocksDB
-Minimum RSS (idle)	~8MB	~300MB	~2MB	~5MB
+Minimum RSS (idle)	~12MB	~300MB	~2MB	~5MB
 Buffer Pool default	25% RAM or 256MB	50% RAM	Cache managed by OS	User-configured
 MemTable default	64MB per collection	N/A	N/A	64MB (default)
 Index Hot Zone default	64MB	Included in WiredTiger cache	OS page cache	Block cache
+Change Stream subscriber (each)	~256KB ring buffer per subscriber	Variable	N/A	N/A
+Geospatial index (R-tree in-memory cache)	~32MB default (configurable)	Included in WiredTiger cache	N/A	N/A
 
- 
+
 Section 15 — Production Readiness
 
 15.1 Crash Recovery
 Oblivinx3x guarantees recovery to the last committed transaction after any crash scenario, including process kill (SIGKILL), power failure, and OS crash. The recovery procedure is:
-1.	On open, read the database header from Page 0. Verify the magic number and CRC.
-2.	If the WAL Active flag is set in the header, a previous session did not cleanly checkpoint.
-3.	Scan the WAL segment forward from the last checkpoint TxID.
-4.	For each WAL record with a COMMIT marker, re-apply the write to the MemTable.
-5.	For each WAL record without a COMMIT marker (partial transaction), discard the record.
-6.	Flush the recovered MemTable to an L0 SSTable and trigger compaction.
-7.	Write a new checkpoint to the header. Clear the WAL Active flag.
+1. On open, read the database header from Page 0. Verify the magic number and CRC.
+2. If the WAL Active flag is set in the header, a previous session did not cleanly checkpoint.
+3. Scan the WAL segment forward from the last checkpoint TxID.
+4. For each WAL record with a COMMIT marker, re-apply the write to the MemTable.
+5. For each WAL record without a COMMIT marker (partial transaction), discard the record.
+6. Flush the recovered MemTable to an L0 SSTable and trigger compaction.
+7. Write a new checkpoint to the header. Clear the WAL Active flag.
 Recovery time is proportional to the size of uncommitted WAL records since the last checkpoint. With the default 60-second checkpoint interval and typical write rates, recovery completes in under 2 seconds for most workloads.
 
 15.2 Backup Systems
@@ -1038,6 +1331,7 @@ console.log({
   pagesRead: metrics.io.pagesRead,
   pagesWritten: metrics.io.pagesWritten,
   walBytesWritten: metrics.io.walBytesWritten,
+  blobBytesStored: metrics.io.blobBytesStored,
 
   // Cache metrics
   bufferPoolHitRate: metrics.cache.hitRate,
@@ -1048,144 +1342,200 @@ console.log({
   transactionsCommitted: metrics.txn.committed,
   transactionsAborted: metrics.txn.aborted,
   writeConflicts: metrics.txn.writeConflicts,
+  retryableWriteRetries: metrics.txn.retryableWriteRetries,
 
   // Query metrics
   indexScans: metrics.query.indexScans,
   collectionScans: metrics.query.collectionScans,
   avgQueryLatencyUs: metrics.query.avgLatencyUs,
   p99QueryLatencyUs: metrics.query.p99LatencyUs,
+  geospatialQueries: metrics.query.geospatialQueries,
+
+  // Change stream metrics
+  changeStreamSubscribers: metrics.changeStream.activeSubscribers,
+  changeStreamEventsEmitted: metrics.changeStream.eventsEmitted,
+  changeStreamLogUtilization: metrics.changeStream.logUtilizationPct,
+
+  // TTL metrics
+  ttlDocumentsDeleted: metrics.ttl.documentsDeleted,
+  ttlLastRunMs: metrics.ttl.lastRunDurationMs,
 });
 
 A built-in HTTP metrics endpoint can be enabled to expose Prometheus-compatible metrics at http://localhost:9090/metrics, suitable for integration with Grafana dashboards.
 
- 
+
 Section 16 — Implementation Roadmap
-The Oblivinx3x implementation is divided into seven phases. Each phase builds on the previous and delivers a testable milestone. The recommended implementation language is Rust for the core engine (memory safety, zero-cost abstractions, excellent FFI) with JavaScript bindings via Neon (Rust-based Node.js native addon framework).
+The Oblivinx3x implementation is divided into eight phases. Each phase builds on the previous and delivers a testable milestone. The recommended implementation language is Rust for the core engine (memory safety, zero-cost abstractions, excellent FFI) with JavaScript bindings via Neon (Rust-based Node.js native addon framework).
 
 Phase 1 — Storage Engine Prototype (Weeks 1–8)
 Deliverable: A functional .ovn file that can read and write raw pages. No document model, no indexing.
-8.	Implement the .ovn file format specification: header (Page 0), Segment Directory (Page 1), page types.
-9.	Implement the Buffer Pool with segmented-LRU eviction. Support configurable pool size.
-10.	Implement the WAL writer: append WAL records, fsync, checkpointing.
-11.	Implement WAL recovery: replay on open after crash.
-12.	Implement the Permanent B+ Tree for key-value storage (raw bytes, no document model yet).
-13.	Implement the MemTable (concurrent skip list in Rust using crossbeam).
-14.	Implement MemTable flush to L0 SSTable with Bloom filter.
-15.	Write unit tests for page corruption detection, WAL recovery, and B+ tree operations.
-16.	Benchmark: raw page write throughput, B+ tree insert/lookup performance.
+1. Implement the .ovn file format specification: header (Page 0), Segment Directory (Page 1), page types including Blob Segment (0x06) and Change Stream Log (0x07) stubs.
+2. Implement the Buffer Pool with segmented-LRU eviction. Support configurable pool size.
+3. Implement the WAL writer: append WAL records including lsid/txnNumber fields, fsync, checkpointing.
+4. Implement WAL recovery: replay on open after crash.
+5. Implement the Permanent B+ Tree for key-value storage (raw bytes, no document model yet).
+6. Implement the MemTable (concurrent skip list in Rust using crossbeam).
+7. Implement MemTable flush to L0 SSTable with Bloom filter.
+8. Write unit tests for page corruption detection, WAL recovery, and B+ tree operations.
+9. Benchmark: raw page write throughput, B+ tree insert/lookup performance.
 
 Phase 2 — Document Encoding (Weeks 9–14)
 Deliverable: Documents can be stored, retrieved, and decoded from .ovn files.
-17.	Implement the OVN Binary Encoding (OBE) serializer and deserializer.
-18.	Implement document _id generation (UUID v4 and user-provided _id support).
-19.	Implement Field ID resolution for schema-aware collections (field name → 2-byte ID mapping).
-20.	Implement nested document and array encoding/decoding.
-21.	Implement page-level LZ4 compression and decompression.
-22.	Implement document-level zstd compression with shared dictionary training.
-23.	Write fuzz tests for OBE encoder/decoder using libFuzzer.
-24.	Benchmark: serialization throughput, compression ratio on realistic document workloads.
+10. Implement the OVN Binary Encoding (OBE) serializer and deserializer including new type tags: BlobRef (0x0F), GeoPoint (0x10), GeoJSON (0x11).
+11. Implement document _id generation (UUID v4 and user-provided _id support).
+12. Implement Field ID resolution for schema-aware collections (field name → 2-byte ID mapping).
+13. Implement nested document and array encoding/decoding.
+14. Implement page-level LZ4 compression and decompression.
+15. Implement document-level zstd compression with shared dictionary training.
+16. Implement the Blob Segment chunked storage: put/get/stream/delete blob operations.
+17. Write fuzz tests for OBE encoder/decoder using libFuzzer.
+18. Benchmark: serialization throughput, compression ratio on realistic document workloads.
 
-Phase 3 — Indexing Engine (Weeks 15–22)
-Deliverable: Secondary indexes, compound indexes, and the AHIT Hot Zone are operational.
-25.	Implement the AHIT index structure: Hot Zone (in-memory skip list) + Cold Zone (SSTable index blocks).
-26.	Implement the AHIT Promoter: access frequency counters, promotion threshold, Hot Zone eviction.
-27.	Implement secondary index creation, update, and deletion.
-28.	Implement compound index with Skip-Column Optimization (SCO).
-29.	Implement the Bloom filter for SSTable-level miss detection.
-30.	Implement full-text inverted index: tokenizer, stemmer, posting list storage.
-31.	Implement optional HNSW vector index (can use hnswlib as a starting point).
-32.	Write tests for index consistency: verify index matches collection scan results after random operations.
+Phase 3 — Indexing Engine (Weeks 15–24)
+Deliverable: Secondary indexes, compound indexes, full-text with fuzzy/autocomplete, geospatial, and the AHIT Hot Zone are operational.
+19. Implement the AHIT index structure: Hot Zone (in-memory skip list) + Cold Zone (SSTable index blocks).
+20. Implement the AHIT Promoter: access frequency counters, promotion threshold, Hot Zone eviction.
+21. Implement secondary index creation, update, and deletion including TTL index variant.
+22. Implement compound index with Skip-Column Optimization (SCO).
+23. Implement the Bloom filter for SSTable-level miss detection.
+24. Implement full-text inverted index: tokenizer, stemmer, posting list storage.
+25. Implement fuzzy matching BK-tree: construction, serialization, edit-distance traversal.
+26. Implement autocomplete radix trie: construction, prefix lookup, trie serialization to Index Segment.
+27. Implement geospatial index: S2 cell tokenization for 2dsphere, R-tree for 2d planar.
+28. Implement geospatial query operators: $near, $nearSphere, $geoWithin, $geoIntersects.
+29. Implement optional HNSW vector index (can use hnswlib as a starting point).
+30. Write tests for index consistency: verify index matches collection scan results after random operations.
 
-Phase 4 — Query Engine (Weeks 23–30)
-Deliverable: MQL-compatible find, findOne, aggregate, and update operators work correctly.
-33.	Implement the MQL lexer and parser: produce an AST from query filter expressions.
-34.	Implement logical plan: convert AST to a tree of logical operators (Filter, Scan, IndexScan, Projection, Sort, Limit, Group).
-35.	Implement the cost-based optimizer: index selection, plan costing with collection statistics.
-36.	Implement physical plan executors for each logical operator.
-37.	Implement update operators: $set, $unset, $inc, $push, $pull, $addToSet, $rename.
-38.	Implement the aggregation pipeline: $match, $group, $project, $sort, $limit, $skip, $lookup, $unwind.
-39.	Implement dot-notation path resolver for nested field access.
-40.	Write correctness tests comparing Oblivinx3x query results against MongoDB on identical datasets.
+Phase 4 — Query Engine (Weeks 25–33)
+Deliverable: MQL-compatible find, findOne, aggregate, and update operators work correctly including all new MongoDB-parity operators.
+31. Implement the MQL lexer and parser: produce an AST from query filter expressions.
+32. Implement logical plan: convert AST to a tree of logical operators (Filter, Scan, IndexScan, GeoScan, Projection, Sort, Limit, Group, Window, Facet).
+33. Implement the cost-based optimizer: index selection including geospatial index plans.
+34. Implement physical plan executors for each logical operator.
+35. Implement update operators: $set, $unset, $inc, $push, $pull, $addToSet, $rename.
+36. Implement aggregation pipeline stages: $match, $group, $project, $sort, $limit, $skip, $lookup, $unwind (with preserveNullAndEmptyArrays), $facet, $bucket, $bucketAuto, $setWindowFields, $merge, $replaceRoot, $replaceWith, $count, $out.
+37. Implement dot-notation path resolver for nested field access.
+38. Implement capped collection write semantics: size-bounded ring buffer eviction.
+39. Implement time-series collection bucketing: automatic bucket creation, bucket B+ tree, bucket range scan.
+40. Write correctness tests comparing Oblivinx3x query results against MongoDB on identical datasets.
 
-Phase 5 — Concurrency Control (Weeks 31–38)
-Deliverable: ACID transactions with MVCC, snapshot isolation, and write conflict detection.
-41.	Implement TxID generation: hardware clock + thread-local sequence counter.
-42.	Implement MVCC document versioning: version chain linked list, tombstone support.
-43.	Implement MVCC snapshot acquisition and release.
-44.	Implement GC Thread: horizon TxID computation, version chain pruning.
-45.	Implement Snapshot Isolation: validate reads against snapshot TxID.
-46.	Implement optimistic write conflict detection: read set tracking, commit-time validation.
-47.	Implement transaction rollback: write set reversal, tombstone insertion.
-48.	Implement Serializable Snapshot Isolation (SSI) as optional strict mode.
-49.	Write concurrency tests using parallel writers with intentional conflicts and verify ACID properties.
+Phase 5 — Concurrency Control (Weeks 34–42)
+Deliverable: ACID transactions with MVCC, snapshot isolation, retryable writes, and change streams.
+41. Implement TxID generation: hardware clock + thread-local sequence counter.
+42. Implement MVCC document versioning: version chain linked list, tombstone support.
+43. Implement MVCC snapshot acquisition and release.
+44. Implement GC Thread: horizon TxID computation, version chain pruning.
+45. Implement Snapshot Isolation: validate reads against snapshot TxID.
+46. Implement optimistic write conflict detection: read set tracking, commit-time validation.
+47. Implement transaction rollback: write set reversal, tombstone insertion.
+48. Implement Serializable Snapshot Isolation (SSI) as optional strict mode.
+49. Implement retryable writes: session ID management, idempotency key embedding in WAL, Idempotency Cache (LRU map).
+50. Implement Change Stream Emitter: post-WAL event record construction, Change Stream Log circular buffer, subscriber notification callbacks, resume token generation and validation.
+51. Write concurrency tests using parallel writers with intentional conflicts and verify ACID properties.
+52. Write change stream tests: verify event ordering, resume token correctness, and subscriber isolation.
 
-Phase 6 — Performance Optimization (Weeks 39–46)
+Phase 6 — Performance Optimization (Weeks 43–51)
 Deliverable: Performance meets targets defined in Section 14 on the baseline hardware.
-50.	Implement group commit for WAL: batch multiple pending WAL records per fsync.
-51.	Implement the Working Set Estimator (WSE) and dynamic Buffer Pool resizing.
-52.	Profile and optimize the OBE serializer using SIMD intrinsics for bulk field scanning.
-53.	Implement the Background Compaction Worker with I/O throttling.
-54.	Optimize B+ tree node layout for CPU cache line alignment (64-byte aligned nodes).
-55.	Implement prefetch hints for sequential B+ tree leaf scans.
-56.	Profile memory allocation patterns and tune slab allocator for AHIT nodes.
-57.	Run the standard YCSB benchmark suite (Workloads A–F) and compare against RocksDB and SQLite.
+53. Implement group commit for WAL: batch multiple pending WAL records per fsync.
+54. Implement the Working Set Estimator (WSE) and dynamic Buffer Pool resizing.
+55. Profile and optimize the OBE serializer using SIMD intrinsics for bulk field scanning.
+56. Implement the Background Compaction Worker with I/O throttling.
+57. Optimize B+ tree node layout for CPU cache line alignment (64-byte aligned nodes).
+58. Implement prefetch hints for sequential B+ tree leaf scans.
+59. Profile memory allocation patterns and tune slab allocator for AHIT nodes.
+60. Optimize geospatial index: tune S2 cell levels for query accuracy vs. index size trade-off.
+61. Optimize Change Stream Emitter: batch event writes to minimize fsync overhead per event.
+62. Run the standard YCSB benchmark suite (Workloads A–F) and compare against RocksDB and SQLite.
 
-Phase 7 — Developer API and Production Hardening (Weeks 47–56)
+Phase 7 — Developer API and Production Hardening (Weeks 52–62)
 Deliverable: Production-ready library with JavaScript bindings, documentation, and observability.
-58.	Implement the JavaScript/Node.js native addon using Neon (Rust → Node.js FFI).
-59.	Implement the JavaScript Promise API for all async operations.
-60.	Implement the metrics API and Prometheus HTTP endpoint.
-61.	Implement the Hot Backup API (db.backup()).
-62.	Implement the JSON Schema validator for collection-level document validation.
-63.	Implement WASM compilation target for edge computing deployment (using wasm-pack).
-64.	Implement the C FFI header (libovn.h) for non-Rust language integration.
-65.	Write comprehensive API documentation with examples.
-66.	Write an integration test suite covering all documented API behaviors.
-67.	Conduct a security audit: fuzz testing, memory safety review, injection attack testing.
+63. Implement the JavaScript/Node.js native addon using Neon (Rust → Node.js FFI).
+64. Implement the JavaScript Promise API for all async operations.
+65. Implement the metrics API and Prometheus HTTP endpoint including new metrics: geospatial query count, change stream utilization, TTL reaper statistics, blob storage metrics.
+66. Implement the Hot Backup API (db.backup()).
+67. Implement the JSON Schema validator with validationLevel and validationAction support.
+68. Implement WASM compilation target for edge computing deployment (using wasm-pack).
+69. Implement the C FFI header (libovn.h) for non-Rust language integration.
+70. Write comprehensive API documentation with examples for all new features.
+71. Write an integration test suite covering all documented API behaviors.
+72. Conduct a security audit: fuzz testing, memory safety review, injection attack testing.
+73. Write migration guide: documenting feature parity with MongoDB and any behavioral differences.
+
+Phase 8 — Extended Features (Weeks 63–72)
+Deliverable: Complete MongoDB feature parity for the target feature set.
+74. Implement OVN-Dist distributed extension: Raft leader election, single-leader replication, WAL streaming to followers.
+75. Implement distributed change streams: stream events across cluster nodes with consistent ordering.
+76. Implement the $search aggregation stage: compound queries, highlight, scoring, facets via full-text index.
+77. Implement time-series $densify and $fill aggregation stages for gap-filling in time-series data.
+78. Implement database-level transactions (multi-collection): extend MVCC to span multiple collections within a single .ovn file.
+79. Implement collection-level encryption: per-collection AES-256-GCM encryption key, key stored in Metadata Segment encrypted with a user-supplied master key.
+80. Write end-to-end tests: simulate production workloads including IoT time-series ingestion, e-commerce order processing, geospatial store locator, and real-time analytics dashboards.
 
 Phase Summary
 
 Phase	Weeks	Key Milestone	Risk Level
-1 — Storage Engine	1-8	.ovn file read/write, WAL, B+ Tree	Low
-2 — Document Encoding	9-14	OBE serializer, compression	Low
-3 — Indexing Engine	15-22	AHIT, compound indexes, full-text	Medium
-4 — Query Engine	23-30	MQL parser, optimizer, aggregation	High
-5 — Concurrency Control	31-38	MVCC, ACID transactions, SSI	High
-6 — Performance Optimization	39-46	YCSB benchmarks, SIMD, group commit	Medium
-7 — Developer API	47-56	Node.js bindings, WASM, production hardening	Medium
+1 — Storage Engine	1-8	.ovn file read/write, WAL, B+ Tree, Blob stub	Low
+2 — Document Encoding	9-14	OBE serializer, compression, Blob storage	Low
+3 — Indexing Engine	15-24	AHIT, compound, full-text, fuzzy, autocomplete, geospatial	Medium
+4 — Query Engine	25-33	MQL parser, optimizer, aggregation, capped, time-series	High
+5 — Concurrency Control	34-42	MVCC, ACID, retryable writes, change streams	High
+6 — Performance Optimization	43-51	YCSB benchmarks, SIMD, group commit, geo tuning	Medium
+7 — Developer API	52-62	Node.js bindings, WASM, production hardening	Medium
+8 — Extended Features	63-72	Distributed, encryption, advanced aggregation	High
 
- 
+
 Appendix A — Glossary
 
 Term	Definition
 ACID	Atomicity, Consistency, Isolation, Durability — the four properties of database transactions.
 AHIT	Adaptive Hybrid Index Tree — the novel index structure designed for Oblivinx3x.
+Autocomplete Index	A compressed radix trie that supports prefix-based token completion for search-as-you-type queries.
 B+ Tree	A balanced tree data structure where all data is stored in leaf nodes, connected in a linked list for sequential scan efficiency.
+Blob Segment	A dedicated .ovn file segment for storing binary large objects (BLOBs) exceeding the 16MB document size limit, chunked at 255KB boundaries.
 Bloom Filter	A probabilistic data structure that tests whether an element is in a set with possible false positives but no false negatives.
+BK-tree	Burkhard-Keller tree — a metric tree structure used for fuzzy string matching by Levenshtein edit distance.
+Capped Collection	A fixed-size collection that automatically overwrites the oldest documents when the size or document count limit is reached.
+Change Stream	A real-time ordered sequence of change events (insert/update/delete/drop) emitted by the Change Stream Emitter after each committed write.
 Compaction	The process of merging multiple SSTable files (or MemTable flushes) to reduce read amplification and reclaim space.
+GeoJSON	An open standard for encoding geographic data structures (Point, LineString, Polygon, etc.) as JSON.
 HNSW	Hierarchical Navigable Small World — a graph-based approximate nearest neighbor search algorithm.
+Idempotency Key	A (lsid, txnNumber) pair embedded in WAL records to detect and deduplicate retried write operations.
+lsid	Logical Session ID — a 128-bit identifier assigned to a client session, used for retryable writes and change stream cursors.
 LSM Tree	Log-Structured Merge-tree — a data structure with excellent write performance that stages writes in memory before merging to disk.
 MVCC	Multi-Version Concurrency Control — a technique allowing multiple versions of data to coexist so readers and writers do not block each other.
 OBE	OVN Binary Encoding — the document serialization format used by Oblivinx3x.
 OVN	Oblivinx Storage Format — the file format used by Oblivinx3x (.ovn extension).
+R-tree	A tree data structure used for spatial indexing of multi-dimensional data (used for 2d planar geospatial index).
+Resume Token	An opaque token embedded in change stream events that allows a subscriber to restart the stream from the last processed event.
+Retryable Write	A write operation that can be safely retried by the driver without risk of duplicate execution, enabled by session-level idempotency keys.
+S2 Geometry	A spherical geometry library (developed by Google) that partitions the Earth's surface into a hierarchy of quadrilateral cells for geospatial indexing.
 SCO	Skip-Column Optimization — the Oblivinx3x technique for non-leftmost-prefix compound index queries.
 SSI	Serializable Snapshot Isolation — a concurrency control protocol achieving full serializability via snapshot isolation with anomaly detection.
 SSTable	Sorted String Table — an immutable, sorted file of key-value pairs used in LSM-tree architectures.
+Time-Series Collection	A collection type optimized for time-ordered measurements, storing documents in automatic time-based buckets for efficient range queries.
+TTL Index	A secondary index with an expireAfterSeconds property that causes the TTL Reaper to automatically delete documents whose indexed time field exceeds the TTL.
 TxID	Transaction ID — a monotonically increasing 64-bit integer identifying each write transaction.
+validationAction	Collection property controlling what happens on schema validation failure: 'error' rejects the write, 'warn' logs and allows it.
+validationLevel	Collection property controlling which documents are validated: 'strict' validates all writes, 'moderate' skips existing non-conforming documents.
 WAL	Write-Ahead Log — a durability mechanism where changes are written to a sequential log before being applied to the main data structure.
 Working Set	The set of data pages actively accessed by the current workload within a recent time window.
 WSE	Working Set Estimator — the Oblivinx3x component that dynamically adjusts Buffer Pool size based on observed working set.
 
- 
+
 Appendix B — .OVN File Format Quick Reference
 File Layout (default 4096-byte pages):
 
   Page 0    : File Header (magic, version, page size, root pointers, flags)
   Page 1    : Segment Directory (maps segment types to page ranges)
   Page 2-N  : Data Segment (document leaf pages, overflow pages)
-  Page N-M  : Index Segment (AHIT B+ tree nodes, SSTable index blocks)
+  Page N-M  : Index Segment (AHIT B+ tree nodes, SSTable index blocks,
+                              inverted index, BK-tree, autocomplete trie,
+                              geospatial R-tree / S2 cell index, HNSW graph)
   Page M-P  : WAL Segment (write-ahead log records)
-  Page P-Q  : Metadata Segment (collection schemas, statistics, version history)
+  Page P-Q  : Metadata Segment (collection schemas, statistics, version history,
+                                 session registry, idempotency cache)
+  Page Q-R  : Blob Segment (chunked binary large objects, Blob Directory B+ tree)
+  Page R-S  : Change Stream Log (append-only circular buffer of change events)
 
 Page Header (32 bytes, every page):
   [4B] Page Type | [8B] Page Number | [8B] TxID | [2B] Slot Count
@@ -1195,7 +1545,17 @@ OBE Document (variable length):
   [4B] Total Length | [16B] Document ID | [8B] TxID | [1B] Tombstone
   [varint] Field Count | [Field...] (Field Name/ID + Type Tag + Value)
 
- 
+WAL Record (variable length):
+  [4B] Record Type | [8B] TxID | [4B] Collection ID
+  [16B] lsid (session ID, zeroed if not retryable) | [8B] txnNumber
+  [varint] Document Length | [Document Bytes] | [4B] CRC32
+
+Change Stream Event (variable length):
+  [8B] TxID | [4B] Collection ID | [1B] Operation Type
+  [16B] Document ID | [varint] Pre-image Length | [Pre-image OBE]
+  [varint] Post-image Length | [Post-image OBE]
+
+
 Appendix C — Supported MQL Operators
 
 Category	Operators
@@ -1204,8 +1564,19 @@ Logical	$and, $or, $not, $nor
 Array	$all, $elemMatch, $size
 Element	$exists, $type
 Evaluation	$regex, $where (sandboxed), $expr
-Update — Field	$set, $unset, $inc, $mul, $rename, $min, $max, $currentDate
+Geospatial	$near, $nearSphere, $geoWithin, $geoIntersects, $centerSphere, $box, $polygon, $geometry
+Text Search	$text (with $search, $language, $caseSensitive, $diacriticSensitive, $fuzzy)
+Bitwise	$bitsAllSet, $bitsAnySet, $bitsAllClear, $bitsAnyClear
+Update — Field	$set, $unset, $inc, $mul, $rename, $min, $max, $currentDate, $setOnInsert
 Update — Array	$push, $pull, $addToSet, $pop, $pullAll, $each, $position, $sort, $slice
-Aggregation	$match, $group, $project, $sort, $limit, $skip, $unwind, $lookup, $count, $out
-Aggregation Accumulators	$sum, $avg, $min, $max, $first, $last, $push, $addToSet, $stdDevPop, $stdDevSamp
-
+Aggregation	$match, $group, $project, $sort, $limit, $skip, $unwind, $lookup,
+		$count, $out, $facet, $bucket, $bucketAuto, $setWindowFields,
+		$merge, $replaceRoot, $replaceWith, $densify, $fill,
+		$unionWith, $sortByCount, $sample
+Aggregation Accumulators	$sum, $avg, $min, $max, $first, $last, $push, $addToSet,
+			$stdDevPop, $stdDevSamp, $mergeObjects, $accumulator,
+			$percentile, $median, $rank, $denseRank, $documentNumber,
+			$shift, $expMovingAvg, $integral, $derivative
+Window Operators	$sum, $avg, $min, $max, $first, $last, $rank, $denseRank,
+		$documentNumber, $shift, $expMovingAvg, $integral, $derivative
+		(within $setWindowFields output stage)

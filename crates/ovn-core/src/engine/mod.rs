@@ -219,8 +219,14 @@ impl OvnEngine {
 
         // WAL write
         let collection_id = Self::collection_id(collection);
-        let wal_record =
-            WalRecord::new(WalRecordType::Insert, txid, collection_id, encoded.clone());
+        let wal_record = WalRecord::new(
+            WalRecordType::Insert,
+            txid,
+            collection_id,
+            [0u8; 16],
+            0,
+            encoded.clone(),
+        );
         self.wal.append(wal_record, &*self.backend)?;
 
         // MemTable insert
@@ -454,6 +460,8 @@ impl OvnEngine {
                             WalRecordType::Update,
                             txid,
                             collection_id,
+                            [0; 16],
+                            0,
                             encoded.clone(),
                         );
                         self.wal.append(wal_record, &*self.backend)?;
@@ -525,8 +533,14 @@ impl OvnEngine {
             doc.txid = txid;
             let encoded = doc.encode()?;
 
-            let wal_record =
-                WalRecord::new(WalRecordType::Update, txid, collection_id, encoded.clone());
+            let wal_record = WalRecord::new(
+                WalRecordType::Update,
+                txid,
+                collection_id,
+                [0; 16],
+                0,
+                encoded.clone(),
+            );
             self.wal.append(wal_record, &*self.backend)?;
 
             let btree_entry = crate::storage::btree::BTreeEntry {
@@ -584,8 +598,14 @@ impl OvnEngine {
                     };
                     let _ = self.memtable.insert(mem_entry);
 
-                    let wal_record =
-                        WalRecord::new(WalRecordType::Delete, txid, collection_id, doc.id.to_vec());
+                    let wal_record = WalRecord::new(
+                        WalRecordType::Delete,
+                        txid,
+                        collection_id,
+                        [0; 16],
+                        0,
+                        doc.id.to_vec(),
+                    );
                     self.wal.append(wal_record, &*self.backend)?;
 
                     return Ok(1);
@@ -632,7 +652,14 @@ impl OvnEngine {
             };
             let _ = self.memtable.insert(mem_entry);
 
-            let wal_record = WalRecord::new(WalRecordType::Delete, txid, collection_id, doc_id);
+            let wal_record = WalRecord::new(
+                WalRecordType::Delete,
+                txid,
+                collection_id,
+                [0; 16],
+                0,
+                doc_id,
+            );
             self.wal.append(wal_record, &*self.backend)?;
             deleted += 1;
         }

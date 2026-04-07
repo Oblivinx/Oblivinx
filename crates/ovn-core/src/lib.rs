@@ -24,7 +24,9 @@
 //! └─────────────────────────────────────┘
 //! ```
 
+pub mod background;
 pub mod compression;
+pub mod distributed;
 pub mod engine;
 pub mod error;
 pub mod format;
@@ -57,4 +59,4 @@ pub const DEFAULT_BUFFER_POOL_SIZE: usize = 256 * 1024 * 1024;
 
 /// File format version
 pub const FORMAT_VERSION_MAJOR: u16 = 1;
-pub const FORMAT_VERSION_MINOR: u16 = 0;
+pub const FORMAT_VERSION_MINOR: u16 = 1;

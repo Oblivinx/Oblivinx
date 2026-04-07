@@ -7,8 +7,10 @@
 //! - [`sstable`] — Sorted String Table for flushed MemTable data
 //! - [`btree`] — Persistent B+ tree for primary document index
 
+pub mod blob;
 pub mod btree;
 pub mod buffer_pool;
 pub mod memtable;
 pub mod sstable;
+pub mod timeseries;
 pub mod wal;

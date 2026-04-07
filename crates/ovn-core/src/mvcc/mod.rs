@@ -8,7 +8,17 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod change_stream;
+
 use crate::error::{OvnError, OvnResult};
+
+/// Idempotency Cache for Retryable Writes.
+/// Maps logical session ID (lsid) and TxnNumber to the commit result.
+#[derive(Debug, Clone, Default)]
+pub struct IdempotencyCache {
+    // Maps lsid bytes -> (txn_number, result_summary)
+    pub sessions: HashMap<[u8; 16], (u64, Vec<u8>)>,
+}
 
 /// Transaction ID generator using monotonic counter.
 pub struct TxIdGenerator {

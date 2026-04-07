@@ -5,7 +5,9 @@
 
 pub mod ahit;
 pub mod fulltext;
+pub mod geospatial;
 pub mod secondary;
+pub mod vector;
 
 pub use ahit::AdaptiveHybridIndexTree;
 pub use secondary::SecondaryIndex;

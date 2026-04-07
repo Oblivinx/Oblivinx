@@ -27,6 +27,12 @@ pub enum AggregateStage {
     Unwind(String),
     /// $count — count documents and output as field
     Count(String),
+    /// $facet - multi-faceted aggregation (stub)
+    Facet(BTreeMap<String, Vec<AggregateStage>>),
+    /// $bucket - bucket grouping (stub)
+    Bucket(serde_json::Value),
+    /// $setWindowFields - analytical partitions (stub)
+    SetWindowFields(serde_json::Value),
 }
 
 /// Accumulator operations for $group stage.
@@ -132,6 +138,11 @@ fn parse_stage(json: &serde_json::Value) -> OvnResult<AggregateStage> {
         "$count" => {
             let field = value.as_str().unwrap_or("count");
             Ok(AggregateStage::Count(field.to_string()))
+        }
+        "$facet" => Ok(AggregateStage::Facet(BTreeMap::new())), // TODO: parse facet recursively
+        "$bucket" | "$bucketAuto" => Ok(AggregateStage::Bucket(value.clone())),
+        "$setWindowFields" | "$fill" | "$densify" => {
+            Ok(AggregateStage::SetWindowFields(value.clone()))
         }
         _ => Err(OvnError::UnknownOperator(key.clone())),
     }
@@ -312,6 +323,12 @@ fn execute_stage(docs: Vec<ObeDocument>, stage: &AggregateStage) -> OvnResult<Ve
             id_expr,
             accumulators,
         } => execute_group(docs, id_expr, accumulators),
+        AggregateStage::Facet(_)
+        | AggregateStage::Bucket(_)
+        | AggregateStage::SetWindowFields(_) => {
+            // TODO: implement Phase 4 missing analytical pipelines
+            Ok(docs)
+        }
     }
 }
 

@@ -55,6 +55,10 @@ pub struct WalRecord {
     pub txid: u64,
     /// Collection ID (hash of collection name)
     pub collection_id: u32,
+    /// Logical session ID for retryable writes
+    pub lsid: [u8; 16],
+    /// Session transaction sequence number
+    pub txn_number: u64,
     /// Document data (OBE-encoded)
     pub data: Vec<u8>,
     /// CRC32 of the record
@@ -63,11 +67,20 @@ pub struct WalRecord {
 
 impl WalRecord {
     /// Create a new WAL record.
-    pub fn new(record_type: WalRecordType, txid: u64, collection_id: u32, data: Vec<u8>) -> Self {
+    pub fn new(
+        record_type: WalRecordType,
+        txid: u64,
+        collection_id: u32,
+        lsid: [u8; 16],
+        txn_number: u64,
+        data: Vec<u8>,
+    ) -> Self {
         Self {
             record_type,
             txid,
             collection_id,
+            lsid,
+            txn_number,
             data,
             crc32: 0,
         }
@@ -75,11 +88,13 @@ impl WalRecord {
 
     /// Serialize the WAL record to bytes.
     pub fn encode(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(20 + self.data.len());
+        let mut buf = Vec::with_capacity(44 + self.data.len());
 
         buf.extend_from_slice(&(self.record_type as u32).to_le_bytes());
         buf.extend_from_slice(&self.txid.to_le_bytes());
         buf.extend_from_slice(&self.collection_id.to_le_bytes());
+        buf.extend_from_slice(&self.lsid);
+        buf.extend_from_slice(&self.txn_number.to_le_bytes());
         encode_varint(self.data.len() as u64, &mut buf);
         buf.extend_from_slice(&self.data);
 
@@ -94,7 +109,7 @@ impl WalRecord {
 
     /// Deserialize a WAL record from bytes, returning (record, bytes_consumed).
     pub fn decode(buf: &[u8]) -> OvnResult<(Self, usize)> {
-        if buf.len() < 16 {
+        if buf.len() < 40 {
             return Err(OvnError::WalCorrupted {
                 offset: 0,
                 reason: "Record too short".to_string(),
@@ -128,6 +143,30 @@ impl WalRecord {
         let collection_id =
             u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
         pos += 4;
+
+        // lsid
+        if buf.len() < pos + 24 {
+            return Err(OvnError::WalCorrupted {
+                offset: pos as u64,
+                reason: "Record too short for lsid/txnNumber".to_string(),
+            });
+        }
+        let mut lsid = [0u8; 16];
+        lsid.copy_from_slice(&buf[pos..pos + 16]);
+        pos += 16;
+
+        // txnNumber
+        let txn_number = u64::from_le_bytes([
+            buf[pos],
+            buf[pos + 1],
+            buf[pos + 2],
+            buf[pos + 3],
+            buf[pos + 4],
+            buf[pos + 5],
+            buf[pos + 6],
+            buf[pos + 7],
+        ]);
+        pos += 8;
 
         // Data length
         let (data_len, vl) = decode_varint(&buf[pos..])?;
@@ -167,6 +206,8 @@ impl WalRecord {
                 record_type,
                 txid,
                 collection_id,
+                lsid,
+                txn_number,
                 data,
                 crc32: stored_crc,
             },
@@ -237,7 +278,7 @@ impl WalManager {
 
     /// Write a checkpoint record and update the last checkpoint TxID.
     pub fn checkpoint(&self, txid: u64, backend: &dyn FileBackend) -> OvnResult<()> {
-        let record = WalRecord::new(WalRecordType::Checkpoint, txid, 0, Vec::new());
+        let record = WalRecord::new(WalRecordType::Checkpoint, txid, 0, [0; 16], 0, Vec::new());
         self.append(record, backend)?;
         *self.last_checkpoint_txid.lock() = txid;
         Ok(())
@@ -305,7 +346,8 @@ mod tests {
     #[test]
     fn test_wal_record_roundtrip() {
         let data = b"test document data".to_vec();
-        let record = WalRecord::new(WalRecordType::Insert, 42, 1, data.clone());
+        let lsid = [1u8; 16];
+        let record = WalRecord::new(WalRecordType::Insert, 42, 1, lsid, 7, data.clone());
         let encoded = record.encode();
         let (decoded, consumed) = WalRecord::decode(&encoded).unwrap();
 
@@ -313,6 +355,8 @@ mod tests {
         assert_eq!(decoded.record_type, WalRecordType::Insert);
         assert_eq!(decoded.txid, 42);
         assert_eq!(decoded.collection_id, 1);
+        assert_eq!(decoded.lsid, lsid);
+        assert_eq!(decoded.txn_number, 7);
         assert_eq!(decoded.data, data);
     }
 
@@ -320,16 +364,16 @@ mod tests {
     fn test_wal_replay_multiple() {
         let mut all_bytes = Vec::new();
 
-        let r1 = WalRecord::new(WalRecordType::Insert, 1, 1, b"doc1".to_vec());
+        let r1 = WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"doc1".to_vec());
         all_bytes.extend_from_slice(&r1.encode());
 
-        let r2 = WalRecord::new(WalRecordType::Commit, 1, 0, Vec::new());
+        let r2 = WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 0, Vec::new());
         all_bytes.extend_from_slice(&r2.encode());
 
-        let r3 = WalRecord::new(WalRecordType::Checkpoint, 1, 0, Vec::new());
+        let r3 = WalRecord::new(WalRecordType::Checkpoint, 1, 0, [0; 16], 0, Vec::new());
         all_bytes.extend_from_slice(&r3.encode());
 
-        let r4 = WalRecord::new(WalRecordType::Insert, 2, 1, b"doc2".to_vec());
+        let r4 = WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 0, b"doc2".to_vec());
         all_bytes.extend_from_slice(&r4.encode());
 
         let records = WalManager::replay(&all_bytes).unwrap();
@@ -340,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_wal_corrupted_record() {
-        let record = WalRecord::new(WalRecordType::Insert, 1, 1, b"data".to_vec());
+        let record = WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"data".to_vec());
         let mut encoded = record.encode();
         // Corrupt CRC
         let len = encoded.len();

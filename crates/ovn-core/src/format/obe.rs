@@ -49,6 +49,9 @@ pub enum TypeTag {
     ObjectId = 0x0C,
     Decimal128 = 0x0D,
     Varint = 0x0E,
+    BlobRef = 0x0F,
+    GeoPoint = 0x10,
+    GeoJSON = 0x11,
 }
 
 impl TypeTag {
@@ -68,6 +71,9 @@ impl TypeTag {
             0x0C => Ok(Self::ObjectId),
             0x0D => Ok(Self::Decimal128),
             0x0E => Ok(Self::Varint),
+            0x0F => Ok(Self::BlobRef),
+            0x10 => Ok(Self::GeoPoint),
+            0x11 => Ok(Self::GeoJSON),
             _ => Err(OvnError::UnknownTypeTag(b)),
         }
     }
@@ -131,6 +137,9 @@ pub enum ObeValue {
     Timestamp(u64),
     ObjectId([u8; 12]),
     Decimal128([u8; 16]),
+    BlobRef { blob_id: [u8; 16], total_size: u64 },
+    GeoPoint { lat: f64, lng: f64 },
+    GeoJSON(Vec<u8>),
 }
 
 impl ObeValue {
@@ -150,6 +159,9 @@ impl ObeValue {
             ObeValue::Timestamp(_) => TypeTag::Timestamp,
             ObeValue::ObjectId(_) => TypeTag::ObjectId,
             ObeValue::Decimal128(_) => TypeTag::Decimal128,
+            ObeValue::BlobRef { .. } => TypeTag::BlobRef,
+            ObeValue::GeoPoint { .. } => TypeTag::GeoPoint,
+            ObeValue::GeoJSON(_) => TypeTag::GeoJSON,
         }
     }
 
@@ -304,6 +316,27 @@ impl ObeValue {
                 }
                 serde_json::Value::String(hex)
             }
+            ObeValue::BlobRef {
+                blob_id,
+                total_size,
+            } => {
+                let mut hex = String::with_capacity(32);
+                for byte in blob_id {
+                    use std::fmt::Write;
+                    write!(hex, "{byte:02x}").unwrap();
+                }
+                serde_json::json!({
+                    "$blob": hex,
+                    "size": total_size
+                })
+            }
+            ObeValue::GeoPoint { lat, lng } => {
+                serde_json::json!({
+                    "type": "Point",
+                    "coordinates": [lng, lat]
+                })
+            }
+            ObeValue::GeoJSON(b) => serde_json::from_slice(b).unwrap_or(serde_json::Value::Null),
         }
     }
 }
@@ -625,6 +658,21 @@ fn encode_value(value: &ObeValue, buf: &mut Vec<u8>) -> OvnResult<()> {
         ObeValue::Decimal128(d) => {
             buf.extend_from_slice(d);
         }
+        ObeValue::BlobRef {
+            blob_id,
+            total_size,
+        } => {
+            buf.extend_from_slice(blob_id);
+            buf.extend_from_slice(&total_size.to_le_bytes());
+        }
+        ObeValue::GeoPoint { lat, lng } => {
+            buf.extend_from_slice(&lat.to_le_bytes());
+            buf.extend_from_slice(&lng.to_le_bytes());
+        }
+        ObeValue::GeoJSON(b) => {
+            encode_varint(b.len() as u64, buf);
+            buf.extend_from_slice(b);
+        }
     }
     Ok(())
 }
@@ -765,6 +813,45 @@ fn decode_value(tag: TypeTag, buf: &[u8]) -> OvnResult<(ObeValue, usize)> {
         TypeTag::Varint => {
             let (v, consumed) = decode_varint(buf)?;
             Ok((ObeValue::Int64(v as i64), consumed))
+        }
+        TypeTag::BlobRef => {
+            if buf.len() < 24 {
+                return Err(OvnError::EncodingError("BlobRef truncated".to_string()));
+            }
+            let mut blob_id = [0u8; 16];
+            blob_id.copy_from_slice(&buf[..16]);
+            let total_size = u64::from_le_bytes([
+                buf[16], buf[17], buf[18], buf[19], buf[20], buf[21], buf[22], buf[23],
+            ]);
+            Ok((
+                ObeValue::BlobRef {
+                    blob_id,
+                    total_size,
+                },
+                24,
+            ))
+        }
+        TypeTag::GeoPoint => {
+            if buf.len() < 16 {
+                return Err(OvnError::EncodingError("GeoPoint truncated".to_string()));
+            }
+            let lat = f64::from_le_bytes([
+                buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7],
+            ]);
+            let lng = f64::from_le_bytes([
+                buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15],
+            ]);
+            Ok((ObeValue::GeoPoint { lat, lng }, 16))
+        }
+        TypeTag::GeoJSON => {
+            let (len, vl) = decode_varint(buf)?;
+            let len = len as usize;
+            let start = vl;
+            if buf.len() < start + len {
+                return Err(OvnError::EncodingError("GeoJSON truncated".to_string()));
+            }
+            let data = buf[start..start + len].to_vec();
+            Ok((ObeValue::GeoJSON(data), start + len))
         }
     }
 }

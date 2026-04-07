@@ -31,6 +31,8 @@ pub struct FullTextIndex {
     pub name: String,
     /// Indexed fields
     pub fields: Vec<String>,
+    // TODO: Add bk_tree: RwLock<BkTree> for maxEdits fuzzy matching
+    // TODO: Add radix_trie: RwLock<RadixTrie> for autocomplete prefix queries
 }
 
 impl FullTextIndex {
