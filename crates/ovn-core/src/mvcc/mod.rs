@@ -177,13 +177,14 @@ impl MvccManager {
                     if version.txid > txn.snapshot.txid
                         && !txn.snapshot.active_txids.contains(&version.txid)
                     {
+                        let winner_txid = version.txid;
                         let doc_id = String::from_utf8_lossy(read_key).to_string();
                         drop(version_chains);
                         active.remove(&txid);
                         self.update_horizon();
                         return Err(OvnError::WriteConflict {
                             doc_id,
-                            winner_txid: version.txid,
+                            winner_txid,
                             loser_txid: txid,
                         });
                     }

@@ -658,6 +658,17 @@ impl OvnEngine {
         }
     }
 
+    /// Drop a named index from a collection.
+    pub fn drop_index(&self, collection: &str, index_name: &str) -> OvnResult<()> {
+        self.check_closed()?;
+        self.ensure_collection(collection)?;
+        let collections = self.collections.read();
+        if let Some(coll) = collections.get(collection) {
+            coll.index_manager.drop_index(index_name, collection)?;
+        }
+        Ok(())
+    }
+
     // ── Transactions ───────────────────────────────────────────
 
     /// Begin a new transaction.

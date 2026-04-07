@@ -1,0 +1,150 @@
+{
+    "groups": {
+        "1203630xxxxx@g.us": {
+            "meta": {
+                "id": "1203630xxxxx@g.us",
+                "name": "Nama Group",
+                "owner": "628123xxxx@s.whatsapp.net",
+                "createdAt": 1710000000000,
+                "updatedAt": 1710000000000,
+                "region": "ID",
+                "language": "id"
+            },
+            "state": {
+                "isActive": true,
+                "isMuted": false,
+                "isLocked": false,
+                "maintenance": false
+            },
+            "settings": {
+                "anti": {
+                    "link": true,
+                    "spam": true,
+                    "badWord": true,
+                    "mentionAll": false,
+                    "caps": true
+                },
+                "automation": {
+                    "welcome": true,
+                    "goodbye": true,
+                    "autoRead": false,
+                    "autoDelete": false,
+                    "autoReact": true
+                },
+                "restrictions": {
+                    "adminOnlyCommand": false,
+                    "premiumOnlyCommand": false,
+                    "cooldownPerUser": 3,
+                    "cooldownGlobal": 1
+                }
+            },
+            "featureFlags": {
+                "ai": true,
+                "games": true,
+                "economy": true,
+                "nsfw": false,
+                "downloader": true,
+                "sticker": true
+            },
+            "security": {
+                "antiRaid": {
+                    "enabled": true,
+                    "joinThreshold": 5,
+                    "interval": 10,
+                    "action": "lock"
+                },
+                "antiBot": true,
+                "antiFakeNumber": false,
+                "antiVPN": false
+            },
+            "members": {
+                "628123xxxx@s.whatsapp.net": {
+                    "profile": {
+                        "name": "User",
+                        "role": "admin",
+                        "premium": false
+                    },
+                    "stats": {
+                        "messages": 120,
+                        "commandsUsed": 45,
+                        "lastActive": 1710000000000
+                    },
+                    "moderation": {
+                        "warnings": 1,
+                        "isMuted": false,
+                        "isBanned": false,
+                        "muteUntil": null
+                    },
+                    "economy": {
+                        "balance": 1500,
+                        "xp": 230,
+                        "level": 3,
+                        "inventory": []
+                    },
+                    "cooldowns": {
+                        "lastCommand": 1710000000000
+                    }
+                }
+            },
+            "moderation": {
+                "bannedUsers": [],
+                "mutedUsers": [],
+                "warningLogs": []
+            },
+            "commands": {
+                "custom": {
+                    "!rules": {
+                        "response": "No spam, no link",
+                        "cooldown": 5,
+                        "adminOnly": false
+                    }
+                },
+                "disabled": [
+                    "play",
+                    "ytmp3"
+                ]
+            },
+            "messages": {
+                "welcome": {
+                    "enabled": true,
+                    "text": "Halo @user, selamat datang di @group 🎉",
+                    "media": null
+                },
+                "goodbye": {
+                    "enabled": true,
+                    "text": "Bye @user 👋",
+                    "media": null
+                }
+            },
+            "logs": {
+                "enabled": true,
+                "events": {
+                    "messageDelete": true,
+                    "memberJoin": true,
+                    "memberLeave": true,
+                    "commandUsage": true
+                },
+                "channel": "1203630log@g.us"
+            },
+            "analytics": {
+                "dailyMessages": 1200,
+                "activeUsers": 45,
+                "topCommands": [
+                    "menu",
+                    "ai",
+                    "play"
+                ]
+            },
+            "integrations": {
+                "webhook": {
+                    "enabled": false,
+                    "url": null
+                },
+                "api": {
+                    "enabled": true,
+                    "rateLimit": 1000
+                }
+            }
+        }
+    }
+}

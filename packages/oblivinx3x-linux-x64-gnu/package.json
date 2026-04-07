@@ -1,0 +1,16 @@
+{
+  "name": "oblivinx3x-linux-x64-gnu",
+  "version": "0.1.0",
+  "description": "Oblivinx3x prebuilt native addon for Linux x64 (glibc)",
+  "main": "ovn_neon.node",
+  "files": ["ovn_neon.node", "README.md"],
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "libc": ["glibc"],
+  "license": "MIT",
+  "author": "Natz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/natz/oblivinx3x.git"
+  }
+}

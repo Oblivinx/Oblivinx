@@ -48,3 +48,16 @@ neon = { version = "1", features = ["napi-6"] }
 tempfile = "3.12"
 rand = "0.8"
 criterion = "0.5"
+
+# ── Release profile: optimized for size + speed ─────────────
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# ── Dev profile: fast builds for development ────────────────
+[profile.dev]
+opt-level = 0
+debug = true

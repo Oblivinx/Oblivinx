@@ -1,0 +1,67 @@
+{
+  "name": "oblivinx3x",
+  "version": "0.1.0",
+  "description": "Oblivinx3x — High-Performance Embedded Document Database. Hybrid B+/LSM engine with MVCC, ACID transactions, and MongoDB-compatible query language. Zero configuration, single-file, in-process.",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.js",
+      "require": "./src/index.cjs",
+      "types": "./src/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "type": "module",
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:debug": "cargo build -p ovn-neon",
+    "build:release": "cargo build --release -p ovn-neon",
+    "postbuild": "node scripts/copy-native.js",
+    "test": "node --test tests/",
+    "test:unit": "node --test tests/unit/",
+    "test:integration": "node --test tests/integration/",
+    "prepublishOnly": "node scripts/prepublish.js"
+  },
+  "keywords": [
+    "database",
+    "embedded",
+    "document",
+    "nosql",
+    "mvcc",
+    "rust",
+    "neon",
+    "mongodb",
+    "sqlite",
+    "key-value",
+    "storage-engine",
+    "b-plus-tree",
+    "lsm"
+  ],
+  "author": "Natz",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "optionalDependencies": {
+    "oblivinx3x-darwin-arm64": "0.1.0",
+    "oblivinx3x-darwin-x64": "0.1.0",
+    "oblivinx3x-linux-arm64-gnu": "0.1.0",
+    "oblivinx3x-linux-x64-gnu": "0.1.0",
+    "oblivinx3x-win32-x64-msvc": "0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/natz/oblivinx3x.git"
+  },
+  "bugs": {
+    "url": "https://github.com/natz/oblivinx3x/issues"
+  },
+  "homepage": "https://github.com/natz/oblivinx3x#readme"
+}

@@ -129,7 +129,7 @@ impl FileHeader {
 
         // Compute CRC32 over bytes 0x0000–0x0037 (inclusive)
         let mut crc = Crc32Hasher::new();
-        crc.update(&buf[0x0000..0x0038]);
+        crc.update(&cursor.get_ref()[0x0000..0x0038]);
         let checksum = crc.finalize();
         cursor.write_all(&checksum.to_le_bytes()).unwrap();            // 0x0038
 

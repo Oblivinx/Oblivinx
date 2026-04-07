@@ -1,0 +1,312 @@
+name: Build & Publish Oblivinx3x
+
+# Triggers:
+#   - Manual dispatch (workflow_dispatch) for on-demand builds
+#   - Push of a version tag: v0.1.0, v1.0.0, etc.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (build only, do not publish to npm)'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Job 1: Build native addon for Windows x64 ─────────────────
+  build-windows-x64:
+    name: Build — Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build ovn-neon (release)
+        run: cargo build --release -p ovn-neon
+
+      - name: Prepare platform binary
+        shell: pwsh
+        run: |
+          $dll = "target/release/ovn_neon.dll"
+          $node = "packages/oblivinx3x-win32-x64-msvc/ovn_neon.node"
+          Copy-Item $dll $node -Force
+          Write-Host "Copied $dll → $node"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oblivinx3x-win32-x64-msvc
+          path: packages/oblivinx3x-win32-x64-msvc/ovn_neon.node
+          retention-days: 7
+
+  # ── Job 2: Build native addon for Linux x64 ───────────────────
+  build-linux-x64:
+    name: Build — Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build ovn-neon (release)
+        run: cargo build --release -p ovn-neon
+
+      - name: Prepare platform binary
+        run: |
+          cp target/release/libovn_neon.so packages/oblivinx3x-linux-x64-gnu/ovn_neon.node
+          echo "Copied libovn_neon.so → packages/oblivinx3x-linux-x64-gnu/ovn_neon.node"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oblivinx3x-linux-x64-gnu
+          path: packages/oblivinx3x-linux-x64-gnu/ovn_neon.node
+          retention-days: 7
+
+  # ── Job 3: Build native addon for Linux ARM64 ─────────────────
+  build-linux-arm64:
+    name: Build — Linux ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install cross-compilation linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build ovn-neon (cross-compile ARM64)
+        run: |
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          cargo build --release -p ovn-neon --target aarch64-unknown-linux-gnu
+
+      - name: Prepare platform binary
+        run: |
+          cp target/aarch64-unknown-linux-gnu/release/libovn_neon.so \
+             packages/oblivinx3x-linux-arm64-gnu/ovn_neon.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oblivinx3x-linux-arm64-gnu
+          path: packages/oblivinx3x-linux-arm64-gnu/ovn_neon.node
+          retention-days: 7
+
+  # ── Job 4: Build native addon for macOS x64 ───────────────────
+  build-darwin-x64:
+    name: Build — macOS Intel x64
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-x64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build ovn-neon (release)
+        run: cargo build --release -p ovn-neon
+
+      - name: Prepare platform binary
+        run: |
+          cp target/release/libovn_neon.dylib packages/oblivinx3x-darwin-x64/ovn_neon.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oblivinx3x-darwin-x64
+          path: packages/oblivinx3x-darwin-x64/ovn_neon.node
+          retention-days: 7
+
+  # ── Job 5: Build native addon for macOS ARM64 (Apple Silicon) ──
+  build-darwin-arm64:
+    name: Build — macOS Apple Silicon ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build ovn-neon (release)
+        run: cargo build --release -p ovn-neon
+
+      - name: Prepare platform binary
+        run: |
+          cp target/release/libovn_neon.dylib packages/oblivinx3x-darwin-arm64/ovn_neon.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oblivinx3x-darwin-arm64
+          path: packages/oblivinx3x-darwin-arm64/ovn_neon.node
+          retention-days: 7
+
+  # ── Job 6: Publish all packages to npm ────────────────────────
+  publish:
+    name: Publish to npm
+    needs:
+      - build-windows-x64
+      - build-linux-x64
+      - build-linux-arm64
+      - build-darwin-x64
+      - build-darwin-arm64
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dry_run }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Download all built binaries
+      - uses: actions/download-artifact@v4
+        with:
+          name: oblivinx3x-win32-x64-msvc
+          path: packages/oblivinx3x-win32-x64-msvc/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oblivinx3x-linux-x64-gnu
+          path: packages/oblivinx3x-linux-x64-gnu/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oblivinx3x-linux-arm64-gnu
+          path: packages/oblivinx3x-linux-arm64-gnu/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oblivinx3x-darwin-x64
+          path: packages/oblivinx3x-darwin-x64/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: oblivinx3x-darwin-arm64
+          path: packages/oblivinx3x-darwin-arm64/
+
+      # Publish platform packages first
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in \
+            packages/oblivinx3x-win32-x64-msvc \
+            packages/oblivinx3x-linux-x64-gnu \
+            packages/oblivinx3x-linux-arm64-gnu \
+            packages/oblivinx3x-darwin-x64 \
+            packages/oblivinx3x-darwin-arm64; do
+            echo "Publishing $pkg..."
+            cd "$pkg"
+            npm publish --access public || echo "Already published (ok)"
+            cd -
+          done
+
+      # Then publish the main package
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/oblivinx3x
+        run: npm publish --access public
+
+  # ── Job 7: Verify published package (integration test) ─────────
+  verify:
+    name: Verify npm install
+    needs: [publish]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['18', '20', '22']
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Test npm install and basic usage
+        run: |
+          mkdir test-install && cd test-install
+          npm init -y
+          npm install oblivinx3x
+          node -e "
+            import('oblivinx3x').then(({ Oblivinx3x }) => {
+              const db = new Oblivinx3x('verify-test.ovn');
+              db.close().then(() => {
+                console.log('✓ oblivinx3x installed and working on ${{ matrix.os }} Node ${{ matrix.node }}');
+                process.exit(0);
+              });
+            }).catch(err => {
+              console.error('✗', err.message);
+              process.exit(1);
+            });
+          "
