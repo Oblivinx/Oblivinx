@@ -27,12 +27,12 @@
 //! | 0x0060 | 64   | Application identifier       |
 //! | 0x0FF0 | 16   | Shadow copy (corruption det) |
 
-use std::io::{Read, Write, Cursor};
 use crc32fast::Hasher as Crc32Hasher;
+use std::io::{Cursor, Read, Write};
 use uuid::Uuid;
 
 use crate::error::{OvnError, OvnResult};
-use crate::{OVN_MAGIC, FORMAT_VERSION_MAJOR, FORMAT_VERSION_MINOR, DEFAULT_PAGE_SIZE};
+use crate::{DEFAULT_PAGE_SIZE, FORMAT_VERSION_MAJOR, FORMAT_VERSION_MINOR, OVN_MAGIC};
 
 /// Size of the file header in bytes (always one full page).
 pub const HEADER_SIZE: usize = 4096;
@@ -116,28 +116,40 @@ impl FileHeader {
         let mut cursor = Cursor::new(&mut buf[..]);
 
         // Write all fields in little-endian order
-        cursor.write_all(&self.magic.to_le_bytes()).unwrap();           // 0x0000
-        cursor.write_all(&self.version_major.to_le_bytes()).unwrap();   // 0x0004
-        cursor.write_all(&self.version_minor.to_le_bytes()).unwrap();   // 0x0006
-        cursor.write_all(&self.page_size.to_le_bytes()).unwrap();       // 0x0008
-        cursor.write_all(&self.total_file_size.to_le_bytes()).unwrap(); // 0x000C
-        cursor.write_all(&self.primary_root_page.to_le_bytes()).unwrap();  // 0x0014
-        cursor.write_all(&self.metadata_root_page.to_le_bytes()).unwrap(); // 0x001C
-        cursor.write_all(&self.wal_start_offset.to_le_bytes()).unwrap();   // 0x0024
-        cursor.write_all(&self.wal_size.to_le_bytes()).unwrap();           // 0x002C
-        cursor.write_all(&self.collection_count.to_le_bytes()).unwrap();   // 0x0034
+        cursor.write_all(&self.magic.to_le_bytes()).unwrap(); // 0x0000
+        cursor.write_all(&self.version_major.to_le_bytes()).unwrap(); // 0x0004
+        cursor.write_all(&self.version_minor.to_le_bytes()).unwrap(); // 0x0006
+        cursor.write_all(&self.page_size.to_le_bytes()).unwrap(); // 0x0008
+        cursor
+            .write_all(&self.total_file_size.to_le_bytes())
+            .unwrap(); // 0x000C
+        cursor
+            .write_all(&self.primary_root_page.to_le_bytes())
+            .unwrap(); // 0x0014
+        cursor
+            .write_all(&self.metadata_root_page.to_le_bytes())
+            .unwrap(); // 0x001C
+        cursor
+            .write_all(&self.wal_start_offset.to_le_bytes())
+            .unwrap(); // 0x0024
+        cursor.write_all(&self.wal_size.to_le_bytes()).unwrap(); // 0x002C
+        cursor
+            .write_all(&self.collection_count.to_le_bytes())
+            .unwrap(); // 0x0034
 
         // Compute CRC32 over bytes 0x0000–0x0037 (inclusive)
         let mut crc = Crc32Hasher::new();
         crc.update(&cursor.get_ref()[0x0000..0x0038]);
         let checksum = crc.finalize();
-        cursor.write_all(&checksum.to_le_bytes()).unwrap();            // 0x0038
+        cursor.write_all(&checksum.to_le_bytes()).unwrap(); // 0x0038
 
-        cursor.write_all(&self.flags.to_le_bytes()).unwrap();          // 0x003C
-        cursor.write_all(&self.created_at.to_le_bytes()).unwrap();     // 0x0040
-        cursor.write_all(&self.last_checkpoint.to_le_bytes()).unwrap();// 0x0048
-        cursor.write_all(&self.db_uuid).unwrap();                      // 0x0050
-        cursor.write_all(&self.app_id).unwrap();                       // 0x0060
+        cursor.write_all(&self.flags.to_le_bytes()).unwrap(); // 0x003C
+        cursor.write_all(&self.created_at.to_le_bytes()).unwrap(); // 0x0040
+        cursor
+            .write_all(&self.last_checkpoint.to_le_bytes())
+            .unwrap(); // 0x0048
+        cursor.write_all(&self.db_uuid).unwrap(); // 0x0050
+        cursor.write_all(&self.app_id).unwrap(); // 0x0060
 
         // Shadow copy at 0x0FF0: magic(4) + version(4) + page_size(4) + pad(4)
         let shadow_start = SHADOW_OFFSET;

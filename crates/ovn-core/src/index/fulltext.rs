@@ -3,8 +3,8 @@
 //! Maps stemmed, lowercased tokens to posting lists for text search.
 //! Supports phrase queries and proximity searches via position tracking.
 
-use std::collections::{BTreeMap, HashMap};
 use parking_lot::RwLock;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::error::OvnResult;
 
@@ -50,10 +50,7 @@ impl FullTextIndex {
 
         for (pos, token) in tokens.iter().enumerate() {
             let stemmed = Self::stem(token);
-            token_positions
-                .entry(stemmed)
-                .or_default()
-                .push(pos as u32);
+            token_positions.entry(stemmed).or_default().push(pos as u32);
         }
 
         let mut index = self.index.write();
@@ -101,7 +98,11 @@ impl FullTextIndex {
             .collect();
 
         // Sort by score descending
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         results
     }
@@ -179,16 +180,15 @@ mod tests {
 
     #[test]
     fn test_full_text_search() {
-        let fti = FullTextIndex::new(
-            "content_text".to_string(),
-            vec!["content".to_string()],
-        );
+        let fti = FullTextIndex::new("content_text".to_string(), vec!["content".to_string()]);
 
         let doc1_id = [1u8; 16];
         let doc2_id = [2u8; 16];
 
-        fti.index_document(doc1_id, 0, "The quick brown fox jumps over the lazy dog").unwrap();
-        fti.index_document(doc2_id, 0, "A quick red car drives fast").unwrap();
+        fti.index_document(doc1_id, 0, "The quick brown fox jumps over the lazy dog")
+            .unwrap();
+        fti.index_document(doc2_id, 0, "A quick red car drives fast")
+            .unwrap();
 
         let results = fti.search("quick fox");
         assert!(!results.is_empty());

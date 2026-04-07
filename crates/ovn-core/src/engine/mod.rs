@@ -3,35 +3,36 @@
 //! The `OvnEngine` struct is the primary entry point for all database operations.
 //! It coordinates the storage engine, MVCC, indexing, and query layers.
 
-pub mod config;
 pub mod collection;
+pub mod config;
 
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 use crate::error::{OvnError, OvnResult};
 use crate::format::header::FileHeader;
 use crate::format::obe::ObeDocument;
 use crate::format::page::{Page, PageType};
 use crate::io::{FileBackend, OsFileBackend};
+use crate::mvcc::{MvccManager, Transaction, VersionEntry};
+use crate::query::aggregation::{execute_pipeline, parse_pipeline};
+use crate::query::filter::{evaluate_filter, parse_filter};
+use crate::query::update::{apply_update, parse_update};
+use crate::storage::btree::BPlusTree;
 use crate::storage::buffer_pool::BufferPool;
-use crate::storage::wal::{WalManager, WalRecord, WalRecordType};
 use crate::storage::memtable::{MemTable, MemTableEntry};
 use crate::storage::sstable::SSTableManager;
-use crate::storage::btree::BPlusTree;
-use crate::mvcc::{MvccManager, VersionEntry, Transaction};
-use crate::query::filter::{parse_filter, evaluate_filter};
-use crate::query::update::{parse_update, apply_update};
-use crate::query::aggregation::{parse_pipeline, execute_pipeline};
+use crate::storage::wal::{WalManager, WalRecord, WalRecordType};
 
-use self::config::OvnConfig;
 use self::collection::Collection;
+use self::config::OvnConfig;
 
 /// The main Oblivinx3x database engine.
 pub struct OvnEngine {
-    /// Database file path
+    /// Database file path — retained for future WAL recovery and hot-backup APIs
+    #[allow(dead_code)]
     path: PathBuf,
     /// File I/O backend
     backend: Arc<OsFileBackend>,
@@ -134,7 +135,8 @@ impl OvnEngine {
             .as_millis() as u64;
 
         let header_bytes = header.to_bytes();
-        self.backend.write_page(0, self.config.page_size, &header_bytes)?;
+        self.backend
+            .write_page(0, self.config.page_size, &header_bytes)?;
         self.backend.sync()?;
 
         *self.closed.write() = true;
@@ -204,11 +206,7 @@ impl OvnEngine {
     // ── Document CRUD ──────────────────────────────────────────
 
     /// Insert a single document into a collection.
-    pub fn insert(
-        &self,
-        collection: &str,
-        doc_json: &serde_json::Value,
-    ) -> OvnResult<String> {
+    pub fn insert(&self, collection: &str, doc_json: &serde_json::Value) -> OvnResult<String> {
         self.check_closed()?;
         self.ensure_collection(collection)?;
 
@@ -221,7 +219,8 @@ impl OvnEngine {
 
         // WAL write
         let collection_id = Self::collection_id(collection);
-        let wal_record = WalRecord::new(WalRecordType::Insert, txid, collection_id, encoded.clone());
+        let wal_record =
+            WalRecord::new(WalRecordType::Insert, txid, collection_id, encoded.clone());
         self.wal.append(wal_record, &*self.backend)?;
 
         // MemTable insert
@@ -407,10 +406,14 @@ impl OvnEngine {
         collection: &str,
         filter_json: &serde_json::Value,
     ) -> OvnResult<Option<serde_json::Value>> {
-        let results = self.find(collection, filter_json, Some(FindOptions {
-            limit: Some(1),
-            ..Default::default()
-        }))?;
+        let results = self.find(
+            collection,
+            filter_json,
+            Some(FindOptions {
+                limit: Some(1),
+                ..Default::default()
+            }),
+        )?;
         Ok(results.into_iter().next())
     }
 
@@ -448,18 +451,31 @@ impl OvnEngine {
 
                         // WAL
                         let wal_record = WalRecord::new(
-                            WalRecordType::Update, txid, collection_id, encoded.clone(),
+                            WalRecordType::Update,
+                            txid,
+                            collection_id,
+                            encoded.clone(),
                         );
                         self.wal.append(wal_record, &*self.backend)?;
 
                         // Update B+ tree
                         let btree_entry = crate::storage::btree::BTreeEntry {
                             key: doc.id.to_vec(),
-                            value: encoded,
+                            value: encoded.clone(),
                             txid,
                             tombstone: false,
                         };
                         self.btree.insert(btree_entry)?;
+
+                        // MemTable update
+                        let mem_entry = MemTableEntry {
+                            key: doc.id.to_vec(),
+                            value: encoded,
+                            txid,
+                            tombstone: false,
+                            collection_id,
+                        };
+                        let _ = self.memtable.insert(mem_entry);
 
                         updated_count += 1;
 
@@ -493,7 +509,9 @@ impl OvnEngine {
 
         let all_entries = self.btree.scan_all();
         for entry in all_entries {
-            if entry.tombstone { continue; }
+            if entry.tombstone {
+                continue;
+            }
             if let Ok(doc) = ObeDocument::decode(&entry.value) {
                 if evaluate_filter(&filter, &doc) {
                     to_update.push(doc);
@@ -507,16 +525,27 @@ impl OvnEngine {
             doc.txid = txid;
             let encoded = doc.encode()?;
 
-            let wal_record = WalRecord::new(WalRecordType::Update, txid, collection_id, encoded.clone());
+            let wal_record =
+                WalRecord::new(WalRecordType::Update, txid, collection_id, encoded.clone());
             self.wal.append(wal_record, &*self.backend)?;
 
             let btree_entry = crate::storage::btree::BTreeEntry {
                 key: doc.id.to_vec(),
-                value: encoded,
+                value: encoded.clone(),
                 txid,
                 tombstone: false,
             };
             self.btree.insert(btree_entry)?;
+
+            let mem_entry = MemTableEntry {
+                key: doc.id.to_vec(),
+                value: encoded,
+                txid,
+                tombstone: false,
+                collection_id,
+            };
+            let _ = self.memtable.insert(mem_entry);
+
             updated_count += 1;
         }
 
@@ -524,11 +553,7 @@ impl OvnEngine {
     }
 
     /// Delete a single matching document.
-    pub fn delete(
-        &self,
-        collection: &str,
-        filter_json: &serde_json::Value,
-    ) -> OvnResult<u64> {
+    pub fn delete(&self, collection: &str, filter_json: &serde_json::Value) -> OvnResult<u64> {
         self.check_closed()?;
 
         let filter = parse_filter(filter_json)?;
@@ -536,7 +561,9 @@ impl OvnEngine {
         let all_entries = self.btree.scan_all();
 
         for entry in all_entries {
-            if entry.tombstone { continue; }
+            if entry.tombstone {
+                continue;
+            }
             if let Ok(doc) = ObeDocument::decode(&entry.value) {
                 if evaluate_filter(&filter, &doc) {
                     let txid = self.mvcc.next_txid();
@@ -548,7 +575,17 @@ impl OvnEngine {
                     };
                     self.btree.insert(tombstone_entry)?;
 
-                    let wal_record = WalRecord::new(WalRecordType::Delete, txid, collection_id, doc.id.to_vec());
+                    let mem_entry = MemTableEntry {
+                        key: doc.id.to_vec(),
+                        value: Vec::new(),
+                        txid,
+                        tombstone: true,
+                        collection_id,
+                    };
+                    let _ = self.memtable.insert(mem_entry);
+
+                    let wal_record =
+                        WalRecord::new(WalRecordType::Delete, txid, collection_id, doc.id.to_vec());
                     self.wal.append(wal_record, &*self.backend)?;
 
                     return Ok(1);
@@ -560,11 +597,7 @@ impl OvnEngine {
     }
 
     /// Delete all matching documents.
-    pub fn delete_many(
-        &self,
-        collection: &str,
-        filter_json: &serde_json::Value,
-    ) -> OvnResult<u64> {
+    pub fn delete_many(&self, collection: &str, filter_json: &serde_json::Value) -> OvnResult<u64> {
         self.check_closed()?;
 
         let filter = parse_filter(filter_json)?;
@@ -590,6 +623,15 @@ impl OvnEngine {
             };
             self.btree.insert(tombstone)?;
 
+            let mem_entry = MemTableEntry {
+                key: doc_id.clone(),
+                value: Vec::new(),
+                txid,
+                tombstone: true,
+                collection_id,
+            };
+            let _ = self.memtable.insert(mem_entry);
+
             let wal_record = WalRecord::new(WalRecordType::Delete, txid, collection_id, doc_id);
             self.wal.append(wal_record, &*self.backend)?;
             deleted += 1;
@@ -609,10 +651,12 @@ impl OvnEngine {
         self.check_closed()?;
         self.ensure_collection(collection)?;
 
-        let fields_obj = fields_json.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-            position: 0,
-            message: "Index fields must be an object".to_string(),
-        })?;
+        let fields_obj = fields_json
+            .as_object()
+            .ok_or_else(|| OvnError::QuerySyntaxError {
+                position: 0,
+                message: "Index fields must be an object".to_string(),
+            })?;
 
         let fields: Vec<(String, i32)> = fields_obj
             .iter()
@@ -641,7 +685,8 @@ impl OvnEngine {
     pub fn list_indexes(&self, collection: &str) -> Vec<serde_json::Value> {
         let collections = self.collections.read();
         if let Some(coll) = collections.get(collection) {
-            coll.index_manager.list_indexes()
+            coll.index_manager
+                .list_indexes()
                 .into_iter()
                 .map(|spec| {
                     serde_json::json!({
@@ -692,7 +737,7 @@ impl OvnEngine {
     /// Execute an aggregation pipeline.
     pub fn aggregate(
         &self,
-        collection: &str,
+        _collection: &str,
         pipeline_json: &[serde_json::Value],
     ) -> OvnResult<Vec<serde_json::Value>> {
         self.check_closed()?;
@@ -827,14 +872,21 @@ mod tests {
         let config = OvnConfig::default();
         let engine = OvnEngine::open(db_path.to_str().unwrap(), config).unwrap();
 
-        let id = engine.insert("users", &serde_json::json!({
-            "name": "Alice",
-            "age": 28,
-            "email": "alice@example.com"
-        })).unwrap();
+        let id = engine
+            .insert(
+                "users",
+                &serde_json::json!({
+                    "name": "Alice",
+                    "age": 28,
+                    "email": "alice@example.com"
+                }),
+            )
+            .unwrap();
         assert!(!id.is_empty());
 
-        let results = engine.find("users", &serde_json::json!({ "name": "Alice" }), None).unwrap();
+        let results = engine
+            .find("users", &serde_json::json!({ "name": "Alice" }), None)
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["name"], "Alice");
         assert_eq!(results[0]["age"], 28);
@@ -850,24 +902,34 @@ mod tests {
         let config = OvnConfig::default();
         let engine = OvnEngine::open(db_path.to_str().unwrap(), config).unwrap();
 
-        engine.insert("users", &serde_json::json!({ "name": "Bob", "age": 30 })).unwrap();
+        engine
+            .insert("users", &serde_json::json!({ "name": "Bob", "age": 30 }))
+            .unwrap();
 
         // Update
-        let updated = engine.update(
-            "users",
-            &serde_json::json!({ "name": "Bob" }),
-            &serde_json::json!({ "$set": { "age": 31 } }),
-        ).unwrap();
+        let updated = engine
+            .update(
+                "users",
+                &serde_json::json!({ "name": "Bob" }),
+                &serde_json::json!({ "$set": { "age": 31 } }),
+            )
+            .unwrap();
         assert_eq!(updated, 1);
 
-        let results = engine.find("users", &serde_json::json!({ "name": "Bob" }), None).unwrap();
+        let results = engine
+            .find("users", &serde_json::json!({ "name": "Bob" }), None)
+            .unwrap();
         assert_eq!(results[0]["age"], 31);
 
         // Delete
-        let deleted = engine.delete("users", &serde_json::json!({ "name": "Bob" })).unwrap();
+        let deleted = engine
+            .delete("users", &serde_json::json!({ "name": "Bob" }))
+            .unwrap();
         assert_eq!(deleted, 1);
 
-        let results = engine.find("users", &serde_json::json!({ "name": "Bob" }), None).unwrap();
+        let results = engine
+            .find("users", &serde_json::json!({ "name": "Bob" }), None)
+            .unwrap();
         assert_eq!(results.len(), 0);
 
         engine.close().unwrap();

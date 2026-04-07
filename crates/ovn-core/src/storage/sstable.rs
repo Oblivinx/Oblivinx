@@ -23,9 +23,9 @@
 //!   tombstone: u8
 //! ```
 
+use parking_lot::RwLock;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use parking_lot::RwLock;
 
 use crate::error::{OvnError, OvnResult};
 use crate::storage::memtable::MemTableEntry;
@@ -54,7 +54,7 @@ impl BloomFilter {
         // Optimal bit count: m = -n * ln(p) / (ln(2)^2)
         // For p=0.01: m ≈ 9.585 * n
         let num_bits = ((expected_elements as f64 * 9.585).ceil() as usize).max(64);
-        let byte_count = (num_bits + 7) / 8;
+        let byte_count = num_bits.div_ceil(8);
         Self {
             bits: vec![0u8; byte_count],
             num_bits,
@@ -143,7 +143,9 @@ impl SSTable {
     /// Build an SSTable from a sorted list of MemTable entries.
     pub fn from_memtable_entries(id: u64, entries: Vec<MemTableEntry>) -> OvnResult<Self> {
         if entries.is_empty() {
-            return Err(OvnError::SSTableError("Cannot create SSTable from empty entries".to_string()));
+            return Err(OvnError::SSTableError(
+                "Cannot create SSTable from empty entries".to_string(),
+            ));
         }
 
         let mut bloom = BloomFilter::new(entries.len());
@@ -191,7 +193,10 @@ impl SSTable {
 
     /// Range scan [from, to).
     pub fn scan_range(&self, from: &[u8], to: &[u8]) -> Vec<&SSTableEntry> {
-        let start = match self.entries.binary_search_by(|e| e.key.as_slice().cmp(from)) {
+        let start = match self
+            .entries
+            .binary_search_by(|e| e.key.as_slice().cmp(from))
+        {
             Ok(idx) => idx,
             Err(idx) => idx,
         };
@@ -269,59 +274,85 @@ impl SSTable {
         }
         let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
         if magic != SSTABLE_MAGIC {
-            return Err(OvnError::SSTableError(format!("Invalid magic: 0x{magic:08X}")));
+            return Err(OvnError::SSTableError(format!(
+                "Invalid magic: 0x{magic:08X}"
+            )));
         }
         pos += 4;
 
         // Entry count
         let entry_count = u64::from_le_bytes([
-            data[pos], data[pos+1], data[pos+2], data[pos+3],
-            data[pos+4], data[pos+5], data[pos+6], data[pos+7],
+            data[pos],
+            data[pos + 1],
+            data[pos + 2],
+            data[pos + 3],
+            data[pos + 4],
+            data[pos + 5],
+            data[pos + 6],
+            data[pos + 7],
         ]) as usize;
         pos += 8;
 
         // Min key
-        let min_key_len = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+        let min_key_len =
+            u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
         pos += 4;
-        let min_key = data[pos..pos+min_key_len].to_vec();
+        let min_key = data[pos..pos + min_key_len].to_vec();
         pos += min_key_len;
 
         // Max key
-        let max_key_len = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+        let max_key_len =
+            u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
         pos += 4;
-        let max_key = data[pos..pos+max_key_len].to_vec();
+        let max_key = data[pos..pos + max_key_len].to_vec();
         pos += max_key_len;
 
         // Bloom filter
-        let bloom_size = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+        let bloom_size =
+            u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
         pos += 4;
-        let bloom_bits = data[pos..pos+bloom_size].to_vec();
+        let bloom_bits = data[pos..pos + bloom_size].to_vec();
         pos += bloom_size;
         let bloom = BloomFilter::from_raw(bloom_bits, bloom_size * 8);
 
         // Entries
         let mut entries = Vec::with_capacity(entry_count);
         for _ in 0..entry_count {
-            let key_len = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+            let key_len =
+                u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
+                    as usize;
             pos += 4;
-            let key = data[pos..pos+key_len].to_vec();
+            let key = data[pos..pos + key_len].to_vec();
             pos += key_len;
 
-            let val_len = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+            let val_len =
+                u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
+                    as usize;
             pos += 4;
-            let value = data[pos..pos+val_len].to_vec();
+            let value = data[pos..pos + val_len].to_vec();
             pos += val_len;
 
             let txid = u64::from_le_bytes([
-                data[pos], data[pos+1], data[pos+2], data[pos+3],
-                data[pos+4], data[pos+5], data[pos+6], data[pos+7],
+                data[pos],
+                data[pos + 1],
+                data[pos + 2],
+                data[pos + 3],
+                data[pos + 4],
+                data[pos + 5],
+                data[pos + 6],
+                data[pos + 7],
             ]);
             pos += 8;
 
             let tombstone = data[pos] == 0xFF;
             pos += 1;
 
-            entries.push(SSTableEntry { key, value, txid, tombstone });
+            entries.push(SSTableEntry {
+                key,
+                value,
+                txid,
+                tombstone,
+            });
         }
 
         Ok(Self {
@@ -350,8 +381,15 @@ impl SSTableManager {
             next_id: std::sync::atomic::AtomicU64::new(1),
         }
     }
+}
 
-    /// Add a new SSTable flushed from a MemTable.
+impl Default for SSTableManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SSTableManager {
     pub fn add(&self, sstable: SSTable) {
         self.tables.write().push(sstable);
     }
@@ -380,7 +418,8 @@ impl SSTableManager {
 
     /// Get next SSTable ID.
     pub fn next_id(&self) -> u64 {
-        self.next_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Remove all SSTables (after compaction into B+ tree).
@@ -398,9 +437,7 @@ impl SSTableManager {
         }
 
         // Sort by key, then by txid descending (newest version first)
-        all_entries.sort_by(|a, b| {
-            a.key.cmp(&b.key).then(b.txid.cmp(&a.txid))
-        });
+        all_entries.sort_by(|a, b| a.key.cmp(&b.key).then(b.txid.cmp(&a.txid)));
 
         // Deduplicate: keep only the newest version per key
         all_entries.dedup_by(|a, b| a.key == b.key);

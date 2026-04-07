@@ -23,9 +23,9 @@
 //! [...]     Value bytes (type-dependent)
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 use crate::error::{OvnError, OvnResult};
 
@@ -108,7 +108,9 @@ pub fn decode_varint(buf: &[u8]) -> OvnResult<(u64, usize)> {
         shift += 7;
     }
 
-    Err(OvnError::EncodingError("Unexpected end of varint".to_string()))
+    Err(OvnError::EncodingError(
+        "Unexpected end of varint".to_string(),
+    ))
 }
 
 // ── OBE Value ──────────────────────────────────────────────────
@@ -264,11 +266,9 @@ impl ObeValue {
             ObeValue::Bool(b) => serde_json::Value::Bool(*b),
             ObeValue::Int32(i) => serde_json::Value::Number((*i).into()),
             ObeValue::Int64(i) => serde_json::Value::Number((*i).into()),
-            ObeValue::Float64(f) => {
-                serde_json::Number::from_f64(*f)
-                    .map(serde_json::Value::Number)
-                    .unwrap_or(serde_json::Value::Null)
-            }
+            ObeValue::Float64(f) => serde_json::Number::from_f64(*f)
+                .map(serde_json::Value::Number)
+                .unwrap_or(serde_json::Value::Null),
             ObeValue::String(s) => serde_json::Value::String(s.clone()),
             ObeValue::Binary(b) => {
                 // Encode binary as base64 string in JSON
@@ -367,9 +367,9 @@ impl ObeDocument {
 
     /// Create a document from a JSON value.
     pub fn from_json(json: &serde_json::Value) -> OvnResult<Self> {
-        let obj = json.as_object().ok_or_else(|| {
-            OvnError::EncodingError("Document must be a JSON object".to_string())
-        })?;
+        let obj = json
+            .as_object()
+            .ok_or_else(|| OvnError::EncodingError("Document must be a JSON object".to_string()))?;
 
         let mut doc = Self::new();
 
@@ -398,7 +398,10 @@ impl ObeDocument {
 
         // Add _id as first field
         let uuid = Uuid::from_bytes(self.id);
-        map.insert("_id".to_string(), serde_json::Value::String(uuid.to_string()));
+        map.insert(
+            "_id".to_string(),
+            serde_json::Value::String(uuid.to_string()),
+        );
 
         for (key, value) in &self.fields {
             map.insert(key.clone(), value.to_json());
@@ -518,8 +521,14 @@ impl ObeDocument {
 
         // Transaction ID
         let txid = u64::from_le_bytes([
-            buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3],
-            buf[pos + 4], buf[pos + 5], buf[pos + 6], buf[pos + 7],
+            buf[pos],
+            buf[pos + 1],
+            buf[pos + 2],
+            buf[pos + 3],
+            buf[pos + 4],
+            buf[pos + 5],
+            buf[pos + 6],
+            buf[pos + 7],
         ]);
         pos += 8;
 
@@ -573,7 +582,7 @@ fn encode_field(name: &str, value: &ObeValue, buf: &mut Vec<u8>) -> OvnResult<()
 /// Encode a value based on its type tag.
 fn encode_value(value: &ObeValue, buf: &mut Vec<u8>) -> OvnResult<()> {
     match value {
-        ObeValue::Null => {} // No value bytes
+        ObeValue::Null => {}    // No value bytes
         ObeValue::Bool(_) => {} // Type tag encodes true/false
         ObeValue::Int32(v) => {
             buf.extend_from_slice(&v.to_le_bytes());
@@ -779,14 +788,20 @@ mod tests {
     #[test]
     fn test_document_encode_decode() {
         let mut doc = ObeDocument::new();
-        doc.set("name".to_string(), ObeValue::String("Alice Kim".to_string()));
+        doc.set(
+            "name".to_string(),
+            ObeValue::String("Alice Kim".to_string()),
+        );
         doc.set("age".to_string(), ObeValue::Int32(28));
         doc.set("active".to_string(), ObeValue::Bool(true));
         doc.set("score".to_string(), ObeValue::Float64(99.5));
-        doc.set("tags".to_string(), ObeValue::Array(vec![
-            ObeValue::String("admin".to_string()),
-            ObeValue::String("developer".to_string()),
-        ]));
+        doc.set(
+            "tags".to_string(),
+            ObeValue::Array(vec![
+                ObeValue::String("admin".to_string()),
+                ObeValue::String("developer".to_string()),
+            ]),
+        );
 
         let mut addr = BTreeMap::new();
         addr.insert("city".to_string(), ObeValue::String("Jakarta".to_string()));
@@ -811,12 +826,18 @@ mod tests {
     fn test_null_and_binary() {
         let mut doc = ObeDocument::new();
         doc.set("nothing".to_string(), ObeValue::Null);
-        doc.set("data".to_string(), ObeValue::Binary(vec![0xDE, 0xAD, 0xBE, 0xEF]));
+        doc.set(
+            "data".to_string(),
+            ObeValue::Binary(vec![0xDE, 0xAD, 0xBE, 0xEF]),
+        );
 
         let encoded = doc.encode().unwrap();
         let decoded = ObeDocument::decode(&encoded).unwrap();
         assert_eq!(decoded.get("nothing"), Some(&ObeValue::Null));
-        assert_eq!(decoded.get("data"), Some(&ObeValue::Binary(vec![0xDE, 0xAD, 0xBE, 0xEF])));
+        assert_eq!(
+            decoded.get("data"),
+            Some(&ObeValue::Binary(vec![0xDE, 0xAD, 0xBE, 0xEF]))
+        );
     }
 
     #[test]

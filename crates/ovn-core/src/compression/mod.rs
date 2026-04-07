@@ -38,23 +38,20 @@ pub fn lz4_compress(data: &[u8]) -> OvnResult<Vec<u8>> {
 
 /// Decompress LZ4-compressed data.
 pub fn lz4_decompress(data: &[u8]) -> OvnResult<Vec<u8>> {
-    lz4_flex::decompress_size_prepended(data).map_err(|e| {
-        OvnError::CompressionError(format!("LZ4 decompression failed: {e}"))
-    })
+    lz4_flex::decompress_size_prepended(data)
+        .map_err(|e| OvnError::CompressionError(format!("LZ4 decompression failed: {e}")))
 }
 
 /// Compress data using Zstandard at the given compression level.
 pub fn zstd_compress(data: &[u8], level: i32) -> OvnResult<Vec<u8>> {
-    zstd::encode_all(std::io::Cursor::new(data), level).map_err(|e| {
-        OvnError::CompressionError(format!("Zstd compression failed: {e}"))
-    })
+    zstd::encode_all(std::io::Cursor::new(data), level)
+        .map_err(|e| OvnError::CompressionError(format!("Zstd compression failed: {e}")))
 }
 
 /// Decompress Zstandard-compressed data.
 pub fn zstd_decompress(data: &[u8]) -> OvnResult<Vec<u8>> {
-    zstd::decode_all(std::io::Cursor::new(data)).map_err(|e| {
-        OvnError::CompressionError(format!("Zstd decompression failed: {e}"))
-    })
+    zstd::decode_all(std::io::Cursor::new(data))
+        .map_err(|e| OvnError::CompressionError(format!("Zstd decompression failed: {e}")))
 }
 
 /// Compress data using the specified algorithm.
@@ -86,7 +83,10 @@ mod tests {
         let compressed = lz4_compress(data).unwrap();
         let decompressed = lz4_decompress(&compressed).unwrap();
         assert_eq!(&decompressed, data);
-        assert!(compressed.len() < data.len(), "LZ4 should compress repeated data");
+        assert!(
+            compressed.len() < data.len(),
+            "LZ4 should compress repeated data"
+        );
     }
 
     #[test]
@@ -101,7 +101,11 @@ mod tests {
     #[test]
     fn test_compression_dispatch() {
         let data = b"test data for compression dispatch";
-        for &ctype in &[CompressionType::None, CompressionType::Lz4, CompressionType::Zstd] {
+        for &ctype in &[
+            CompressionType::None,
+            CompressionType::Lz4,
+            CompressionType::Zstd,
+        ] {
             let compressed = compress(data, ctype).unwrap();
             let decompressed = decompress(&compressed, ctype).unwrap();
             assert_eq!(decompressed, data);

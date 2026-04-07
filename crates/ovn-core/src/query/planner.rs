@@ -1,7 +1,6 @@
 //! Query planner — cost-based index selection and plan optimization.
 
-use crate::error::OvnResult;
-use crate::query::filter::{Filter, extract_filter_fields};
+use crate::query::filter::{extract_filter_fields, Filter};
 
 /// Query execution plan type.
 #[derive(Debug, Clone)]
@@ -42,8 +41,8 @@ pub fn plan_query(
         // Simple heuristic: check if any filter field matches an index
         if filter_fields.iter().any(|f| index_name.contains(f)) {
             let estimated_docs = (collection_size as f64 * 0.1) as u64; // 10% selectivity estimate
-            let cost = (estimated_docs as f64).log2() * PAGE_COST
-                + estimated_docs as f64 * DECODE_COST;
+            let cost =
+                (estimated_docs as f64).log2() * PAGE_COST + estimated_docs as f64 * DECODE_COST;
 
             return QueryPlan {
                 plan_type: PlanType::IndexRangeScan {

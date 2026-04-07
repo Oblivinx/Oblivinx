@@ -3,7 +3,6 @@
 //! Parses and evaluates MongoDB-style filter expressions against OBE documents.
 //! Supports comparison, logical, array, and element operators.
 
-use std::collections::BTreeMap;
 use crate::error::{OvnError, OvnResult};
 use crate::format::obe::{ObeDocument, ObeValue};
 
@@ -46,7 +45,9 @@ pub enum FilterOp {
 }
 
 impl FilterOp {
-    pub fn from_str(s: &str) -> OvnResult<Self> {
+    /// Parse a MQL operator string like `"$gt"` into a `FilterOp`.
+    /// Named `parse_op` (not `from_str`) to avoid confusion with `std::str::FromStr`.
+    pub fn parse_op(s: &str) -> OvnResult<Self> {
         match s {
             "$eq" => Ok(Self::Eq),
             "$ne" => Ok(Self::Ne),
@@ -70,10 +71,12 @@ pub fn parse_filter(json: &serde_json::Value) -> OvnResult<Filter> {
     let obj = match json {
         serde_json::Value::Object(obj) => obj,
         serde_json::Value::Null => return Ok(Filter::MatchAll),
-        _ => return Err(OvnError::QuerySyntaxError {
-            position: 0,
-            message: "Filter must be a JSON object".to_string(),
-        }),
+        _ => {
+            return Err(OvnError::QuerySyntaxError {
+                position: 0,
+                message: "Filter must be a JSON object".to_string(),
+            })
+        }
     };
 
     if obj.is_empty() {
@@ -135,7 +138,7 @@ fn parse_field_filter(field: &str, value: &serde_json::Value) -> OvnResult<Filte
             for (op_key, op_val) in ops {
                 match op_key.as_str() {
                     "$eq" | "$ne" | "$gt" | "$gte" | "$lt" | "$lte" => {
-                        let op = FilterOp::from_str(op_key)?;
+                        let op = FilterOp::parse_op(op_key)?;
                         conditions.push(Filter::Comparison(
                             field.to_string(),
                             op,
@@ -143,13 +146,9 @@ fn parse_field_filter(field: &str, value: &serde_json::Value) -> OvnResult<Filte
                         ));
                     }
                     "$in" | "$nin" => {
-                        let op = FilterOp::from_str(op_key)?;
+                        let op = FilterOp::parse_op(op_key)?;
                         let arr_val = ObeValue::from_json(op_val);
-                        conditions.push(Filter::Comparison(
-                            field.to_string(),
-                            op,
-                            arr_val,
-                        ));
+                        conditions.push(Filter::Comparison(field.to_string(), op, arr_val));
                     }
                     "$exists" => {
                         let exists = op_val.as_bool().unwrap_or(true);
@@ -160,7 +159,7 @@ fn parse_field_filter(field: &str, value: &serde_json::Value) -> OvnResult<Filte
                         conditions.push(Filter::Type(field.to_string(), type_str.to_string()));
                     }
                     "$all" | "$elemMatch" | "$size" | "$regex" => {
-                        let op = FilterOp::from_str(op_key)?;
+                        let op = FilterOp::parse_op(op_key)?;
                         conditions.push(Filter::Comparison(
                             field.to_string(),
                             op,
@@ -216,45 +215,46 @@ pub fn evaluate_filter(filter: &Filter, doc: &ObeDocument) -> bool {
 /// Evaluate a comparison operator.
 fn evaluate_comparison(doc_value: Option<&ObeValue>, op: &FilterOp, target: &ObeValue) -> bool {
     match op {
-        FilterOp::Eq => {
-            doc_value.map_or(target.is_null(), |v| values_equal(v, target))
-        }
-        FilterOp::Ne => {
-            doc_value.map_or(!target.is_null(), |v| !values_equal(v, target))
-        }
-        FilterOp::Gt => {
-            doc_value.map_or(false, |v| compare_values(v, target) == Some(std::cmp::Ordering::Greater))
-        }
-        FilterOp::Gte => {
-            doc_value.map_or(false, |v| {
-                matches!(compare_values(v, target), Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal))
-            })
-        }
+        FilterOp::Eq => doc_value.map_or(target.is_null(), |v| values_equal(v, target)),
+        FilterOp::Ne => doc_value.map_or(!target.is_null(), |v| !values_equal(v, target)),
+        FilterOp::Gt => doc_value
+            .is_some_and(|v| compare_values(v, target) == Some(std::cmp::Ordering::Greater)),
+        FilterOp::Gte => doc_value.is_some_and(|v| {
+            matches!(
+                compare_values(v, target),
+                Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+            )
+        }),
         FilterOp::Lt => {
-            doc_value.map_or(false, |v| compare_values(v, target) == Some(std::cmp::Ordering::Less))
+            doc_value.is_some_and(|v| compare_values(v, target) == Some(std::cmp::Ordering::Less))
         }
-        FilterOp::Lte => {
-            doc_value.map_or(false, |v| {
-                matches!(compare_values(v, target), Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal))
-            })
-        }
+        FilterOp::Lte => doc_value.is_some_and(|v| {
+            matches!(
+                compare_values(v, target),
+                Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
+            )
+        }),
         FilterOp::In => {
-            if let Some(ObeValue::Array(arr)) = Some(target) {
-                doc_value.map_or(false, |v| arr.iter().any(|t| values_equal(v, t)))
+            if let ObeValue::Array(arr) = target {
+                doc_value.is_some_and(|v| arr.iter().any(|t| values_equal(v, t)))
             } else {
                 false
             }
         }
         FilterOp::Nin => {
-            if let Some(ObeValue::Array(arr)) = Some(target) {
-                doc_value.map_or(true, |v| !arr.iter().any(|t| values_equal(v, t)))
+            if let ObeValue::Array(arr) = target {
+                doc_value.is_none_or(|v| !arr.iter().any(|t| values_equal(v, t)))
             } else {
                 true
             }
         }
         FilterOp::All => {
-            if let (Some(ObeValue::Array(doc_arr)), ObeValue::Array(target_arr)) = (doc_value, target) {
-                target_arr.iter().all(|t| doc_arr.iter().any(|d| values_equal(d, t)))
+            if let (Some(ObeValue::Array(doc_arr)), ObeValue::Array(target_arr)) =
+                (doc_value, target)
+            {
+                target_arr
+                    .iter()
+                    .all(|t| doc_arr.iter().any(|d| values_equal(d, t)))
             } else {
                 false
             }
@@ -299,7 +299,8 @@ fn values_equal(a: &ObeValue, b: &ObeValue) -> bool {
         }
         (ObeValue::Document(a), ObeValue::Document(b)) => {
             a.len() == b.len()
-                && a.iter().all(|(k, v)| b.get(k).map_or(false, |bv| values_equal(v, bv)))
+                && a.iter()
+                    .all(|(k, v)| b.get(k).is_some_and(|bv| values_equal(v, bv)))
         }
         _ => false,
     }
@@ -353,16 +354,20 @@ pub fn extract_filter_fields(filter: &Filter) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     fn make_doc() -> ObeDocument {
         let mut doc = ObeDocument::new();
         doc.set("name".to_string(), ObeValue::String("Alice".to_string()));
         doc.set("age".to_string(), ObeValue::Int32(28));
         doc.set("active".to_string(), ObeValue::Bool(true));
-        doc.set("tags".to_string(), ObeValue::Array(vec![
-            ObeValue::String("admin".to_string()),
-            ObeValue::String("dev".to_string()),
-        ]));
+        doc.set(
+            "tags".to_string(),
+            ObeValue::Array(vec![
+                ObeValue::String("admin".to_string()),
+                ObeValue::String("dev".to_string()),
+            ]),
+        );
 
         let mut addr = BTreeMap::new();
         addr.insert("city".to_string(), ObeValue::String("Jakarta".to_string()));
@@ -374,10 +379,18 @@ mod tests {
     #[test]
     fn test_eq_filter() {
         let doc = make_doc();
-        let filter = Filter::Comparison("name".to_string(), FilterOp::Eq, ObeValue::String("Alice".to_string()));
+        let filter = Filter::Comparison(
+            "name".to_string(),
+            FilterOp::Eq,
+            ObeValue::String("Alice".to_string()),
+        );
         assert!(evaluate_filter(&filter, &doc));
 
-        let filter = Filter::Comparison("name".to_string(), FilterOp::Eq, ObeValue::String("Bob".to_string()));
+        let filter = Filter::Comparison(
+            "name".to_string(),
+            FilterOp::Eq,
+            ObeValue::String("Bob".to_string()),
+        );
         assert!(!evaluate_filter(&filter, &doc));
     }
 
@@ -411,7 +424,11 @@ mod tests {
         let doc = make_doc();
 
         let filter = Filter::And(vec![
-            Filter::Comparison("name".to_string(), FilterOp::Eq, ObeValue::String("Alice".to_string())),
+            Filter::Comparison(
+                "name".to_string(),
+                FilterOp::Eq,
+                ObeValue::String("Alice".to_string()),
+            ),
             Filter::Comparison("age".to_string(), FilterOp::Gt, ObeValue::Int32(20)),
         ]);
         assert!(evaluate_filter(&filter, &doc));
@@ -429,7 +446,11 @@ mod tests {
         let filter = Filter::Comparison(
             "age".to_string(),
             FilterOp::In,
-            ObeValue::Array(vec![ObeValue::Int32(25), ObeValue::Int32(28), ObeValue::Int32(30)]),
+            ObeValue::Array(vec![
+                ObeValue::Int32(25),
+                ObeValue::Int32(28),
+                ObeValue::Int32(30),
+            ]),
         );
         assert!(evaluate_filter(&filter, &doc));
     }
@@ -437,8 +458,14 @@ mod tests {
     #[test]
     fn test_exists() {
         let doc = make_doc();
-        assert!(evaluate_filter(&Filter::Exists("name".to_string(), true), &doc));
-        assert!(evaluate_filter(&Filter::Exists("nonexistent".to_string(), false), &doc));
+        assert!(evaluate_filter(
+            &Filter::Exists("name".to_string(), true),
+            &doc
+        ));
+        assert!(evaluate_filter(
+            &Filter::Exists("nonexistent".to_string(), false),
+            &doc
+        ));
     }
 
     #[test]

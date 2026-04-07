@@ -13,12 +13,11 @@
 //! [4 bytes]  CRC32 of record
 //! ```
 
-use std::io::{Write, Cursor, Read};
 use crc32fast::Hasher as Crc32Hasher;
 use parking_lot::Mutex;
 
 use crate::error::{OvnError, OvnResult};
-use crate::format::obe::{encode_varint, decode_varint};
+use crate::format::obe::{decode_varint, encode_varint};
 use crate::io::FileBackend;
 
 /// WAL record types.
@@ -114,13 +113,20 @@ impl WalRecord {
 
         // TxID
         let txid = u64::from_le_bytes([
-            buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3],
-            buf[pos + 4], buf[pos + 5], buf[pos + 6], buf[pos + 7],
+            buf[pos],
+            buf[pos + 1],
+            buf[pos + 2],
+            buf[pos + 3],
+            buf[pos + 4],
+            buf[pos + 5],
+            buf[pos + 6],
+            buf[pos + 7],
         ]);
         pos += 8;
 
         // Collection ID
-        let collection_id = u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
+        let collection_id =
+            u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
         pos += 4;
 
         // Data length
@@ -150,7 +156,9 @@ impl WalRecord {
         if stored_crc != computed_crc {
             return Err(OvnError::WalCorrupted {
                 offset: 0,
-                reason: format!("CRC mismatch: stored=0x{stored_crc:08X}, computed=0x{computed_crc:08X}"),
+                reason: format!(
+                    "CRC mismatch: stored=0x{stored_crc:08X}, computed=0x{computed_crc:08X}"
+                ),
             });
         }
 
@@ -194,11 +202,7 @@ impl WalManager {
     }
 
     /// Append a WAL record and flush to backend.
-    pub fn append(
-        &self,
-        record: WalRecord,
-        backend: &dyn FileBackend,
-    ) -> OvnResult<()> {
+    pub fn append(&self, record: WalRecord, backend: &dyn FileBackend) -> OvnResult<()> {
         let encoded = record.encode();
 
         {

@@ -4,7 +4,7 @@
 //! [`OsFileBackend`] is the standard implementation using `std::fs::File`.
 
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -149,6 +149,13 @@ impl MemoryBackend {
         Self {
             data: Mutex::new(Vec::new()),
         }
+    }
+}
+
+#[cfg(test)]
+impl Default for MemoryBackend {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

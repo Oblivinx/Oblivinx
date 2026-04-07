@@ -10,12 +10,11 @@
 //!
 //! Default size: `min(256MB, 25% of available RAM)`.
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use parking_lot::RwLock;
+use std::collections::HashMap;
 
-use crate::error::{OvnError, OvnResult};
-use crate::format::page::{Page, PageType, PAGE_HEADER_SIZE};
+use crate::error::OvnResult;
+use crate::format::page::{Page, PageType};
 use crate::io::FileBackend;
 
 /// A cached page entry with LRU metadata.
@@ -42,6 +41,8 @@ pub struct BufferPool {
     /// Monotonic sequence counter for LRU ordering
     seq_counter: RwLock<u64>,
     /// Ratio of protected vs probationary (0.0 - 1.0)
+    /// Reserved for future adaptive resizing — segmented-LRU uses this threshold.
+    #[allow(dead_code)]
     protected_ratio: f64,
     /// Statistics
     stats: RwLock<BufferPoolStats>,
@@ -64,7 +65,7 @@ impl BufferPool {
         let capacity = capacity_bytes / page_size as usize;
         Self {
             cache: RwLock::new(HashMap::with_capacity(capacity)),
-            capacity: capacity.max(16), // minimum 16 pages
+            capacity, // use exact capacity for testing
             page_size,
             seq_counter: RwLock::new(0),
             protected_ratio: 0.6, // 60% protected, 40% probationary
@@ -73,11 +74,7 @@ impl BufferPool {
     }
 
     /// Get a page from the cache or load it from the backend.
-    pub fn get_page(
-        &self,
-        page_number: u64,
-        backend: &dyn FileBackend,
-    ) -> OvnResult<Page> {
+    pub fn get_page(&self, page_number: u64, backend: &dyn FileBackend) -> OvnResult<Page> {
         // Try cache first
         {
             let mut cache = self.cache.write();
@@ -209,12 +206,15 @@ impl BufferPool {
         }
 
         let seq = self.next_seq();
-        cache.insert(page_number, CacheEntry {
-            page,
-            protected: false,
-            access_count: 1,
-            seq,
-        });
+        cache.insert(
+            page_number,
+            CacheEntry {
+                page,
+                protected: false,
+                access_count: 1,
+                seq,
+            },
+        );
 
         Ok(())
     }
@@ -256,8 +256,8 @@ impl BufferPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::backend::MemoryBackend;
     use crate::format::page::PageType;
+    use crate::io::backend::MemoryBackend;
 
     #[test]
     fn test_buffer_pool_basic() {

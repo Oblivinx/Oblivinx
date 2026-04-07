@@ -5,8 +5,8 @@
 //! segment types, and the OVN Binary Encoding (OBE) format.
 
 pub mod header;
-pub mod page;
 pub mod obe;
+pub mod page;
 
 /// Segment type codes used in the Segment Directory (Page 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

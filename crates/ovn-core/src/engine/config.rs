@@ -1,7 +1,7 @@
 //! Database configuration.
 
 use crate::compression::CompressionType;
-use crate::{DEFAULT_PAGE_SIZE, DEFAULT_BUFFER_POOL_SIZE, DEFAULT_MEMTABLE_THRESHOLD};
+use crate::{DEFAULT_BUFFER_POOL_SIZE, DEFAULT_MEMTABLE_THRESHOLD, DEFAULT_PAGE_SIZE};
 
 /// Configuration for opening an Oblivinx3x database.
 #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ impl OvnConfig {
         Self {
             page_size: 4096,
             buffer_pool_size: 1024 * 1024, // 1MB
-            memtable_threshold: 64 * 1024,  // 64KB
+            memtable_threshold: 64 * 1024, // 64KB
             ..Default::default()
         }
     }

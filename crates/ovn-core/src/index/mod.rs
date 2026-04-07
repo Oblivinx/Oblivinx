@@ -4,8 +4,8 @@
 //! adding query-pattern-aware node promotion.
 
 pub mod ahit;
-pub mod secondary;
 pub mod fulltext;
+pub mod secondary;
 
 pub use ahit::AdaptiveHybridIndexTree;
 pub use secondary::SecondaryIndex;

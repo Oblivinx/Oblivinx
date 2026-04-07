@@ -16,8 +16,8 @@
 //! | 0x18   | 4    | Right sibling page number        |
 //! | 0x1C   | 4    | CRC32 checksum of payload        |
 
-use std::io::{Read, Write, Cursor};
 use crc32fast::Hasher as Crc32Hasher;
+use std::io::{Cursor, Read, Write};
 
 use crate::error::{OvnError, OvnResult};
 
@@ -106,11 +106,15 @@ impl PageHeader {
         let mut buf = [0u8; PAGE_HEADER_SIZE];
         let mut cursor = Cursor::new(&mut buf[..]);
 
-        cursor.write_all(&(self.page_type as u32).to_le_bytes()).unwrap();
+        cursor
+            .write_all(&(self.page_type as u32).to_le_bytes())
+            .unwrap();
         cursor.write_all(&self.page_number.to_le_bytes()).unwrap();
         cursor.write_all(&self.txid.to_le_bytes()).unwrap();
         cursor.write_all(&self.slot_count.to_le_bytes()).unwrap();
-        cursor.write_all(&self.free_space_offset.to_le_bytes()).unwrap();
+        cursor
+            .write_all(&self.free_space_offset.to_le_bytes())
+            .unwrap();
         cursor.write_all(&self.right_sibling.to_le_bytes()).unwrap();
         cursor.write_all(&self.crc32.to_le_bytes()).unwrap();
 
@@ -133,12 +137,11 @@ impl PageHeader {
 
         cursor.read_exact(&mut tmp4)?;
         let page_type_raw = u32::from_le_bytes(tmp4);
-        let page_type = PageType::from_u32(page_type_raw).ok_or_else(|| {
-            OvnError::PageCorrupted {
+        let page_type =
+            PageType::from_u32(page_type_raw).ok_or_else(|| OvnError::PageCorrupted {
                 page_number: 0,
                 reason: format!("Unknown page type: 0x{page_type_raw:08X}"),
-            }
-        })?;
+            })?;
 
         cursor.read_exact(&mut tmp8)?;
         let page_number = u64::from_le_bytes(tmp8);

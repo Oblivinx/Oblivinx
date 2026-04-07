@@ -24,21 +24,21 @@
 //! └─────────────────────────────────────┘
 //! ```
 
+pub mod compression;
+pub mod engine;
 pub mod error;
 pub mod format;
-pub mod io;
-pub mod storage;
-pub mod engine;
-pub mod mvcc;
-pub mod compression;
 pub mod index;
+pub mod io;
+pub mod mvcc;
 pub mod query;
+pub mod storage;
 
 // Re-export primary public types
-pub use error::{OvnError, OvnResult};
 pub use engine::config::OvnConfig;
 pub use engine::OvnEngine;
-pub use format::obe::{ObeDocument, ObeValue, ObeField};
+pub use error::{OvnError, OvnResult};
+pub use format::obe::{ObeDocument, ObeField, ObeValue};
 
 /// The magic number for .ovn files: 'OVNX' in ASCII = 0x4F564E58
 pub const OVN_MAGIC: u32 = 0x4F56_4E58;

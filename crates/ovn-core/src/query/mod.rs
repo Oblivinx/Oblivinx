@@ -10,11 +10,11 @@
 //! - Update: $set, $unset, $inc, $push, $pull, $addToSet, etc.
 //! - Aggregation: $match, $group, $project, $sort, $limit, $skip, $unwind, $lookup
 
-pub mod filter;
-pub mod update;
 pub mod aggregation;
+pub mod filter;
 pub mod planner;
+pub mod update;
 
-pub use filter::{Filter, FilterOp, evaluate_filter};
-pub use update::{UpdateOp, apply_update};
-pub use aggregation::{AggregateStage, execute_pipeline};
+pub use aggregation::{execute_pipeline, AggregateStage};
+pub use filter::{evaluate_filter, Filter, FilterOp};
+pub use update::{apply_update, UpdateOp};

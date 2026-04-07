@@ -8,10 +8,9 @@
 //! - 1 billion documents: ~4 levels max
 //! - Point lookup: O(log N) with at most 4 page reads
 
-use std::collections::BTreeMap;
 use parking_lot::RwLock;
 
-use crate::error::{OvnError, OvnResult};
+use crate::error::OvnResult;
 
 /// Maximum number of key-value pairs per B+ tree leaf node.
 /// With 4KB pages, 32-byte header, 16-byte keys + 8-byte pointers + 4-byte overhead:
@@ -91,7 +90,15 @@ impl BPlusTree {
             entry_count: RwLock::new(0),
         }
     }
+}
 
+impl Default for BPlusTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BPlusTree {
     /// Create a B+ tree with custom node capacities.
     pub fn with_capacity(leaf_capacity: usize, interior_capacity: usize) -> Self {
         Self {
@@ -121,11 +128,20 @@ impl BPlusTree {
         }
 
         let root_idx = root_ref.unwrap();
-        let result = Self::insert_recursive(&mut nodes, root_idx, entry, self.leaf_capacity, self.interior_capacity);
+        let result = Self::insert_recursive(
+            &mut nodes,
+            root_idx,
+            entry,
+            self.leaf_capacity,
+            self.interior_capacity,
+        );
 
         match result {
             InsertResult::Done => {}
-            InsertResult::Split { median_key, right_idx } => {
+            InsertResult::Split {
+                median_key,
+                right_idx,
+            } => {
                 // Root was split — create a new root
                 let new_root = InteriorNode {
                     keys: vec![median_key],
@@ -225,13 +241,8 @@ impl BPlusTree {
 
         // Find leftmost leaf
         let mut current = root_idx;
-        loop {
-            match &nodes[current] {
-                BPlusNode::Interior(interior) => {
-                    current = interior.children[0];
-                }
-                BPlusNode::Leaf(_) => break,
-            }
+        while let BPlusNode::Interior(interior) = &nodes[current] {
+            current = interior.children[0];
         }
 
         let mut results = Vec::new();
@@ -292,7 +303,10 @@ impl BPlusTree {
                     nodes[node_idx] = BPlusNode::Leaf(leaf);
                     nodes.push(BPlusNode::Leaf(right_leaf));
 
-                    InsertResult::Split { median_key, right_idx }
+                    InsertResult::Split {
+                        median_key,
+                        right_idx,
+                    }
                 }
             }
             BPlusNode::Interior(interior) => {
@@ -300,11 +314,15 @@ impl BPlusTree {
                 let child_idx = Self::find_child(&interior, &entry.key);
                 let child_node_idx = interior.children[child_idx];
 
-                let result = Self::insert_recursive(nodes, child_node_idx, entry, leaf_cap, interior_cap);
+                let result =
+                    Self::insert_recursive(nodes, child_node_idx, entry, leaf_cap, interior_cap);
 
                 match result {
                     InsertResult::Done => InsertResult::Done,
-                    InsertResult::Split { median_key, right_idx } => {
+                    InsertResult::Split {
+                        median_key,
+                        right_idx,
+                    } => {
                         // Child was split — insert median key into this interior node
                         let mut interior = match &nodes[node_idx] {
                             BPlusNode::Interior(i) => i.clone(),
@@ -348,12 +366,11 @@ impl BPlusTree {
 
     fn search_recursive(nodes: &[BPlusNode], node_idx: usize, key: &[u8]) -> Option<BTreeEntry> {
         match &nodes[node_idx] {
-            BPlusNode::Leaf(leaf) => {
-                leaf.entries
-                    .binary_search_by(|e| e.key.as_slice().cmp(key))
-                    .ok()
-                    .map(|idx| leaf.entries[idx].clone())
-            }
+            BPlusNode::Leaf(leaf) => leaf
+                .entries
+                .binary_search_by(|e| e.key.as_slice().cmp(key))
+                .ok()
+                .map(|idx| leaf.entries[idx].clone()),
             BPlusNode::Interior(interior) => {
                 let child_idx = Self::find_child(interior, key);
                 Self::search_recursive(nodes, interior.children[child_idx], key)
@@ -372,15 +389,22 @@ impl BPlusTree {
     }
 
     fn find_child(interior: &InteriorNode, key: &[u8]) -> usize {
-        interior.keys
-            .binary_search_by(|k| k.as_slice().cmp(key))
-            .unwrap_or_else(|idx| idx)
+        // In a B+ tree, all data lives in leaves.
+        // Separator key S at index i means: keys < S go to children[i], keys >= S go to children[i+1].
+        // binary_search returns Ok(i) on exact match — we must return i+1 (go RIGHT).
+        match interior.keys.binary_search_by(|k| k.as_slice().cmp(key)) {
+            Ok(idx) => idx + 1, // exact match → right child
+            Err(idx) => idx,    // not found → insertion point (left/right)
+        }
     }
 }
 
 enum InsertResult {
     Done,
-    Split { median_key: Vec<u8>, right_idx: usize },
+    Split {
+        median_key: Vec<u8>,
+        right_idx: usize,
+    },
 }
 
 #[cfg(test)]

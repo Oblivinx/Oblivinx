@@ -7,9 +7,9 @@
 //! A background Promoter monitors access patterns and moves cold nodes
 //! to the Hot Zone when their frequency exceeds a threshold.
 
+use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use parking_lot::RwLock;
 
 use crate::error::OvnResult;
 use crate::storage::btree::{BPlusTree, BTreeEntry};
@@ -72,7 +72,8 @@ pub struct AdaptiveHybridIndexTree {
     promotion_threshold: u64,
     /// Eviction threshold
     eviction_threshold: u64,
-    /// Hot zone memory limit in bytes
+    /// Hot zone memory limit in bytes — reserved for adaptive resizing (WSE integration)
+    #[allow(dead_code)]
     hot_zone_limit: usize,
     /// Index name
     pub name: String,
@@ -186,10 +187,7 @@ impl AdaptiveHybridIndexTree {
         let entries = self.hot_zone.scan_all();
 
         for entry in entries {
-            let count = counters
-                .get(&entry.key)
-                .map(|c| c.count())
-                .unwrap_or(0);
+            let count = counters.get(&entry.key).map(|c| c.count()).unwrap_or(0);
 
             if count < self.eviction_threshold {
                 self.hot_zone.delete(&entry.key);
@@ -224,11 +222,7 @@ mod tests {
 
     #[test]
     fn test_ahit_insert_and_get() {
-        let ahit = AdaptiveHybridIndexTree::new(
-            "age_idx".to_string(),
-            "age".to_string(),
-            false,
-        );
+        let ahit = AdaptiveHybridIndexTree::new("age_idx".to_string(), "age".to_string(), false);
 
         ahit.insert(b"28".to_vec(), b"doc1".to_vec(), 1).unwrap();
         ahit.insert(b"30".to_vec(), b"doc2".to_vec(), 2).unwrap();
@@ -241,13 +235,16 @@ mod tests {
 
     #[test]
     fn test_ahit_range_scan() {
-        let ahit = AdaptiveHybridIndexTree::new(
-            "idx".to_string(), "field".to_string(), false,
-        );
+        let ahit = AdaptiveHybridIndexTree::new("idx".to_string(), "field".to_string(), false);
 
         for i in 0..10u32 {
             let key = format!("{:03}", i);
-            ahit.insert(key.as_bytes().to_vec(), format!("doc{i}").into_bytes(), i as u64).unwrap();
+            ahit.insert(
+                key.as_bytes().to_vec(),
+                format!("doc{i}").into_bytes(),
+                i as u64,
+            )
+            .unwrap();
         }
 
         let results = ahit.range_scan(b"003", b"007");
@@ -256,9 +253,7 @@ mod tests {
 
     #[test]
     fn test_ahit_delete() {
-        let ahit = AdaptiveHybridIndexTree::new(
-            "idx".to_string(), "field".to_string(), false,
-        );
+        let ahit = AdaptiveHybridIndexTree::new("idx".to_string(), "field".to_string(), false);
 
         ahit.insert(b"key1".to_vec(), b"doc1".to_vec(), 1).unwrap();
         ahit.delete(b"key1");

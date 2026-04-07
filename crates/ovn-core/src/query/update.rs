@@ -1,8 +1,8 @@
 //! MQL update operators — $set, $unset, $inc, $push, $pull, $addToSet, etc.
 
-use std::collections::BTreeMap;
 use crate::error::{OvnError, OvnResult};
 use crate::format::obe::{ObeDocument, ObeValue};
+use std::collections::BTreeMap;
 
 /// A parsed update operation.
 #[derive(Debug, Clone)]
@@ -43,10 +43,12 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
     let mut ops = Vec::new();
 
     for (op_key, op_value) in obj {
-        let fields = op_value.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-            position: 0,
-            message: format!("{op_key} value must be an object"),
-        })?;
+        let fields = op_value
+            .as_object()
+            .ok_or_else(|| OvnError::QuerySyntaxError {
+                position: 0,
+                message: format!("{op_key} value must be an object"),
+            })?;
 
         for (field, value) in fields {
             match op_key.as_str() {
@@ -90,7 +92,10 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
                     ops.push(UpdateOp::Pull(field.clone(), ObeValue::from_json(value)));
                 }
                 "$addToSet" => {
-                    ops.push(UpdateOp::AddToSet(field.clone(), ObeValue::from_json(value)));
+                    ops.push(UpdateOp::AddToSet(
+                        field.clone(),
+                        ObeValue::from_json(value),
+                    ));
                 }
                 "$pop" => {
                     let dir = value.as_i64().unwrap_or(1) as i32;
@@ -143,10 +148,12 @@ fn apply_single_update(doc: &mut ObeDocument, op: &UpdateOp) -> OvnResult<()> {
                     }
                 }
                 ObeValue::Float64(v) => ObeValue::Float64(v + amount),
-                _ => return Err(OvnError::QuerySyntaxError {
-                    position: 0,
-                    message: format!("$inc requires numeric field, got {:?}", current),
-                }),
+                _ => {
+                    return Err(OvnError::QuerySyntaxError {
+                        position: 0,
+                        message: format!("$inc requires numeric field, got {:?}", current),
+                    })
+                }
             };
             set_nested_field(&mut doc.fields, field, new_val);
         }
@@ -156,10 +163,12 @@ fn apply_single_update(doc: &mut ObeDocument, op: &UpdateOp) -> OvnResult<()> {
                 ObeValue::Int32(v) => ObeValue::Float64(v as f64 * factor),
                 ObeValue::Int64(v) => ObeValue::Float64(v as f64 * factor),
                 ObeValue::Float64(v) => ObeValue::Float64(v * factor),
-                _ => return Err(OvnError::QuerySyntaxError {
-                    position: 0,
-                    message: "$mul requires numeric field".to_string(),
-                }),
+                _ => {
+                    return Err(OvnError::QuerySyntaxError {
+                        position: 0,
+                        message: "$mul requires numeric field".to_string(),
+                    })
+                }
             };
             set_nested_field(&mut doc.fields, field, new_val);
         }
@@ -187,7 +196,10 @@ fn apply_single_update(doc: &mut ObeDocument, op: &UpdateOp) -> OvnResult<()> {
             }
         }
         UpdateOp::Push(field, value) => {
-            let current = doc.fields.entry(field.clone()).or_insert(ObeValue::Array(Vec::new()));
+            let current = doc
+                .fields
+                .entry(field.clone())
+                .or_insert(ObeValue::Array(Vec::new()));
             if let ObeValue::Array(arr) = current {
                 arr.push(value.clone());
             } else {
@@ -203,7 +215,10 @@ fn apply_single_update(doc: &mut ObeDocument, op: &UpdateOp) -> OvnResult<()> {
             }
         }
         UpdateOp::AddToSet(field, value) => {
-            let current = doc.fields.entry(field.clone()).or_insert(ObeValue::Array(Vec::new()));
+            let current = doc
+                .fields
+                .entry(field.clone())
+                .or_insert(ObeValue::Array(Vec::new()));
             if let ObeValue::Array(arr) = current {
                 if !arr.contains(value) {
                     arr.push(value.clone());
@@ -287,10 +302,14 @@ mod tests {
         let mut doc = ObeDocument::new();
         doc.set("name".to_string(), ObeValue::String("Alice".to_string()));
 
-        apply_update(&mut doc, &[
-            UpdateOp::Set("age".to_string(), ObeValue::Int32(28)),
-            UpdateOp::Unset("name".to_string()),
-        ]).unwrap();
+        apply_update(
+            &mut doc,
+            &[
+                UpdateOp::Set("age".to_string(), ObeValue::Int32(28)),
+                UpdateOp::Unset("name".to_string()),
+            ],
+        )
+        .unwrap();
 
         assert!(doc.get("name").is_none());
         assert_eq!(doc.get("age"), Some(&ObeValue::Int32(28)));
@@ -308,21 +327,32 @@ mod tests {
     #[test]
     fn test_push_and_pull() {
         let mut doc = ObeDocument::new();
-        doc.set("tags".to_string(), ObeValue::Array(vec![
-            ObeValue::String("a".to_string()),
-        ]));
+        doc.set(
+            "tags".to_string(),
+            ObeValue::Array(vec![ObeValue::String("a".to_string())]),
+        );
 
-        apply_update(&mut doc, &[
-            UpdateOp::Push("tags".to_string(), ObeValue::String("b".to_string())),
-        ]).unwrap();
+        apply_update(
+            &mut doc,
+            &[UpdateOp::Push(
+                "tags".to_string(),
+                ObeValue::String("b".to_string()),
+            )],
+        )
+        .unwrap();
 
         if let Some(ObeValue::Array(arr)) = doc.get("tags") {
             assert_eq!(arr.len(), 2);
         }
 
-        apply_update(&mut doc, &[
-            UpdateOp::Pull("tags".to_string(), ObeValue::String("a".to_string())),
-        ]).unwrap();
+        apply_update(
+            &mut doc,
+            &[UpdateOp::Pull(
+                "tags".to_string(),
+                ObeValue::String("a".to_string()),
+            )],
+        )
+        .unwrap();
 
         if let Some(ObeValue::Array(arr)) = doc.get("tags") {
             assert_eq!(arr.len(), 1);

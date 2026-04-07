@@ -3,8 +3,8 @@
 //! Secondary indexes are AHIT structures keyed on document field values.
 //! Supports single-field, compound (with Skip-Column Optimization), and unique indexes.
 
-use std::collections::HashMap;
 use parking_lot::RwLock;
+use std::collections::HashMap;
 
 use crate::error::{OvnError, OvnResult};
 use crate::format::obe::{ObeDocument, ObeValue};
@@ -56,14 +56,14 @@ impl SecondaryIndex {
         let field_path = if spec.fields.len() == 1 {
             spec.fields[0].0.clone()
         } else {
-            spec.fields.iter().map(|(f, _)| f.as_str()).collect::<Vec<_>>().join("+")
+            spec.fields
+                .iter()
+                .map(|(f, _)| f.as_str())
+                .collect::<Vec<_>>()
+                .join("+")
         };
 
-        let ahit = AdaptiveHybridIndexTree::new(
-            spec.name.clone(),
-            field_path,
-            spec.unique,
-        );
+        let ahit = AdaptiveHybridIndexTree::new(spec.name.clone(), field_path, spec.unique);
 
         Self { ahit, spec }
     }
@@ -218,10 +218,7 @@ impl IndexManager {
 
         let mut indexes = self.indexes.write();
         if indexes.contains_key(&name) {
-            return Err(OvnError::IndexAlreadyExists {
-                name,
-                collection,
-            });
+            return Err(OvnError::IndexAlreadyExists { name, collection });
         }
 
         let index = SecondaryIndex::new(spec);
@@ -281,10 +278,8 @@ impl IndexManager {
 
         // Prefer exact match on single field
         for (name, idx) in indexes.iter() {
-            if idx.spec.fields.len() == 1 {
-                if filter_fields.contains(&idx.spec.fields[0].0) {
-                    return Some(name.clone());
-                }
+            if idx.spec.fields.len() == 1 && filter_fields.contains(&idx.spec.fields[0].0) {
+                return Some(name.clone());
             }
         }
 
@@ -311,7 +306,6 @@ impl Default for IndexManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
 
     #[test]
     fn test_secondary_index_single_field() {

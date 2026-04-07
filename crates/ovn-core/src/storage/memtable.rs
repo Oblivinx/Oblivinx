@@ -4,9 +4,9 @@
 //! When the MemTable exceeds the configured threshold (default 64MB),
 //! it is frozen and flushed to an L0 SSTable by a background thread.
 
-use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 use parking_lot::RwLock;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::error::{OvnError, OvnResult};
 
@@ -210,7 +210,12 @@ mod tests {
     #[test]
     fn test_memory_threshold() {
         let mt = MemTable::new(100); // Very low threshold
-        mt.insert(make_entry("key1", "a very long value that exceeds threshold", 1)).unwrap();
+        mt.insert(make_entry(
+            "key1",
+            "a very long value that exceeds threshold",
+            1,
+        ))
+        .unwrap();
         assert!(mt.should_flush());
     }
 }

@@ -14,18 +14,18 @@
 //! The handle is passed as the first argument to every function.
 
 use neon::prelude::*;
-use ovn_core::engine::OvnEngine;
 use ovn_core::engine::config::OvnConfig;
 use ovn_core::engine::FindOptions;
+use ovn_core::engine::OvnEngine;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::cell::RefCell;
 
 // Thread-safe database handle stored per JS thread
 type DbHandle = Arc<Mutex<OvnEngine>>;
 
 thread_local! {
-    static DATABASES: RefCell<Vec<Option<DbHandle>>> = RefCell::new(Vec::new());
+    static DATABASES: RefCell<Vec<Option<DbHandle>>> = const { RefCell::new(Vec::new()) };
 }
 
 // ── Database Lifecycle ──────────────────────────────────────
@@ -44,7 +44,7 @@ fn ovn_open(mut cx: FunctionContext) -> JsResult<JsNumber> {
             // pageSize
             if let Ok(ps) = cfg_obj.get::<JsNumber, _, _>(&mut cx, "pageSize") {
                 let v = ps.value(&mut cx) as u32;
-                if v >= 512 && v <= 65536 {
+                if (512..=65536).contains(&v) {
                     config.page_size = v;
                 }
             }
@@ -78,9 +78,8 @@ fn ovn_open(mut cx: FunctionContext) -> JsResult<JsNumber> {
         }
     }
 
-    let engine = OvnEngine::open(&path, config).or_else(|e| {
-        cx.throw_error(format!("OvnError: Failed to open '{}': {}", path, e))
-    })?;
+    let engine = OvnEngine::open(&path, config)
+        .or_else(|e| cx.throw_error(format!("OvnError: Failed to open '{}': {}", path, e)))?;
 
     let handle: DbHandle = Arc::new(Mutex::new(engine));
 
@@ -152,7 +151,9 @@ fn ovn_get_version(mut cx: FunctionContext) -> JsResult<JsString> {
 fn ovn_create_collection(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
     let name = cx.argument::<JsString>(1)?.value(&mut cx);
-    with_engine(&mut cx, handle_idx, |engine| engine.create_collection(&name))?;
+    with_engine(&mut cx, handle_idx, |engine| {
+        engine.create_collection(&name)
+    })?;
     Ok(cx.undefined())
 }
 
@@ -171,9 +172,7 @@ fn ovn_drop_collection(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 /// JS signature: `listCollections(handle: number): string` (JSON string[])
 fn ovn_list_collections(mut cx: FunctionContext) -> JsResult<JsString> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
-    let names = with_engine(&mut cx, handle_idx, |engine| {
-        Ok(engine.list_collections())
-    })?;
+    let names = with_engine(&mut cx, handle_idx, |engine| Ok(engine.list_collections()))?;
     let json = serde_json::to_string(&names).unwrap_or_else(|_| "[]".to_string());
     Ok(cx.string(json))
 }
@@ -188,9 +187,8 @@ fn ovn_insert(mut cx: FunctionContext) -> JsResult<JsString> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let doc_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let doc_json: serde_json::Value = serde_json::from_str(&doc_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON document: {}", e))
-    })?;
+    let doc_json: serde_json::Value = serde_json::from_str(&doc_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON document: {}", e)))?;
 
     let id = with_engine(&mut cx, handle_idx, |engine| {
         engine.insert(&collection, &doc_json)
@@ -207,9 +205,8 @@ fn ovn_insert_many(mut cx: FunctionContext) -> JsResult<JsString> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let docs_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let docs_json: Vec<serde_json::Value> = serde_json::from_str(&docs_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON array: {}", e))
-    })?;
+    let docs_json: Vec<serde_json::Value> = serde_json::from_str(&docs_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON array: {}", e)))?;
 
     let ids = with_engine(&mut cx, handle_idx, |engine| {
         engine.insert_many(&collection, &docs_json)
@@ -227,9 +224,8 @@ fn ovn_find(mut cx: FunctionContext) -> JsResult<JsString> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
 
     let results = with_engine(&mut cx, handle_idx, |engine| {
         engine.find(&collection, &filter_json, None)
@@ -248,13 +244,11 @@ fn ovn_find_with_options(mut cx: FunctionContext) -> JsResult<JsString> {
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
     let opts_str = cx.argument::<JsString>(3)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
 
-    let opts_json: serde_json::Value = serde_json::from_str(&opts_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON options: {}", e))
-    })?;
+    let opts_json: serde_json::Value = serde_json::from_str(&opts_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON options: {}", e)))?;
 
     // Parse FindOptions from JSON
     let mut options = FindOptions::default();
@@ -302,9 +296,8 @@ fn ovn_find_one(mut cx: FunctionContext) -> JsResult<JsString> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
 
     let result = with_engine(&mut cx, handle_idx, |engine| {
         engine.find_one(&collection, &filter_json)
@@ -322,9 +315,8 @@ fn ovn_count(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
 
     let results = with_engine(&mut cx, handle_idx, |engine| {
         engine.find(&collection, &filter_json, Some(FindOptions::default()))
@@ -342,12 +334,10 @@ fn ovn_update(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
     let update_str = cx.argument::<JsString>(3)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
-    let update_json: serde_json::Value = serde_json::from_str(&update_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON update: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
+    let update_json: serde_json::Value = serde_json::from_str(&update_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON update: {}", e)))?;
 
     let count = with_engine(&mut cx, handle_idx, |engine| {
         engine.update(&collection, &filter_json, &update_json)
@@ -365,12 +355,10 @@ fn ovn_update_many(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
     let update_str = cx.argument::<JsString>(3)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
-    let update_json: serde_json::Value = serde_json::from_str(&update_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON update: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
+    let update_json: serde_json::Value = serde_json::from_str(&update_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON update: {}", e)))?;
 
     let count = with_engine(&mut cx, handle_idx, |engine| {
         engine.update_many(&collection, &filter_json, &update_json)
@@ -387,9 +375,8 @@ fn ovn_delete(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
 
     let count = with_engine(&mut cx, handle_idx, |engine| {
         engine.delete(&collection, &filter_json)
@@ -406,9 +393,8 @@ fn ovn_delete_many(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let filter_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let filter_json: serde_json::Value = serde_json::from_str(&filter_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e))
-    })?;
+    let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
 
     let count = with_engine(&mut cx, handle_idx, |engine| {
         engine.delete_many(&collection, &filter_json)
@@ -427,9 +413,8 @@ fn ovn_aggregate(mut cx: FunctionContext) -> JsResult<JsString> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let pipeline_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let pipeline_json: Vec<serde_json::Value> = serde_json::from_str(&pipeline_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON pipeline: {}", e))
-    })?;
+    let pipeline_json: Vec<serde_json::Value> = serde_json::from_str(&pipeline_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON pipeline: {}", e)))?;
 
     let results = with_engine(&mut cx, handle_idx, |engine| {
         engine.aggregate(&collection, &pipeline_json)
@@ -449,9 +434,8 @@ fn ovn_create_index(mut cx: FunctionContext) -> JsResult<JsString> {
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
     let fields_str = cx.argument::<JsString>(2)?.value(&mut cx);
 
-    let fields_json: serde_json::Value = serde_json::from_str(&fields_str).or_else(|e| {
-        cx.throw_error(format!("OvnError: Invalid JSON: {}", e))
-    })?;
+    let fields_json: serde_json::Value = serde_json::from_str(&fields_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON: {}", e)))?;
 
     let name = with_engine(&mut cx, handle_idx, |engine| {
         engine.create_index(&collection, &fields_json)
@@ -508,11 +492,13 @@ fn ovn_commit_transaction(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
     let txid_str = cx.argument::<JsString>(1)?.value(&mut cx);
 
-    let txid: u64 = txid_str.parse().or_else(|_| {
-        cx.throw_error("OvnError: Invalid transaction ID")
-    })?;
+    let txid: u64 = txid_str
+        .parse()
+        .or_else(|_| cx.throw_error("OvnError: Invalid transaction ID"))?;
 
-    with_engine(&mut cx, handle_idx, |engine| engine.commit_transaction(txid))?;
+    with_engine(&mut cx, handle_idx, |engine| {
+        engine.commit_transaction(txid)
+    })?;
     Ok(cx.undefined())
 }
 
@@ -523,9 +509,9 @@ fn ovn_abort_transaction(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
     let txid_str = cx.argument::<JsString>(1)?.value(&mut cx);
 
-    let txid: u64 = txid_str.parse().or_else(|_| {
-        cx.throw_error("OvnError: Invalid transaction ID")
-    })?;
+    let txid: u64 = txid_str
+        .parse()
+        .or_else(|_| cx.throw_error("OvnError: Invalid transaction ID"))?;
 
     DATABASES.with(|dbs| {
         let dbs = dbs.borrow();
@@ -547,9 +533,7 @@ fn ovn_abort_transaction(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 fn ovn_get_metrics(mut cx: FunctionContext) -> JsResult<JsString> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
 
-    let metrics = with_engine(&mut cx, handle_idx, |engine| {
-        Ok(engine.get_metrics())
-    })?;
+    let metrics = with_engine(&mut cx, handle_idx, |engine| Ok(engine.get_metrics()))?;
 
     let result_str = serde_json::to_string(&metrics).unwrap_or_else(|_| "{}".to_string());
     Ok(cx.string(result_str))
@@ -586,9 +570,7 @@ where
                 .unwrap_err()
         })?;
 
-        f(&engine).map_err(|e| {
-            cx.throw_error::<_, ()>(format!("{}", e)).unwrap_err()
-        })
+        f(&engine).map_err(|e| cx.throw_error::<_, ()>(format!("{}", e)).unwrap_err())
     })
 }
 

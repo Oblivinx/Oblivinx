@@ -1,9 +1,9 @@
 //! Aggregation pipeline — $match, $group, $project, $sort, $limit, $skip, $unwind, $lookup, $count.
 
-use std::collections::BTreeMap;
 use crate::error::{OvnError, OvnResult};
 use crate::format::obe::{ObeDocument, ObeValue};
-use crate::query::filter::{parse_filter, evaluate_filter};
+use crate::query::filter::{evaluate_filter, parse_filter};
+use std::collections::BTreeMap;
 
 /// A single stage in the aggregation pipeline.
 #[derive(Debug, Clone)]
@@ -76,10 +76,12 @@ fn parse_stage(json: &serde_json::Value) -> OvnResult<AggregateStage> {
         "$match" => Ok(AggregateStage::Match(value.clone())),
         "$group" => parse_group_stage(value),
         "$project" => {
-            let proj_obj = value.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-                position: 0,
-                message: "$project must be an object".to_string(),
-            })?;
+            let proj_obj = value
+                .as_object()
+                .ok_or_else(|| OvnError::QuerySyntaxError {
+                    position: 0,
+                    message: "$project must be an object".to_string(),
+                })?;
             let mut projection = BTreeMap::new();
             for (field, include) in proj_obj {
                 let include = match include {
@@ -92,10 +94,12 @@ fn parse_stage(json: &serde_json::Value) -> OvnResult<AggregateStage> {
             Ok(AggregateStage::Project(projection))
         }
         "$sort" => {
-            let sort_obj = value.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-                position: 0,
-                message: "$sort must be an object".to_string(),
-            })?;
+            let sort_obj = value
+                .as_object()
+                .ok_or_else(|| OvnError::QuerySyntaxError {
+                    position: 0,
+                    message: "$sort must be an object".to_string(),
+                })?;
             let sort_fields: Vec<(String, i32)> = sort_obj
                 .iter()
                 .map(|(f, d)| (f.clone(), d.as_i64().unwrap_or(1) as i32))
@@ -134,12 +138,15 @@ fn parse_stage(json: &serde_json::Value) -> OvnResult<AggregateStage> {
 }
 
 fn parse_group_stage(value: &serde_json::Value) -> OvnResult<AggregateStage> {
-    let obj = value.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-        position: 0,
-        message: "$group must be an object".to_string(),
-    })?;
+    let obj = value
+        .as_object()
+        .ok_or_else(|| OvnError::QuerySyntaxError {
+            position: 0,
+            message: "$group must be an object".to_string(),
+        })?;
 
-    let id_expr = obj.get("_id")
+    let id_expr = obj
+        .get("_id")
         .and_then(|v| v.as_str())
         .unwrap_or("null")
         .strip_prefix('$')
@@ -153,10 +160,12 @@ fn parse_group_stage(value: &serde_json::Value) -> OvnResult<AggregateStage> {
             continue;
         }
 
-        let acc_obj = acc_value.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-            position: 0,
-            message: format!("Accumulator for '{field}' must be an object"),
-        })?;
+        let acc_obj = acc_value
+            .as_object()
+            .ok_or_else(|| OvnError::QuerySyntaxError {
+                position: 0,
+                message: format!("Accumulator for '{field}' must be an object"),
+            })?;
 
         for (acc_op, acc_expr) in acc_obj {
             let expr = parse_accumulator_expr(acc_expr);
@@ -175,7 +184,10 @@ fn parse_group_stage(value: &serde_json::Value) -> OvnResult<AggregateStage> {
         }
     }
 
-    Ok(AggregateStage::Group { id_expr, accumulators })
+    Ok(AggregateStage::Group {
+        id_expr,
+        accumulators,
+    })
 }
 
 fn parse_accumulator_expr(value: &serde_json::Value) -> AccumulatorExpr {
@@ -201,42 +213,45 @@ pub fn execute_pipeline(
     Ok(result)
 }
 
-fn execute_stage(
-    docs: Vec<ObeDocument>,
-    stage: &AggregateStage,
-) -> OvnResult<Vec<ObeDocument>> {
+fn execute_stage(docs: Vec<ObeDocument>, stage: &AggregateStage) -> OvnResult<Vec<ObeDocument>> {
     match stage {
         AggregateStage::Match(filter_json) => {
             let filter = parse_filter(filter_json)?;
-            Ok(docs.into_iter().filter(|d| evaluate_filter(&filter, d)).collect())
+            Ok(docs
+                .into_iter()
+                .filter(|d| evaluate_filter(&filter, d))
+                .collect())
         }
         AggregateStage::Project(projection) => {
-            let result: Vec<ObeDocument> = docs.into_iter().map(|doc| {
-                let mut new_doc = ObeDocument::with_id(doc.id);
-                new_doc.txid = doc.txid;
+            let result: Vec<ObeDocument> = docs
+                .into_iter()
+                .map(|doc| {
+                    let mut new_doc = ObeDocument::with_id(doc.id);
+                    new_doc.txid = doc.txid;
 
-                let has_includes = projection.values().any(|&v| v);
+                    let has_includes = projection.values().any(|&v| v);
 
-                if has_includes {
-                    // Include mode: only include specified fields
-                    for (field, include) in projection {
-                        if *include {
-                            if let Some(val) = doc.get(field) {
+                    if has_includes {
+                        // Include mode: only include specified fields
+                        for (field, include) in projection {
+                            if *include {
+                                if let Some(val) = doc.get(field) {
+                                    new_doc.set(field.clone(), val.clone());
+                                }
+                            }
+                        }
+                    } else {
+                        // Exclude mode: copy all except excluded
+                        for (field, val) in &doc.fields {
+                            if projection.get(field).is_none_or(|&exclude| exclude) {
                                 new_doc.set(field.clone(), val.clone());
                             }
                         }
                     }
-                } else {
-                    // Exclude mode: copy all except excluded
-                    for (field, val) in &doc.fields {
-                        if !projection.get(field).map_or(false, |&exclude| !exclude) {
-                            new_doc.set(field.clone(), val.clone());
-                        }
-                    }
-                }
 
-                new_doc
-            }).collect();
+                    new_doc
+                })
+                .collect();
             Ok(result)
         }
         AggregateStage::Sort(sort_fields) => {
@@ -270,12 +285,8 @@ fn execute_stage(
             });
             Ok(sorted)
         }
-        AggregateStage::Limit(n) => {
-            Ok(docs.into_iter().take(*n).collect())
-        }
-        AggregateStage::Skip(n) => {
-            Ok(docs.into_iter().skip(*n).collect())
-        }
+        AggregateStage::Limit(n) => Ok(docs.into_iter().take(*n).collect()),
+        AggregateStage::Skip(n) => Ok(docs.into_iter().skip(*n).collect()),
         AggregateStage::Unwind(field) => {
             let mut result = Vec::new();
             for doc in docs {
@@ -297,9 +308,10 @@ fn execute_stage(
             result_doc.set(output_field.clone(), ObeValue::Int64(count as i64));
             Ok(vec![result_doc])
         }
-        AggregateStage::Group { id_expr, accumulators } => {
-            execute_group(docs, id_expr, accumulators)
-        }
+        AggregateStage::Group {
+            id_expr,
+            accumulators,
+        } => execute_group(docs, id_expr, accumulators),
     }
 }
 
@@ -368,34 +380,34 @@ fn compute_accumulator(acc: &Accumulator, docs: &[&ObeDocument]) -> ObeValue {
             let sum: f64 = docs.iter().map(|d| resolve_expr_f64(expr, d)).sum();
             ObeValue::Float64(sum / docs.len() as f64)
         }
-        Accumulator::Min(expr) => {
-            docs.iter()
-                .filter_map(|d| resolve_expr_value(expr, d))
-                .min_by(|a, b| {
-                    a.as_f64().unwrap_or(f64::MAX).partial_cmp(&b.as_f64().unwrap_or(f64::MAX))
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap_or(ObeValue::Null)
-        }
-        Accumulator::Max(expr) => {
-            docs.iter()
-                .filter_map(|d| resolve_expr_value(expr, d))
-                .max_by(|a, b| {
-                    a.as_f64().unwrap_or(f64::MIN).partial_cmp(&b.as_f64().unwrap_or(f64::MIN))
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .unwrap_or(ObeValue::Null)
-        }
-        Accumulator::First(expr) => {
-            docs.first()
-                .and_then(|d| resolve_expr_value(expr, d))
-                .unwrap_or(ObeValue::Null)
-        }
-        Accumulator::Last(expr) => {
-            docs.last()
-                .and_then(|d| resolve_expr_value(expr, d))
-                .unwrap_or(ObeValue::Null)
-        }
+        Accumulator::Min(expr) => docs
+            .iter()
+            .filter_map(|d| resolve_expr_value(expr, d))
+            .min_by(|a, b| {
+                a.as_f64()
+                    .unwrap_or(f64::MAX)
+                    .partial_cmp(&b.as_f64().unwrap_or(f64::MAX))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(ObeValue::Null),
+        Accumulator::Max(expr) => docs
+            .iter()
+            .filter_map(|d| resolve_expr_value(expr, d))
+            .max_by(|a, b| {
+                a.as_f64()
+                    .unwrap_or(f64::MIN)
+                    .partial_cmp(&b.as_f64().unwrap_or(f64::MIN))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(ObeValue::Null),
+        Accumulator::First(expr) => docs
+            .first()
+            .and_then(|d| resolve_expr_value(expr, d))
+            .unwrap_or(ObeValue::Null),
+        Accumulator::Last(expr) => docs
+            .last()
+            .and_then(|d| resolve_expr_value(expr, d))
+            .unwrap_or(ObeValue::Null),
         Accumulator::Push(expr) => {
             let values: Vec<ObeValue> = docs
                 .iter()
@@ -440,10 +452,16 @@ mod tests {
 
     fn make_order(customer: &str, amount: f64, year: i32) -> ObeDocument {
         let mut doc = ObeDocument::new();
-        doc.set("customerId".to_string(), ObeValue::String(customer.to_string()));
+        doc.set(
+            "customerId".to_string(),
+            ObeValue::String(customer.to_string()),
+        );
         doc.set("amount".to_string(), ObeValue::Float64(amount));
         doc.set("year".to_string(), ObeValue::Int32(year));
-        doc.set("status".to_string(), ObeValue::String("completed".to_string()));
+        doc.set(
+            "status".to_string(),
+            ObeValue::String("completed".to_string()),
+        );
         doc
     }
 
@@ -490,7 +508,10 @@ mod tests {
         let stage = AggregateStage::Group {
             id_expr: "customerId".to_string(),
             accumulators: vec![
-                ("totalAmount".to_string(), Accumulator::Sum(AccumulatorExpr::FieldPath("amount".to_string()))),
+                (
+                    "totalAmount".to_string(),
+                    Accumulator::Sum(AccumulatorExpr::FieldPath("amount".to_string())),
+                ),
                 ("orderCount".to_string(), Accumulator::Count),
             ],
         };
@@ -499,9 +520,9 @@ mod tests {
         assert_eq!(result.len(), 2); // Two customers: c1 and c2
 
         // Find c1's result
-        let c1 = result.iter().find(|d| {
-            d.get("_id").map_or(false, |v| v.as_str() == Some("c1"))
-        });
+        let c1 = result
+            .iter()
+            .find(|d| d.get("_id").is_some_and(|v| v.as_str() == Some("c1")));
         assert!(c1.is_some());
     }
 
@@ -509,11 +530,14 @@ mod tests {
     fn test_unwind() {
         let mut doc = ObeDocument::new();
         doc.set("name".to_string(), ObeValue::String("test".to_string()));
-        doc.set("tags".to_string(), ObeValue::Array(vec![
-            ObeValue::String("a".to_string()),
-            ObeValue::String("b".to_string()),
-            ObeValue::String("c".to_string()),
-        ]));
+        doc.set(
+            "tags".to_string(),
+            ObeValue::Array(vec![
+                ObeValue::String("a".to_string()),
+                ObeValue::String("b".to_string()),
+                ObeValue::String("c".to_string()),
+            ]),
+        );
 
         let result = execute_stage(vec![doc], &AggregateStage::Unwind("tags".to_string())).unwrap();
         assert_eq!(result.len(), 3);
