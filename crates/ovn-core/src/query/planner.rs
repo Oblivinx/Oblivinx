@@ -13,6 +13,8 @@ pub enum PlanType {
     CoveredIndexScan { index_name: String },
     /// Full collection scan
     CollectionScan,
+    /// Time-Series optimized scan
+    TimeSeriesScan { min_time: i64, max_time: i64 },
 }
 
 /// A query execution plan with estimated cost.

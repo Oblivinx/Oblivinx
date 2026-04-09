@@ -14,3 +14,4 @@ ovn-core = { path = "../ovn-core" }
 neon.workspace = true
 serde_json.workspace = true
 log.workspace = true
+uuid = { workspace = true, features = ["v4"] }

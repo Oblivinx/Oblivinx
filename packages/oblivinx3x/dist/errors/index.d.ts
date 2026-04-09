@@ -1,0 +1,156 @@
+/**
+ * @module errors
+ *
+ * Oblivinx3x Error Hierarchy.
+ *
+ * Menyediakan class-class error terstruktur yang memetakan
+ * error codes dari Rust engine ke typed JavaScript exceptions.
+ *
+ * Hierarki:
+ * ```
+ * Error
+ * └── OvnError (base — semua error Oblivinx3x)
+ *     ├── CollectionNotFoundError
+ *     ├── CollectionExistsError
+ *     ├── WriteConflictError
+ *     └── ValidationError
+ * ```
+ *
+ * Setiap error memiliki:
+ * - `code` — machine-readable error code (string)
+ * - `collection` — nama collection terkait (jika relevan)
+ * - Stack trace yang benar (menunjuk ke caller, bukan ke constructor error)
+ *
+ * @packageDocumentation
+ */
+/**
+ * Base class untuk semua error Oblivinx3x.
+ *
+ * Menyediakan informasi terstruktur berupa error code
+ * dan optional collection name untuk debugging yang lebih mudah.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await db.collection('users').insertOne({ name: 'Alice' });
+ * } catch (err) {
+ *   if (err instanceof OvnError) {
+ *     console.error(`[${err.code}] ${err.message}`);
+ *     // Output: [COLLECTION_NOT_FOUND] Collection 'users' not found
+ *   }
+ * }
+ * ```
+ */
+export declare class OvnError extends Error {
+    /** Machine-readable error code untuk programmatic error handling */
+    readonly code: string;
+    /** Nama collection yang terkait dengan error (jika ada) */
+    readonly collection?: string;
+    /**
+     * Buat instance OvnError baru.
+     *
+     * @param message - Pesan error yang human-readable
+     * @param code - Error code (default: 'OVN_ERROR')
+     * @param collection - Nama collection (opsional)
+     */
+    constructor(message: string, code?: string, collection?: string);
+}
+/**
+ * Dilempar ketika collection tidak ditemukan (dan auto-create tidak aktif).
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await db.dropCollection('nonexistent');
+ * } catch (err) {
+ *   if (err instanceof CollectionNotFoundError) {
+ *     console.log(`Collection "${err.collection}" tidak ada`);
+ *   }
+ * }
+ * ```
+ */
+export declare class CollectionNotFoundError extends OvnError {
+    constructor(name: string);
+}
+/**
+ * Dilempar ketika mencoba membuat collection yang sudah ada.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await db.createCollection('users'); // sudah ada
+ * } catch (err) {
+ *   if (err instanceof CollectionExistsError) {
+ *     console.log('Collection sudah ada, skip...');
+ *   }
+ * }
+ * ```
+ */
+export declare class CollectionExistsError extends OvnError {
+    constructor(name: string);
+}
+/**
+ * Dilempar ketika terjadi write-write conflict dalam MVCC transaction.
+ *
+ * Biasanya terjadi ketika dua transaction mencoba mengubah dokumen yang sama
+ * secara bersamaan. Solusi: retry transaction.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await txn.commit();
+ * } catch (err) {
+ *   if (err instanceof WriteConflictError) {
+ *     // Retry logic
+ *     console.log('Write conflict, retrying...');
+ *   }
+ * }
+ * ```
+ */
+export declare class WriteConflictError extends OvnError {
+    constructor(message: string);
+}
+/**
+ * Dilempar ketika dokumen gagal validasi JSON Schema.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await users.insertOne({ age: 'bukan_angka' });
+ * } catch (err) {
+ *   if (err instanceof ValidationError) {
+ *     console.log('Dokumen tidak valid:', err.message);
+ *   }
+ * }
+ * ```
+ */
+export declare class ValidationError extends OvnError {
+    constructor(message: string);
+}
+/**
+ * Wrap pemanggilan native addon dalam error handling.
+ *
+ * Fungsi ini menangkap error dari Rust engine dan mengonversinya
+ * menjadi typed OvnError instances berdasarkan pola pesan error.
+ *
+ * Mapping error:
+ * - "Collection '...' not found"  → CollectionNotFoundError
+ * - "... already exists"          → CollectionExistsError
+ * - "Write conflict" / "WRITE_CONFLICT" → WriteConflictError
+ * - "validation" / "Validation"   → ValidationError
+ * - Lainnya                      → OvnError (generic)
+ *
+ * @template T — Tipe return value dari fungsi native
+ * @param fn — Fungsi yang memanggil native addon
+ * @returns Hasil dari fungsi native
+ * @throws {OvnError} atau subclass-nya jika terjadi error
+ *
+ * @internal — Helper ini tidak di-export ke public API.
+ *
+ * @example
+ * ```typescript
+ * const result = wrapNative(() => native.insert(handle, 'users', jsonStr));
+ * ```
+ */
+export declare function wrapNative<T>(fn: () => T): T;
+//# sourceMappingURL=index.d.ts.map

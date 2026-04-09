@@ -1,6 +1,7 @@
 //! Collection management — maintains per-collection metadata, indexes, and statistics.
 
 use crate::index::secondary::IndexManager;
+use crate::index::vector::HnswVectorIndex;
 
 #[derive(Debug, Clone, Default)]
 pub struct CollectionOptions {
@@ -28,6 +29,8 @@ pub struct Collection {
     pub options: CollectionOptions,
     /// Index manager for this collection
     pub index_manager: IndexManager,
+    /// Optional Vector Index for similarity search
+    pub vector_index: Option<HnswVectorIndex>,
     /// Document count
     pub doc_count: u64,
 }
@@ -40,6 +43,7 @@ impl Collection {
             name,
             options,
             index_manager: IndexManager::new(),
+            vector_index: None,
             doc_count: 0,
         }
     }

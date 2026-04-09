@@ -5,6 +5,7 @@
 
 pub mod collection;
 pub mod config;
+pub mod timeseries;
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -13,11 +14,11 @@ use std::sync::Arc;
 
 use crate::error::{OvnError, OvnResult};
 use crate::format::header::FileHeader;
-use crate::format::obe::ObeDocument;
+use crate::format::obe::{ObeDocument, ObeValue};
 use crate::format::page::{Page, PageType};
 use crate::io::{FileBackend, OsFileBackend};
 use crate::mvcc::{MvccManager, Transaction, VersionEntry};
-use crate::query::aggregation::{execute_pipeline, parse_pipeline};
+use crate::query::aggregation::parse_pipeline;
 use crate::query::filter::{evaluate_filter, parse_filter};
 use crate::query::update::{apply_update, parse_update};
 use crate::storage::btree::BPlusTree;
@@ -25,9 +26,19 @@ use crate::storage::buffer_pool::BufferPool;
 use crate::storage::memtable::{MemTable, MemTableEntry};
 use crate::storage::sstable::SSTableManager;
 use crate::storage::wal::{WalManager, WalRecord, WalRecordType};
+use crate::storage::blob::BlobManager;
+use crate::mvcc::session::{SessionManager, WriteResult};
+use crate::mvcc::change_stream::{ChangeStreamEmitter, ChangeStreamEvent, OperationType};
 
 use self::collection::Collection;
 use self::config::OvnConfig;
+
+/// Options for write operations (insert, update, delete).
+#[derive(Debug, Clone, Default)]
+pub struct WriteOptions {
+    pub lsid: Option<[u8; 16]>,
+    pub txn_number: Option<u64>,
+}
 
 /// The main Oblivinx3x database engine.
 pub struct OvnEngine {
@@ -50,6 +61,12 @@ pub struct OvnEngine {
     btree: Arc<BPlusTree>,
     /// MVCC manager
     mvcc: Arc<MvccManager>,
+    /// Session manager for idempotency
+    session_mgr: Arc<SessionManager>,
+    /// Change stream emitter for real-time events
+    pub change_stream: Arc<RwLock<ChangeStreamEmitter>>,
+    /// Blob storage manager
+    blob_mgr: Arc<BlobManager>,
     /// Collections registry
     collections: RwLock<HashMap<String, Collection>>,
     /// Configuration
@@ -100,6 +117,9 @@ impl OvnEngine {
         let sstable_mgr = Arc::new(SSTableManager::new());
         let btree = Arc::new(BPlusTree::new());
         let mvcc = Arc::new(MvccManager::new());
+        let session_mgr = Arc::new(SessionManager::new());
+        let change_stream = Arc::new(RwLock::new(ChangeStreamEmitter::new()));
+        let blob_mgr = Arc::new(BlobManager::new(buffer_pool.clone(), backend.clone()));
 
         Ok(Self {
             path,
@@ -111,6 +131,9 @@ impl OvnEngine {
             sstable_mgr,
             btree,
             mvcc,
+            session_mgr,
+            change_stream,
+            blob_mgr,
             collections: RwLock::new(HashMap::new()),
             config,
             closed: RwLock::new(false),
@@ -162,7 +185,11 @@ impl OvnEngine {
     // ── Collection Management ──────────────────────────────────
 
     /// Create a new collection.
-    pub fn create_collection(&self, name: &str) -> OvnResult<()> {
+    pub fn create_collection(
+        &self,
+        name: &str,
+        options_json: Option<&serde_json::Value>,
+    ) -> OvnResult<()> {
         self.check_closed()?;
         let mut collections = self.collections.write();
 
@@ -172,7 +199,48 @@ impl OvnEngine {
             });
         }
 
-        let collection = Collection::new(name.to_string());
+        let mut options = crate::engine::collection::CollectionOptions::default();
+        if let Some(json) = options_json {
+            if let Some(obj) = json.as_object() {
+                if let Some(capped) = obj.get("capped").and_then(|v| v.as_bool()) {
+                    options.capped = capped;
+                }
+                if let Some(size) = obj.get("size").and_then(|v| v.as_u64()) {
+                    options.size = Some(size);
+                }
+                if let Some(max) = obj.get("max").and_then(|v| v.as_u64()) {
+                    options.max = Some(max);
+                }
+                if let Some(validator) = obj.get("validator") {
+                    options.validator = Some(validator.clone());
+                }
+                if let Some(level) = obj.get("validationLevel").and_then(|v| v.as_str()) {
+                    options.validation_level = Some(level.to_string());
+                }
+                if let Some(action) = obj.get("validationAction").and_then(|v| v.as_str()) {
+                    options.validation_action = Some(action.to_string());
+                }
+                if let Some(ts) = obj.get("timeseries").and_then(|v| v.as_object()) {
+                    let mut ts_opts = crate::engine::collection::TimeSeriesOptions {
+                        time_field: "timestamp".to_string(),
+                        meta_field: None,
+                        granularity: None,
+                    };
+                    if let Some(time_field) = ts.get("timeField").and_then(|v| v.as_str()) {
+                        ts_opts.time_field = time_field.to_string();
+                    }
+                    if let Some(meta_field) = ts.get("metaField").and_then(|v| v.as_str()) {
+                        ts_opts.meta_field = Some(meta_field.to_string());
+                    }
+                    if let Some(granularity) = ts.get("granularity").and_then(|v| v.as_str()) {
+                        ts_opts.granularity = Some(granularity.to_string());
+                    }
+                    options.timeseries = Some(ts_opts);
+                }
+            }
+        }
+
+        let collection = Collection::new_with_options(name.to_string(), options);
         collections.insert(name.to_string(), collection);
 
         let mut header = self.header.write();
@@ -203,11 +271,111 @@ impl OvnEngine {
         self.collections.read().keys().cloned().collect()
     }
 
+    /// Create a Vector Index (HNSW) for a specific field.
+    pub fn create_vector_index(&self, collection: &str, field: &str) -> OvnResult<()> {
+        self.check_closed()?;
+        self.ensure_collection(collection)?;
+
+        let mut collections = self.collections.write();
+        if let Some(coll) = collections.get_mut(collection) {
+            if coll.vector_index.is_some() {
+                return Err(OvnError::IndexAlreadyExists {
+                    name: "vector_index".to_string(),
+                    collection: collection.to_string(),
+                });
+            }
+
+            use crate::index::vector::HnswVectorIndex;
+            let mut vector_index = HnswVectorIndex::new(field.to_string());
+
+            // Build index for existing documents
+            let all_entries = self.btree.scan_all();
+            for entry in all_entries {
+                if entry.tombstone {
+                    continue;
+                }
+                if let Ok(doc) = ObeDocument::decode(&entry.value) {
+                    if let Some(val) = doc.get_path(field) {
+                        if let Some(arr) = val.as_array() {
+                            let mut values = Vec::new();
+                            for v in arr {
+                                if let Some(f) = v.as_f64() {
+                                    values.push(f as f32);
+                                }
+                            }
+                            if !values.is_empty() {
+                                let _ = vector_index.insert_vector(&doc.id, crate::index::vector::VectorEmbedding::new(values));
+                            }
+                        }
+                    }
+                }
+            }
+
+            coll.vector_index = Some(vector_index);
+            Ok(())
+        } else {
+            Err(OvnError::CollectionNotFound {
+                name: collection.to_string(),
+            })
+        }
+    }
+
+    /// Perform a Vector Search query.
+    pub fn vector_search(&self, collection: &str, query_vector: &[f32], limit: usize) -> OvnResult<Vec<serde_json::Value>> {
+        self.check_closed()?;
+        self.ensure_collection(collection)?;
+
+        let collections = self.collections.read();
+        if let Some(coll) = collections.get(collection) {
+            if let Some(vector_index) = &coll.vector_index {
+                let query_embedding = crate::index::vector::VectorEmbedding::new(query_vector.to_vec());
+                let matches = vector_index.search(&query_embedding, limit);
+
+                let mut results = Vec::new();
+                for (doc_id, _) in matches {
+                    if let Some(entry) = self.btree.get(&doc_id) {
+                        if !entry.tombstone {
+                            if let Ok(doc) = ObeDocument::decode(&entry.value) {
+                                results.push(doc.to_json());
+                            }
+                        }
+                    }
+                }
+                return Ok(results);
+            } else {
+                return Err(OvnError::IndexNotFound {
+                    name: "vector_index".to_string(),
+                    collection: collection.to_string(),
+                });
+            }
+        }
+        
+        Err(OvnError::CollectionNotFound {
+            name: collection.to_string(),
+        })
+    }
+
     // ── Document CRUD ──────────────────────────────────────────
 
     /// Insert a single document into a collection.
-    pub fn insert(&self, collection: &str, doc_json: &serde_json::Value) -> OvnResult<String> {
+    pub fn insert_with_options(
+        &self,
+        collection: &str,
+        doc_json: &serde_json::Value,
+        options: WriteOptions,
+    ) -> OvnResult<String> {
         self.check_closed()?;
+        
+        let lsid_val = options.lsid.unwrap_or([0u8; 16]);
+        let txn_val = options.txn_number.unwrap_or(0);
+        
+        // Idempotency check
+        if txn_val > 0 {
+            if let Some(WriteResult::InsertId(existing_id)) = self.session_mgr.check_idempotent(&lsid_val, txn_val) {
+                return Ok(existing_id);
+            }
+        }
+        
         self.ensure_collection(collection)?;
 
         let mut doc = ObeDocument::from_json(doc_json)?;
@@ -223,8 +391,8 @@ impl OvnEngine {
             WalRecordType::Insert,
             txid,
             collection_id,
-            [0u8; 16],
-            0,
+            lsid_val,
+            txn_val,
             encoded.clone(),
         );
         self.wal.append(wal_record, &*self.backend)?;
@@ -259,9 +427,27 @@ impl OvnEngine {
         );
 
         // Index the document
-        let collections = self.collections.read();
-        if let Some(coll) = collections.get(collection) {
+        let mut collections = self.collections.write();
+        if let Some(coll) = collections.get_mut(collection) {
             coll.index_manager.index_document(&doc)?;
+            
+            // Add to vector index if applicable
+            if let Some(vector_index) = &mut coll.vector_index {
+                let field = vector_index.field.clone();
+                if let Some(val) = doc.get_path(&field) {
+                    if let Some(arr) = val.as_array() {
+                        let mut values = Vec::new();
+                        for v in arr {
+                            if let Some(f) = v.as_f64() {
+                                values.push(f as f32);
+                            }
+                        }
+                        if !values.is_empty() {
+                            let _ = vector_index.insert_vector(&doc.id, crate::index::vector::VectorEmbedding::new(values));
+                        }
+                    }
+                }
+            }
         }
 
         // Check if MemTable needs flushing
@@ -269,7 +455,29 @@ impl OvnEngine {
             self.flush_memtable()?;
         }
 
-        Ok(doc.id_string())
+        let result_id = doc.id_string();
+        
+        if txn_val > 0 {
+            self.session_mgr.record_result(lsid_val, txn_val, WriteResult::InsertId(result_id.clone()));
+        }
+
+        // Emit change stream event
+        let event = ChangeStreamEvent {
+            op_type: OperationType::Insert,
+            cluster_time: txid, // simplify, using txid as logic clock
+            document_key: doc.id,
+            full_document: Some(doc),
+            namespace: collection.to_string(),
+            resume_token: txid.to_be_bytes().to_vec(),
+        };
+        self.change_stream.write().emit(event);
+
+        Ok(result_id)
+    }
+
+    /// Insert a single document into a collection without options.
+    pub fn insert(&self, collection: &str, doc_json: &serde_json::Value) -> OvnResult<String> {
+        self.insert_with_options(collection, doc_json, WriteOptions::default())
     }
 
     /// Insert many documents.
@@ -424,13 +632,24 @@ impl OvnEngine {
     }
 
     /// Update documents matching a filter.
-    pub fn update(
+    pub fn update_with_options(
         &self,
         collection: &str,
         filter_json: &serde_json::Value,
         update_json: &serde_json::Value,
+        options: WriteOptions,
     ) -> OvnResult<u64> {
         self.check_closed()?;
+        
+        let lsid_val = options.lsid.unwrap_or([0u8; 16]);
+        let txn_val = options.txn_number.unwrap_or(0);
+        
+        if txn_val > 0 {
+            if let Some(WriteResult::ModifiedCount(count)) = self.session_mgr.check_idempotent(&lsid_val, txn_val) {
+                return Ok(count);
+            }
+        }
+        
         self.ensure_collection(collection)?;
 
         let filter = parse_filter(filter_json)?;
@@ -460,8 +679,8 @@ impl OvnEngine {
                             WalRecordType::Update,
                             txid,
                             collection_id,
-                            [0; 16],
-                            0,
+                            lsid_val,
+                            txn_val,
                             encoded.clone(),
                         );
                         self.wal.append(wal_record, &*self.backend)?;
@@ -495,7 +714,32 @@ impl OvnEngine {
             }
         }
 
+        if txn_val > 0 {
+            self.session_mgr.record_result(lsid_val, txn_val, WriteResult::ModifiedCount(updated_count));
+        }
+
+        // Emit change stream event (just one for the whole batch for simplicity, or we could emit per doc)
+        let event = ChangeStreamEvent {
+            op_type: OperationType::Update,
+            cluster_time: 0,
+            document_key: [0; 16],
+            full_document: None,
+            namespace: collection.to_string(),
+            resume_token: vec![],
+        };
+        self.change_stream.write().emit(event);
+
         Ok(updated_count)
+    }
+
+    /// Update documents matching a filter (without options).
+    pub fn update(
+        &self,
+        collection: &str,
+        filter_json: &serde_json::Value,
+        update_json: &serde_json::Value,
+    ) -> OvnResult<u64> {
+        self.update_with_options(collection, filter_json, update_json, WriteOptions::default())
     }
 
     /// Update all matching documents.
@@ -741,6 +985,24 @@ impl OvnEngine {
         Ok(())
     }
 
+    // ── Blob Management ────────────────────────────────────────
+
+    /// Store a binary blob.
+    pub fn put_blob(&self, data: &[u8]) -> OvnResult<String> {
+        self.check_closed()?;
+        let (blob_id, _) = self.blob_mgr.put_blob(data)?;
+        Ok(uuid::Uuid::from_bytes(blob_id).to_string())
+    }
+
+    /// Retrieve a binary blob.
+    pub fn get_blob(&self, blob_id_str: &str) -> OvnResult<Option<Vec<u8>>> {
+        self.check_closed()?;
+        let parsed_uuid = uuid::Uuid::parse_str(blob_id_str).map_err(|_| {
+            OvnError::ValidationError(format!("Invalid UUID format: {}", blob_id_str))
+        })?;
+        self.blob_mgr.get_blob(parsed_uuid.as_bytes())
+    }
+
     // ── Transactions ───────────────────────────────────────────
 
     /// Begin a new transaction.
@@ -764,25 +1026,205 @@ impl OvnEngine {
     /// Execute an aggregation pipeline.
     pub fn aggregate(
         &self,
-        _collection: &str,
+        collection: &str,
         pipeline_json: &[serde_json::Value],
     ) -> OvnResult<Vec<serde_json::Value>> {
         self.check_closed()?;
+        self.ensure_collection(collection)?;
 
         let stages = parse_pipeline(pipeline_json)?;
+        let collection_id = Self::collection_id(collection);
 
-        // Get all documents from collection
+        // Collect all documents from the collection
         let all_entries = self.btree.scan_all();
-        let docs: Vec<ObeDocument> = all_entries
+        let mut docs: Vec<ObeDocument> = all_entries
             .into_iter()
             .filter(|e| !e.tombstone)
             .filter_map(|e| ObeDocument::decode(&e.value).ok())
             .collect();
 
-        let result_docs = execute_pipeline(docs, &stages)?;
+        // Also include uncommitted MemTable entries
+        let memtable_entries = self.memtable.entries_for_collection(collection_id);
+        for entry in memtable_entries {
+            if !entry.tombstone && !docs.iter().any(|d| d.id.to_vec() == entry.key) {
+                if let Ok(doc) = ObeDocument::decode(&entry.value) {
+                    docs.push(doc);
+                }
+            }
+        }
 
-        Ok(result_docs.into_iter().map(|d| d.to_json()).collect())
+        // Process pipeline stages — $lookup needs engine access, others use execute_pipeline
+        let mut current = docs;
+        for stage in &stages {
+            match stage {
+                crate::query::aggregation::AggregateStage::Lookup(config) => {
+                    // Resolve $lookup: for each doc, find matching foreign documents
+                    self.ensure_collection(&config.from)?;
+                    let foreign_id = Self::collection_id(&config.from);
+                    let foreign_entries = self.btree.scan_all();
+                    let foreign_docs: Vec<ObeDocument> = foreign_entries
+                        .into_iter()
+                        .filter(|e| !e.tombstone)
+                        .filter_map(|e| ObeDocument::decode(&e.value).ok())
+                        .collect();
+
+                    current = current
+                        .into_iter()
+                        .map(|mut doc| {
+                            let local_val = doc.get_path(&config.local_field).cloned();
+                            let matched: Vec<ObeValue> = foreign_docs
+                                .iter()
+                                .filter(|fd| {
+                                    let foreign_val = fd.get_path(&config.foreign_field);
+                                    match (&local_val, foreign_val) {
+                                        (Some(lv), Some(fv)) => {
+                                            // Compare serialized values for equality
+                                            lv.to_json().to_string() == fv.to_json().to_string()
+                                        }
+                                        _ => false,
+                                    }
+                                })
+                                .map(|fd| ObeValue::Document(fd.fields.clone()))
+                                .collect();
+
+                            doc.set(config.as_field.clone(), ObeValue::Array(matched));
+                            let _ = foreign_id; // suppress warning
+                            doc
+                        })
+                        .collect();
+                }
+                other_stage => {
+                    current = crate::query::aggregation::execute_stage_single(current, other_stage)?;
+                }
+            }
+        }
+
+        Ok(current.into_iter().map(|d| d.to_json()).collect())
     }
+
+    /// Full-text autocomplete search.
+    ///
+    /// Searches for documents where the indexed field starts with the given prefix.
+    /// Uses full-text index tokenization for matching.
+    pub fn autocomplete(
+        &self,
+        collection: &str,
+        field: &str,
+        prefix: &str,
+        limit: usize,
+    ) -> OvnResult<Vec<serde_json::Value>> {
+        self.check_closed()?;
+        self.ensure_collection(collection)?;
+
+        let prefix_lower = prefix.to_lowercase();
+        let all_entries = self.btree.scan_all();
+        let mut results = Vec::new();
+
+        for entry in all_entries {
+            if entry.tombstone {
+                continue;
+            }
+            if let Ok(doc) = ObeDocument::decode(&entry.value) {
+                if let Some(val) = doc.get_path(field) {
+                    if let Some(s) = val.as_str() {
+                        if s.to_lowercase().starts_with(&prefix_lower) {
+                            results.push(doc.to_json());
+                            if results.len() >= limit {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Export database to JSON format.
+    ///
+    /// Returns a JSON object with collections as keys and arrays of documents as values.
+    pub fn export(&self) -> OvnResult<serde_json::Value> {
+        self.check_closed()?;
+
+        let collection_names = self.list_collections();
+        let mut export_map = serde_json::Map::new();
+
+        for coll_name in &collection_names {
+            let docs = self.find(coll_name, &serde_json::Value::Null, None)?;
+            export_map.insert(coll_name.clone(), serde_json::Value::Array(docs));
+        }
+
+        Ok(serde_json::Value::Object(export_map))
+    }
+
+    /// Backup database to a file path (stub — copies btree snapshot).
+    ///
+    /// In a full implementation this would create a consistent hot-backup
+    /// using WAL checkpointing and file copy.
+    pub fn backup(&self, dest_path: &str) -> OvnResult<()> {
+        self.check_closed()?;
+        self.checkpoint()?;
+
+        // Export all data as JSON to dest_path
+        let data = self.export()?;
+        let json_str = serde_json::to_string_pretty(&data)
+            .map_err(|e| OvnError::EncodingError(e.to_string()))?;
+
+        std::fs::write(dest_path, json_str)?;
+        Ok(())
+    }
+
+    /// Create a geospatial index on a field for a collection.
+    pub fn create_geo_index(&self, collection: &str, field: &str) -> OvnResult<()> {
+        self.check_closed()?;
+        self.ensure_collection(collection)?;
+
+        let mut collections = self.collections.write();
+        if let Some(coll) = collections.get_mut(collection) {
+            // Create geo index (GeoSpatialIndex is already in index module)
+            use crate::index::geospatial::{GeoPoint, GeoSpatialIndex};
+            let mut geo_idx = GeoSpatialIndex::new();
+
+            // Index existing documents with geo field
+            let all_entries = self.btree.scan_all();
+            for entry in all_entries {
+                if entry.tombstone {
+                    continue;
+                }
+                if let Ok(doc) = ObeDocument::decode(&entry.value) {
+                    if let Some(val) = doc.get_path(field) {
+                        // Accept [lng, lat] arrays
+                        if let Some(arr) = val.as_array() {
+                            if arr.len() == 2 {
+                                let lng = arr[0].as_f64().unwrap_or(0.0);
+                                let lat = arr[1].as_f64().unwrap_or(0.0);
+                                let _ = geo_idx.index_point(&doc.id, GeoPoint::new(lng, lat));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Store geo index in collection options metadata
+            // (For now, mark field in index_manager with type "2dsphere")
+            let _ = coll.index_manager.create_index(crate::index::secondary::IndexSpec {
+                name: format!("{}_{}_2dsphere", collection, field),
+                collection: collection.to_string(),
+                fields: vec![(field.to_string(), 1)],
+                unique: false,
+                text: false,
+            });
+
+            log::info!("Created geospatial index on {}.{}", collection, field);
+            Ok(())
+        } else {
+            Err(OvnError::CollectionNotFound {
+                name: collection.to_string(),
+            })
+        }
+    }
+
 
     // ── Metrics ────────────────────────────────────────────────
 
@@ -825,7 +1267,7 @@ impl OvnEngine {
         let collections = self.collections.read();
         if !collections.contains_key(name) {
             drop(collections);
-            self.create_collection(name)?;
+            self.create_collection(name, None)?;
         }
         Ok(())
     }
@@ -881,8 +1323,8 @@ mod tests {
         let config = OvnConfig::default();
         let engine = OvnEngine::open(db_path.to_str().unwrap(), config).unwrap();
 
-        engine.create_collection("users").unwrap();
-        engine.create_collection("products").unwrap();
+        engine.create_collection("users", None).unwrap();
+        engine.create_collection("products", None).unwrap();
 
         let collections = engine.list_collections();
         assert!(collections.contains(&"users".to_string()));

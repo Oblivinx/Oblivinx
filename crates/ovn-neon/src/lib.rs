@@ -14,9 +14,11 @@
 //! The handle is passed as the first argument to every function.
 
 use neon::prelude::*;
+use neon::types::buffer::TypedArray;
 use ovn_core::engine::config::OvnConfig;
 use ovn_core::engine::FindOptions;
 use ovn_core::engine::OvnEngine;
+use ovn_core::engine::WriteOptions;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -131,14 +133,14 @@ fn ovn_checkpoint(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
 /// Get engine/library version info.
 ///
-/// JS signature: `getVersion(handle: number): string`
+/// JS signature: `getVersion(): string`
 fn ovn_get_version(mut cx: FunctionContext) -> JsResult<JsString> {
     let version = serde_json::json!({
         "engine": "Oblivinx3x",
         "version": "0.1.0",
         "format": "OVN/1.0",
         "neon": "1.x",
-        "features": ["mvcc", "wal", "lz4", "zstd", "ahit", "fulltext"]
+        "features": ["mvcc", "wal", "lz4", "zstd", "ahit", "fulltext", "geospatial", "vector", "lookup", "autocomplete"]
     });
     Ok(cx.string(version.to_string()))
 }
@@ -147,12 +149,22 @@ fn ovn_get_version(mut cx: FunctionContext) -> JsResult<JsString> {
 
 /// Create a collection.
 ///
-/// JS signature: `createCollection(handle: number, name: string): void`
+/// JS signature: `createCollection(handle: number, name: string, optionsJson?: string): void`
 fn ovn_create_collection(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
     let name = cx.argument::<JsString>(1)?.value(&mut cx);
+    let mut options_json: Option<serde_json::Value> = None;
+
+    if let Some(opts_arg) = cx.argument_opt(2) {
+        if let Ok(opts_str) = opts_arg.downcast::<JsString, _>(&mut cx) {
+            if let Ok(json) = serde_json::from_str(&opts_str.value(&mut cx)) {
+                options_json = Some(json);
+            }
+        }
+    }
+
     with_engine(&mut cx, handle_idx, |engine| {
-        engine.create_collection(&name)
+        engine.create_collection(&name, options_json.as_ref())
     })?;
     Ok(cx.undefined())
 }
@@ -181,7 +193,7 @@ fn ovn_list_collections(mut cx: FunctionContext) -> JsResult<JsString> {
 
 /// Insert a single document.
 ///
-/// JS signature: `insert(handle: number, collection: string, docJson: string): string`
+/// JS signature: `insert(handle: number, collection: string, docJson: string, lsid?: string, txn_number?: number): string`
 fn ovn_insert(mut cx: FunctionContext) -> JsResult<JsString> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
     let collection = cx.argument::<JsString>(1)?.value(&mut cx);
@@ -190,8 +202,25 @@ fn ovn_insert(mut cx: FunctionContext) -> JsResult<JsString> {
     let doc_json: serde_json::Value = serde_json::from_str(&doc_str)
         .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON document: {}", e)))?;
 
+    let mut options = WriteOptions::default();
+
+    if let Some(lsid_arg) = cx.argument_opt(3) {
+        if let Ok(lsid_str) = lsid_arg.downcast::<JsString, _>(&mut cx) {
+            let parsed = uuid::Uuid::parse_str(&lsid_str.value(&mut cx)).ok();
+            if let Some(u) = parsed {
+                options.lsid = Some(*u.as_bytes());
+            }
+        }
+    }
+
+    if let Some(txn_arg) = cx.argument_opt(4) {
+        if let Ok(txn_num) = txn_arg.downcast::<JsNumber, _>(&mut cx) {
+            options.txn_number = Some(txn_num.value(&mut cx) as u64);
+        }
+    }
+
     let id = with_engine(&mut cx, handle_idx, |engine| {
-        engine.insert(&collection, &doc_json)
+        engine.insert_with_options(&collection, &doc_json, options)
     })?;
 
     Ok(cx.string(id))
@@ -335,12 +364,29 @@ fn ovn_update(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let update_str = cx.argument::<JsString>(3)?.value(&mut cx);
 
     let filter_json: serde_json::Value = serde_json::from_str(&filter_str)
-        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON filter: {}", e)))?;
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid filter JSON: {}", e)))?;
     let update_json: serde_json::Value = serde_json::from_str(&update_str)
-        .or_else(|e| cx.throw_error(format!("OvnError: Invalid JSON update: {}", e)))?;
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid update JSON: {}", e)))?;
+
+    let mut options = WriteOptions::default();
+
+    if let Some(lsid_arg) = cx.argument_opt(4) {
+        if let Ok(lsid_str) = lsid_arg.downcast::<JsString, _>(&mut cx) {
+            let parsed = uuid::Uuid::parse_str(&lsid_str.value(&mut cx)).ok();
+            if let Some(u) = parsed {
+                options.lsid = Some(*u.as_bytes());
+            }
+        }
+    }
+
+    if let Some(txn_arg) = cx.argument_opt(5) {
+        if let Ok(txn_num) = txn_arg.downcast::<JsNumber, _>(&mut cx) {
+            options.txn_number = Some(txn_num.value(&mut cx) as u64);
+        }
+    }
 
     let count = with_engine(&mut cx, handle_idx, |engine| {
-        engine.update(&collection, &filter_json, &update_json)
+        engine.update_with_options(&collection, &filter_json, &update_json, options)
     })?;
 
     Ok(cx.number(count as f64))
@@ -401,6 +447,40 @@ fn ovn_delete_many(mut cx: FunctionContext) -> JsResult<JsNumber> {
     })?;
 
     Ok(cx.number(count as f64))
+}
+
+// ── Blob Management ─────────────────────────────────────────
+
+/// Store a binary blob.
+///
+/// JS signature: `putBlob(handle: number, data: Buffer): string`
+fn ovn_put_blob(mut cx: FunctionContext) -> JsResult<JsString> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let buffer = cx.argument::<JsBuffer>(1)?;
+    let data = buffer.as_slice(&cx).to_vec();
+
+    let id = with_engine(&mut cx, handle_idx, |engine| engine.put_blob(&data))?;
+    Ok(cx.string(id))
+}
+
+/// Retrieve a binary blob.
+///
+/// JS signature: `getBlob(handle: number, blobId: string): Buffer | null`
+fn ovn_get_blob(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let blob_id = cx.argument::<JsString>(1)?.value(&mut cx);
+
+    let data_opt = with_engine(&mut cx, handle_idx, |engine| engine.get_blob(&blob_id))?;
+
+    match data_opt {
+        Some(data) => {
+            let mut buffer = cx.buffer(data.len())?;
+            let buf_slice = buffer.as_mut_slice(&mut cx);
+            buf_slice.copy_from_slice(&data);
+            Ok(buffer.upcast())
+        }
+        None => Ok(cx.null().upcast()),
+    }
 }
 
 // ── Aggregation ─────────────────────────────────────────────
@@ -539,6 +619,64 @@ fn ovn_get_metrics(mut cx: FunctionContext) -> JsResult<JsString> {
     Ok(cx.string(result_str))
 }
 
+// ── Advanced Features ───────────────────────────────────────
+
+/// Autocomplete / prefix search on a field.
+///
+/// JS signature: `autocomplete(handle, collection, field, prefix, limit): string` (JSON doc[])
+fn ovn_autocomplete(mut cx: FunctionContext) -> JsResult<JsString> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let collection = cx.argument::<JsString>(1)?.value(&mut cx);
+    let field = cx.argument::<JsString>(2)?.value(&mut cx);
+    let prefix = cx.argument::<JsString>(3)?.value(&mut cx);
+    let limit = cx.argument::<JsNumber>(4)?.value(&mut cx) as usize;
+
+    let results = with_engine(&mut cx, handle_idx, |engine| {
+        engine.autocomplete(&collection, &field, &prefix, limit)
+    })?;
+
+    let json = serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string());
+    Ok(cx.string(json))
+}
+
+/// Export database as JSON.
+///
+/// JS signature: `export(handle): string` (JSON object with collections)
+fn ovn_export(mut cx: FunctionContext) -> JsResult<JsString> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+
+    let data = with_engine(&mut cx, handle_idx, |engine| engine.export())?;
+
+    let json = serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
+    Ok(cx.string(json))
+}
+
+/// Backup database to a file path.
+///
+/// JS signature: `backup(handle, destPath): void`
+fn ovn_backup(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let dest_path = cx.argument::<JsString>(1)?.value(&mut cx);
+
+    with_engine(&mut cx, handle_idx, |engine| engine.backup(&dest_path))?;
+    Ok(cx.undefined())
+}
+
+/// Create a geospatial index on a field.
+///
+/// JS signature: `createGeoIndex(handle, collection, field): void`
+fn ovn_create_geo_index(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let collection = cx.argument::<JsString>(1)?.value(&mut cx);
+    let field = cx.argument::<JsString>(2)?.value(&mut cx);
+
+    with_engine(&mut cx, handle_idx, |engine| {
+        engine.create_geo_index(&collection, &field)
+    })?;
+
+    Ok(cx.undefined())
+}
+
 // ── Helper ──────────────────────────────────────────────────
 
 /// Execute a closure with the engine pointed to by handle_idx.
@@ -572,6 +710,97 @@ where
 
         f(&engine).map_err(|e| cx.throw_error::<_, ()>(format!("{}", e)).unwrap_err())
     })
+}
+
+// ── Real-Time Change Streams ────────────────────────────────
+
+/// Watch for change stream events across the database.
+///
+/// JS signature: `watch(handle: number, callback: (err: any, eventJson: string) => void): void`
+fn ovn_watch(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let cb_root = cx.argument::<neon::types::JsFunction>(1)?.root(&mut cx);
+    let callback = std::sync::Arc::new(cb_root);
+    let channel = cx.channel();
+
+    let rx = with_engine(&mut cx, handle_idx, |engine| {
+        Ok(engine.change_stream.write().subscribe())
+    })?;
+
+    // Spawn a background thread to listen for events
+    std::thread::spawn(move || {
+        while let Ok(event) = rx.recv() {
+            // Serialize event manually or via serde_json if we derive Serialize
+            // For now, let's manually build a simplistic JSON for the event
+            let event_type = match event.op_type {
+                ovn_core::mvcc::change_stream::OperationType::Insert => "insert",
+                ovn_core::mvcc::change_stream::OperationType::Update => "update",
+                ovn_core::mvcc::change_stream::OperationType::Replace => "replace",
+                ovn_core::mvcc::change_stream::OperationType::Delete => "delete",
+                ovn_core::mvcc::change_stream::OperationType::Invalidate => "invalidate",
+            };
+            
+            let full_doc_json = match event.full_document {
+                Some(doc) => doc.to_json().to_string(),
+                None => "null".to_string(),
+            };
+
+            let json = format!(
+                r#"{{"opType":"{}","clusterTime":{},"documentKey":{:?},"fullDocument":{},"namespace":"{}","resumeToken":{:?}}}"#,
+                event_type, event.cluster_time, event.document_key, full_doc_json, event.namespace, event.resume_token
+            );
+
+            let callback_clone = std::sync::Arc::clone(&callback);
+            channel.send(move |mut cx| {
+                let callback = callback_clone.to_inner(&mut cx);
+                let this = cx.undefined();
+                let err = cx.null();
+                let data = cx.string(json);
+                let args = vec![err.upcast::<neon::types::JsValue>(), data.upcast::<neon::types::JsValue>()];
+                callback.call(&mut cx, this, args)?;
+                Ok(())
+            });
+        }
+    });
+
+    Ok(cx.undefined())
+}
+
+// ── Vector Search ───────────────────────────────────────────
+
+/// Create a Vector Index on a specific field.
+///
+/// JS signature: `createVectorIndex(handle: number, collection: string, field: string): void`
+fn ovn_create_vector_index(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let collection = cx.argument::<JsString>(1)?.value(&mut cx);
+    let field = cx.argument::<JsString>(2)?.value(&mut cx);
+
+    with_engine(&mut cx, handle_idx, |engine| {
+        engine.create_vector_index(&collection, &field)
+    })?;
+
+    Ok(cx.undefined())
+}
+
+/// Perform a Vector Search query.
+///
+/// JS signature: `vectorSearch(handle: number, collection: string, queryVectorJson: string, limit: number): string`
+fn ovn_vector_search(mut cx: FunctionContext) -> JsResult<JsString> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let collection = cx.argument::<JsString>(1)?.value(&mut cx);
+    let vector_str = cx.argument::<JsString>(2)?.value(&mut cx);
+    let limit = cx.argument::<JsNumber>(3)?.value(&mut cx) as usize;
+
+    let query_vector: Vec<f32> = serde_json::from_str(&vector_str)
+        .or_else(|e| cx.throw_error(format!("OvnError: Invalid query vector: {}", e)))?;
+
+    let results = with_engine(&mut cx, handle_idx, |engine| {
+        engine.vector_search(&collection, &query_vector, limit)
+    })?;
+
+    let json = serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string());
+    Ok(cx.string(json))
 }
 
 // ── Module Registration ─────────────────────────────────────
@@ -609,6 +838,17 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("dropIndex", ovn_drop_index)?;
     cx.export_function("listIndexes", ovn_list_indexes)?;
 
+    // Geospatial Index
+    cx.export_function("createGeoIndex", ovn_create_geo_index)?;
+
+    // Vector Index
+    cx.export_function("createVectorIndex", ovn_create_vector_index)?;
+    cx.export_function("vectorSearch", ovn_vector_search)?;
+
+    // Blob Storage
+    cx.export_function("putBlob", ovn_put_blob)?;
+    cx.export_function("getBlob", ovn_get_blob)?;
+
     // Transactions
     cx.export_function("beginTransaction", ovn_begin_transaction)?;
     cx.export_function("commitTransaction", ovn_commit_transaction)?;
@@ -616,6 +856,14 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
 
     // Metrics
     cx.export_function("getMetrics", ovn_get_metrics)?;
+
+    // Real-Time Events
+    cx.export_function("watch", ovn_watch)?;
+
+    // Advanced Features
+    cx.export_function("autocomplete", ovn_autocomplete)?;
+    cx.export_function("export", ovn_export)?;
+    cx.export_function("backup", ovn_backup)?;
 
     Ok(())
 }

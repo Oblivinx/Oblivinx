@@ -25,6 +25,10 @@ pub enum Filter {
     Exists(String, bool),
     /// Type check: { field: { $type: "string" } }
     Type(String, String),
+    /// Full-text search: { $text: { $search: "query" } }
+    FullTextSearch(String),
+    /// Expression: { $expr: { $gt: ["$field", value] } } (simplified)
+    Expr(serde_json::Value),
 }
 
 /// Comparison operator.
@@ -42,6 +46,8 @@ pub enum FilterOp {
     ElemMatch,
     Size,
     Regex,
+    GeoWithin,
+    Near,
 }
 
 impl FilterOp {
@@ -61,6 +67,8 @@ impl FilterOp {
             "$elemMatch" => Ok(Self::ElemMatch),
             "$size" => Ok(Self::Size),
             "$regex" => Ok(Self::Regex),
+            "$geoWithin" => Ok(Self::GeoWithin),
+            "$near" | "$geoNear" => Ok(Self::Near),
             _ => Err(OvnError::UnknownOperator(s.to_string())),
         }
     }
@@ -115,6 +123,23 @@ pub fn parse_filter(json: &serde_json::Value) -> OvnResult<Filter> {
                 let filters: OvnResult<Vec<Filter>> = arr.iter().map(parse_filter).collect();
                 conditions.push(Filter::Nor(filters?));
             }
+            "$text" => {
+                // { $text: { $search: "query text" } }
+                let search_query = if let Some(obj) = value.as_object() {
+                    obj.get("$search")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string()
+                } else if let Some(s) = value.as_str() {
+                    s.to_string()
+                } else {
+                    String::new()
+                };
+                conditions.push(Filter::FullTextSearch(search_query));
+            }
+            "$expr" => {
+                conditions.push(Filter::Expr(value.clone()));
+            }
             field => {
                 // Field-level filter
                 let filter = parse_field_filter(field, value)?;
@@ -158,7 +183,7 @@ fn parse_field_filter(field: &str, value: &serde_json::Value) -> OvnResult<Filte
                         let type_str = op_val.as_str().unwrap_or("string");
                         conditions.push(Filter::Type(field.to_string(), type_str.to_string()));
                     }
-                    "$all" | "$elemMatch" | "$size" | "$regex" => {
+                    "$all" | "$elemMatch" | "$size" | "$regex" | "$geoWithin" | "$near" | "$geoNear" => {
                         let op = FilterOp::parse_op(op_key)?;
                         conditions.push(Filter::Comparison(
                             field.to_string(),
@@ -208,6 +233,27 @@ pub fn evaluate_filter(filter: &Filter, doc: &ObeDocument) -> bool {
             } else {
                 false
             }
+        }
+        Filter::FullTextSearch(query) => {
+            // Simple full-text: check if any string field contains all query words
+            let query_lower = query.to_lowercase();
+            let words: Vec<&str> = query_lower.split_whitespace().collect();
+            if words.is_empty() {
+                return true;
+            }
+            // Search across all string fields in the document
+            doc.fields.values().any(|val| {
+                if let Some(s) = val.as_str() {
+                    let s_lower = s.to_lowercase();
+                    words.iter().any(|w| s_lower.contains(*w))
+                } else {
+                    false
+                }
+            })
+        }
+        Filter::Expr(expr) => {
+            // Simplified $expr evaluation: support { $gt: ["$field", value] }
+            evaluate_expr(expr, doc)
         }
     }
 }
@@ -281,6 +327,73 @@ fn evaluate_comparison(doc_value: Option<&ObeValue>, op: &FilterOp, target: &Obe
                 false
             }
         }
+        FilterOp::GeoWithin => {
+            let point = extract_geo_point(doc_value);
+            if let (Some(pt), ObeValue::Document(box_doc)) = (point, target) {
+                if let Some(ObeValue::Array(arr)) = box_doc.get("$box") {
+                    if arr.len() == 2 {
+                        if let (ObeValue::Array(min_coords), ObeValue::Array(max_coords)) = (&arr[0], &arr[1]) {
+                            if min_coords.len() == 2 && max_coords.len() == 2 {
+                                let min_lng = min_coords[0].as_f64().unwrap_or(0.0);
+                                let min_lat = min_coords[1].as_f64().unwrap_or(0.0);
+                                let max_lng = max_coords[0].as_f64().unwrap_or(0.0);
+                                let max_lat = max_coords[1].as_f64().unwrap_or(0.0);
+                                
+                                return pt.lng >= min_lng && pt.lng <= max_lng && pt.lat >= min_lat && pt.lat <= max_lat;
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        }
+        FilterOp::Near => {
+            let point = extract_geo_point(doc_value);
+            if let (Some(pt), ObeValue::Document(near_doc)) = (point, target) {
+                if let Some(geom) = near_doc.get("$geometry") {
+                    let target_pt = extract_geo_point(Some(geom));
+                    if let Some(tpt) = target_pt {
+                        let max_dist = near_doc.get("$maxDistance").and_then(|v| v.as_f64()).unwrap_or(f64::MAX);
+                        let dx = pt.lng - tpt.lng;
+                        let dy = pt.lat - tpt.lat;
+                        let dist = (dx * dx + dy * dy).sqrt();
+                        return dist <= max_dist;
+                    }
+                }
+            }
+            false
+        }
+    }
+}
+
+/// Helper to extract Geo coordinate from ObeValue [lng, lat] or { lng, lat }
+fn extract_geo_point(val: Option<&ObeValue>) -> Option<crate::index::geospatial::GeoPoint> {
+    match val {
+        Some(ObeValue::Array(arr)) if arr.len() == 2 => {
+            if let (Some(lng), Some(lat)) = (arr[0].as_f64(), arr[1].as_f64()) {
+                Some(crate::index::geospatial::GeoPoint { lng, lat })
+            } else {
+                None
+            }
+        }
+        Some(ObeValue::Document(doc)) => {
+            // Check for GeoJSON format { type: "Point", coordinates: [lng, lat] }
+            if let Some(ObeValue::Array(coords)) = doc.get("coordinates") {
+                if coords.len() == 2 {
+                    if let (Some(lng), Some(lat)) = (coords[0].as_f64(), coords[1].as_f64()) {
+                        return Some(crate::index::geospatial::GeoPoint { lng, lat });
+                    }
+                }
+            }
+            // Check for { lng, lat } format
+            if let (Some(lng_val), Some(lat_val)) = (doc.get("lng"), doc.get("lat")) {
+                if let (Some(lng), Some(lat)) = (lng_val.as_f64(), lat_val.as_f64()) {
+                    return Some(crate::index::geospatial::GeoPoint { lng, lat });
+                }
+            }
+            None
+        }
+        _ => None,
     }
 }
 
@@ -348,7 +461,61 @@ pub fn extract_filter_fields(filter: &Filter) -> Vec<String> {
             filters.iter().flat_map(extract_filter_fields).collect()
         }
         Filter::Not(inner) => extract_filter_fields(inner),
+        Filter::FullTextSearch(_) => Vec::new(),
+        Filter::Expr(_) => Vec::new(),
     }
+}
+
+/// Evaluate a simplified $expr expression against a document.
+/// Supports: { $gt: ["$field", value] }, { $eq: [...] }, { $lt: [...] }
+fn evaluate_expr(expr: &serde_json::Value, doc: &ObeDocument) -> bool {
+    let obj = match expr.as_object() {
+        Some(o) => o,
+        None => return false,
+    };
+
+    for (op, args) in obj {
+        let arr = match args.as_array() {
+            Some(a) if a.len() == 2 => a,
+            _ => return false,
+        };
+
+        // Resolve left side (field ref or literal)
+        let left = if let Some(field) = arr[0].as_str().and_then(|s| s.strip_prefix('$')) {
+            doc.get_path(field).cloned().unwrap_or(ObeValue::Null)
+        } else {
+            ObeValue::from_json(&arr[0])
+        };
+
+        // Resolve right side
+        let right = if let Some(field) = arr[1].as_str().and_then(|s| s.strip_prefix('$')) {
+            doc.get_path(field).cloned().unwrap_or(ObeValue::Null)
+        } else {
+            ObeValue::from_json(&arr[1])
+        };
+
+        let result = match op.as_str() {
+            "$gt" => compare_values(&left, &right) == Some(std::cmp::Ordering::Greater),
+            "$gte" => matches!(
+                compare_values(&left, &right),
+                Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+            ),
+            "$lt" => compare_values(&left, &right) == Some(std::cmp::Ordering::Less),
+            "$lte" => matches!(
+                compare_values(&left, &right),
+                Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
+            ),
+            "$eq" => values_equal(&left, &right),
+            "$ne" => !values_equal(&left, &right),
+            _ => false,
+        };
+
+        if !result {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[cfg(test)]

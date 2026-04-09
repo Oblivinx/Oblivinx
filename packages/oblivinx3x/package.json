@@ -2,32 +2,31 @@
   "name": "oblivinx3x",
   "version": "0.1.0",
   "description": "Oblivinx3x — High-Performance Embedded Document Database. Hybrid B+/LSM engine with MVCC, ACID transactions, and MongoDB-compatible query language. Zero configuration, single-file, in-process.",
-  "main": "./src/index.js",
-  "module": "./src/index.js",
-  "types": "./src/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./src/index.js",
-      "require": "./src/index.cjs",
-      "types": "./src/index.d.ts"
-    },
-    "./package.json": "./package.json"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
   },
   "type": "module",
   "files": [
-    "src/",
+    "dist/",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "node scripts/build.js",
-    "build:debug": "cargo build -p ovn-neon",
-    "build:release": "cargo build --release -p ovn-neon",
-    "postbuild": "node scripts/copy-native.js",
-    "test": "node --test tests/",
-    "test:unit": "node --test tests/unit/",
-    "test:integration": "node --test tests/integration/",
-    "prepublishOnly": "node scripts/prepublish.js"
+    "build": "tsc",
+    "build:clean": "node -e \"const fs=require('fs');fs.rmSync('./dist',{recursive:true,force:true})\" && tsc",
+    "build:rust": "cargo build --release -p ovn-neon && node -e \"const{cpSync,existsSync,mkdirSync}=require('fs');const src='../../target/release/ovn_neon.dll';const dst='./native/ovn_neon.node';if(!existsSync('./native')) mkdirSync('./native');if(existsSync(src)){cpSync(src,dst);console.log('Copied ovn_neon.dll -> native/ovn_neon.node (release)')}\"",
+    "build:rust:debug": "cargo build -p ovn-neon && node -e \"const{cpSync,existsSync,mkdirSync}=require('fs');const src='../../target/debug/ovn_neon.dll';const dst='./native/ovn_neon.node';if(!existsSync('./native')) mkdirSync('./native');if(existsSync(src)){cpSync(src,dst);console.log('Copied ovn_neon.dll -> native/ovn_neon.node (debug)')}\"",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build:clean",
+    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/unit/**/*.test.ts",
+    "test:integration": "node --experimental-strip-types --test tests/integration/**/*.test.ts"
   },
   "keywords": [
     "database",
@@ -42,19 +41,17 @@
     "key-value",
     "storage-engine",
     "b-plus-tree",
-    "lsm"
+    "lsm",
+    "typescript"
   ],
   "author": "Natz",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
   },
-  "optionalDependencies": {
-    "oblivinx3x-darwin-arm64": "0.1.0",
-    "oblivinx3x-darwin-x64": "0.1.0",
-    "oblivinx3x-linux-arm64-gnu": "0.1.0",
-    "oblivinx3x-linux-x64-gnu": "0.1.0",
-    "oblivinx3x-win32-x64-msvc": "0.1.0"
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.4.0"
   },
   "repository": {
     "type": "git",
