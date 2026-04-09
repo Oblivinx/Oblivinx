@@ -266,6 +266,16 @@ impl IndexManager {
         }
     }
 
+    /// Look up documents by field value in the given index (by name).
+    pub fn lookup_in_index(&self, name: &str, value: &ObeValue) -> Vec<Vec<u8>> {
+        let indexes = self.indexes.read();
+        if let Some(idx) = indexes.get(name) {
+            idx.lookup(value)
+        } else {
+            Vec::new()
+        }
+    }
+
     /// List all index names.
     pub fn list_indexes(&self) -> Vec<IndexSpec> {
         let indexes = self.indexes.read();

@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    /* Override: do not emit test files */
+    "noEmit": true,
+    /* Relax array index access strictness for test assertions */
+    "noUncheckedIndexedAccess": false,
+    /* Relax unused param strictness for test callbacks */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    /* rootDir must encompass both src and test dirs */
+    "rootDir": "."
+  },
+  "include": [
+    "src/**/*.ts",
+    "__tests__/**/*.ts",
+    "examples/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

@@ -383,6 +383,43 @@ export class Oblivinx3x {
   }
 
   /**
+   * Export seluruh database sebagai JSON object.
+   *
+   * Mengembalikan object dengan collection names sebagai keys dan
+   * arrays of documents sebagai values.
+   *
+   * @returns Object berisi semua collections dan documents
+   *
+   * @example
+   * ```typescript
+   * const data = await db.export();
+   * console.log(data.users); // Array of user documents
+   * console.log(data.orders); // Array of order documents
+   * ```
+   */
+  async export(): Promise<Record<string, Document[]>> {
+    const json = wrapNative(() => native.export(this._handle));
+    return JSON.parse(json) as Record<string, Document[]>;
+  }
+
+  /**
+   * Backup database ke file JSON.
+   *
+   * Melakukan checkpoint terlebih dahulu, kemudian export
+   * semua data ke file JSON di path yang ditentukan.
+   *
+   * @param destPath - Path ke file backup destination
+   *
+   * @example
+   * ```typescript
+   * await db.backup('backup-2024-01-01.json');
+   * ```
+   */
+  async backup(destPath: string): Promise<void> {
+    wrapNative(() => native.backup(this._handle, destPath));
+  }
+
+  /**
    * Tutup database dengan graceful.
    *
    * Melakukan:

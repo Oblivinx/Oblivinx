@@ -1,4 +1,6 @@
 import { Oblivinx3x } from '../dist/index.js';
+import type { Document } from '../dist/index.js';
+
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -7,7 +9,7 @@ const TOTAL_DOCS = 1_000_000;
 const BATCH_SIZE = 10_000;
 const DB_PATH = path.join(process.cwd(), 'benchmark_1m.ovn');
 
-interface SensorData {
+interface SensorData extends Document {
   sensor_id: string;
   temperature: number;
   humidity: number;
@@ -47,7 +49,7 @@ async function runBenchmark() {
   // Insert Benchmark
   console.log(`[2] Starting Insertion of ${TOTAL_DOCS.toLocaleString()} Documents...`);
   let start = performance.now();
-  
+
   for (let i = 0; i < TOTAL_DOCS; i += BATCH_SIZE) {
     const batch: SensorData[] = [];
     for (let j = 0; j < BATCH_SIZE; j++) {
@@ -59,13 +61,13 @@ async function runBenchmark() {
         active: true
       });
     }
-    
+
     await sensors.insertMany(batch);
     if ((i + BATCH_SIZE) % 100_000 === 0) {
       console.log(`    ...inserted ${(i + BATCH_SIZE).toLocaleString()} docs`);
     }
   }
-  
+
   let end = performance.now();
   console.log(`✅ Insertion Complete!`);
   console.log(`   Time Taken: ${((end - start) / 1000).toFixed(2)}s`);
@@ -83,7 +85,7 @@ async function runBenchmark() {
   console.log(`[4] Querying Data (Filter + Sort + Limit)...`);
   start = performance.now();
   const results = await sensors.find(
-    { sensor_id: 'sensor_42' }, 
+    { sensor_id: 'sensor_42' },
     { sort: { timestamp: -1 }, limit: 10 }
   );
   end = performance.now();

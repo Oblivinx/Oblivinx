@@ -23,14 +23,22 @@ pub enum UpdateOp {
     Rename(String, String),
     /// $push: { field: value }
     Push(String, ObeValue),
+    /// $push: { field: { $each: [values] } }
+    PushEach(String, Vec<ObeValue>),
     /// $pull: { field: value }
     Pull(String, ObeValue),
+    /// $pullAll: { field: [value1, value2, ...] }
+    PullAll(String, Vec<ObeValue>),
     /// $addToSet: { field: value }
     AddToSet(String, ObeValue),
+    /// $addToSet: { field: { $each: [values] } }
+    AddToSetEach(String, Vec<ObeValue>),
     /// $pop: { field: 1 or -1 }
     Pop(String, i32),
     /// $currentDate: { field: true }
     CurrentDate(String),
+    /// $setOnInsert: { field: value } — applied only during upsert inserts
+    SetOnInsert(String, ObeValue),
 }
 
 /// Parse update operators from a JSON update expression.
@@ -86,16 +94,35 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
                     ops.push(UpdateOp::Rename(field.clone(), new_name.to_string()));
                 }
                 "$push" => {
-                    ops.push(UpdateOp::Push(field.clone(), ObeValue::from_json(value)));
+                    // Check for $each modifier
+                    if let Some(each_arr) = value.get("$each").and_then(|v| v.as_array()) {
+                        let items: Vec<ObeValue> = each_arr.iter().map(ObeValue::from_json).collect();
+                        ops.push(UpdateOp::PushEach(field.clone(), items));
+                    } else {
+                        ops.push(UpdateOp::Push(field.clone(), ObeValue::from_json(value)));
+                    }
                 }
                 "$pull" => {
                     ops.push(UpdateOp::Pull(field.clone(), ObeValue::from_json(value)));
                 }
+                "$pullAll" => {
+                    let values = match value {
+                        serde_json::Value::Array(arr) => arr.iter().map(ObeValue::from_json).collect(),
+                        _ => vec![ObeValue::from_json(value)],
+                    };
+                    ops.push(UpdateOp::PullAll(field.clone(), values));
+                }
                 "$addToSet" => {
-                    ops.push(UpdateOp::AddToSet(
-                        field.clone(),
-                        ObeValue::from_json(value),
-                    ));
+                    // Check for $each modifier
+                    if let Some(each_arr) = value.get("$each").and_then(|v| v.as_array()) {
+                        let items: Vec<ObeValue> = each_arr.iter().map(ObeValue::from_json).collect();
+                        ops.push(UpdateOp::AddToSetEach(field.clone(), items));
+                    } else {
+                        ops.push(UpdateOp::AddToSet(
+                            field.clone(),
+                            ObeValue::from_json(value),
+                        ));
+                    }
                 }
                 "$pop" => {
                     let dir = value.as_i64().unwrap_or(1) as i32;
@@ -103,6 +130,9 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
                 }
                 "$currentDate" => {
                     ops.push(UpdateOp::CurrentDate(field.clone()));
+                }
+                "$setOnInsert" => {
+                    ops.push(UpdateOp::SetOnInsert(field.clone(), ObeValue::from_json(value)));
                 }
                 _ => {
                     return Err(OvnError::UnknownOperator(op_key.clone()));
@@ -209,9 +239,30 @@ fn apply_single_update(doc: &mut ObeDocument, op: &UpdateOp) -> OvnResult<()> {
                 });
             }
         }
+        UpdateOp::PushEach(field, values) => {
+            let current = doc
+                .fields
+                .entry(field.clone())
+                .or_insert(ObeValue::Array(Vec::new()));
+            if let ObeValue::Array(arr) = current {
+                for v in values {
+                    arr.push(v.clone());
+                }
+            } else {
+                return Err(OvnError::QuerySyntaxError {
+                    position: 0,
+                    message: "$push with $each requires array field".to_string(),
+                });
+            }
+        }
         UpdateOp::Pull(field, value) => {
             if let Some(ObeValue::Array(arr)) = doc.fields.get_mut(field) {
                 arr.retain(|v| v != value);
+            }
+        }
+        UpdateOp::PullAll(field, values) => {
+            if let Some(ObeValue::Array(arr)) = doc.fields.get_mut(field) {
+                arr.retain(|v| !values.contains(v));
             }
         }
         UpdateOp::AddToSet(field, value) => {
@@ -222,6 +273,19 @@ fn apply_single_update(doc: &mut ObeDocument, op: &UpdateOp) -> OvnResult<()> {
             if let ObeValue::Array(arr) = current {
                 if !arr.contains(value) {
                     arr.push(value.clone());
+                }
+            }
+        }
+        UpdateOp::AddToSetEach(field, values) => {
+            let current = doc
+                .fields
+                .entry(field.clone())
+                .or_insert(ObeValue::Array(Vec::new()));
+            if let ObeValue::Array(arr) = current {
+                for v in values {
+                    if !arr.contains(v) {
+                        arr.push(v.clone());
+                    }
                 }
             }
         }
@@ -242,6 +306,11 @@ fn apply_single_update(doc: &mut ObeDocument, op: &UpdateOp) -> OvnResult<()> {
                 .unwrap_or_default()
                 .as_millis() as u64;
             doc.fields.insert(field.clone(), ObeValue::Timestamp(now));
+        }
+        UpdateOp::SetOnInsert(field, value) => {
+            // Applied only during upsert inserts; behaves like $set here.
+            // The caller (engine) decides whether to include this op.
+            set_nested_field(&mut doc.fields, field, value.clone());
         }
     }
     Ok(())
@@ -368,5 +437,125 @@ mod tests {
         });
         let ops = parse_update(&json).unwrap();
         assert_eq!(ops.len(), 2);
+    }
+
+    #[test]
+    fn test_push_each() {
+        let mut doc = ObeDocument::new();
+        doc.set("tags".to_string(), ObeValue::Array(vec![]));
+
+        apply_update(
+            &mut doc,
+            &[UpdateOp::PushEach(
+                "tags".to_string(),
+                vec![
+                    ObeValue::String("a".to_string()),
+                    ObeValue::String("b".to_string()),
+                    ObeValue::String("c".to_string()),
+                ],
+            )],
+        )
+        .unwrap();
+
+        if let Some(ObeValue::Array(arr)) = doc.get("tags") {
+            assert_eq!(arr.len(), 3);
+        }
+    }
+
+    #[test]
+    fn test_pull_all() {
+        let mut doc = ObeDocument::new();
+        doc.set(
+            "tags".to_string(),
+            ObeValue::Array(vec![
+                ObeValue::String("a".to_string()),
+                ObeValue::String("b".to_string()),
+                ObeValue::String("c".to_string()),
+            ]),
+        );
+
+        apply_update(
+            &mut doc,
+            &[UpdateOp::PullAll(
+                "tags".to_string(),
+                vec![
+                    ObeValue::String("a".to_string()),
+                    ObeValue::String("c".to_string()),
+                ],
+            )],
+        )
+        .unwrap();
+
+        if let Some(ObeValue::Array(arr)) = doc.get("tags") {
+            assert_eq!(arr.len(), 1);
+            assert_eq!(arr[0], ObeValue::String("b".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_add_to_set_each() {
+        let mut doc = ObeDocument::new();
+        doc.set(
+            "tags".to_string(),
+            ObeValue::Array(vec![ObeValue::String("a".to_string())]),
+        );
+
+        apply_update(
+            &mut doc,
+            &[UpdateOp::AddToSetEach(
+                "tags".to_string(),
+                vec![
+                    ObeValue::String("a".to_string()), // duplicate
+                    ObeValue::String("b".to_string()),
+                    ObeValue::String("c".to_string()),
+                ],
+            )],
+        )
+        .unwrap();
+
+        if let Some(ObeValue::Array(arr)) = doc.get("tags") {
+            assert_eq!(arr.len(), 3); // a, b, c — no duplicate
+        }
+    }
+
+    #[test]
+    fn test_set_on_insert() {
+        let mut doc = ObeDocument::new();
+        apply_update(
+            &mut doc,
+            &[UpdateOp::SetOnInsert(
+                "createdAt".to_string(),
+                ObeValue::Timestamp(1234567890),
+            )],
+        )
+        .unwrap();
+
+        assert_eq!(
+            doc.get("createdAt"),
+            Some(&ObeValue::Timestamp(1234567890))
+        );
+    }
+
+    #[test]
+    fn test_parse_update_with_each() {
+        let json = serde_json::json!({
+            "$push": { "tags": { "$each": ["a", "b", "c"] } },
+            "$addToSet": { "colors": { "$each": ["red", "blue"] } },
+            "$pullAll": { "remove": ["x", "y"] },
+            "$setOnInsert": { "createdAt": 12345 }
+        });
+        let ops = parse_update(&json).unwrap();
+        assert_eq!(ops.len(), 4);
+
+        // Check that each operator type is present (order is not guaranteed)
+        let has_push_each = ops.iter().any(|op| matches!(op, UpdateOp::PushEach(_, v) if v.len() == 3));
+        let has_add_to_set_each = ops.iter().any(|op| matches!(op, UpdateOp::AddToSetEach(_, v) if v.len() == 2));
+        let has_pull_all = ops.iter().any(|op| matches!(op, UpdateOp::PullAll(_, v) if v.len() == 2));
+        let has_set_on_insert = ops.iter().any(|op| matches!(op, UpdateOp::SetOnInsert(_, _)));
+
+        assert!(has_push_each, "Missing $push with $each");
+        assert!(has_add_to_set_each, "Missing $addToSet with $each");
+        assert!(has_pull_all, "Missing $pullAll");
+        assert!(has_set_on_insert, "Missing $setOnInsert");
     }
 }

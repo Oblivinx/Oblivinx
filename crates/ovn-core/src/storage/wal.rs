@@ -224,8 +224,8 @@ pub struct WalManager {
     buffer: Mutex<Vec<u8>>,
     /// Last checkpointed transaction ID
     last_checkpoint_txid: Mutex<u64>,
-    /// WAL file offset in the .ovn file
-    wal_offset: u64,
+    /// WAL file offset in the .ovn file (tracks where next write goes)
+    wal_offset: Mutex<u64>,
     /// Whether group commit is enabled
     group_commit: bool,
 }
@@ -237,7 +237,7 @@ impl WalManager {
             records: Mutex::new(Vec::new()),
             buffer: Mutex::new(Vec::new()),
             last_checkpoint_txid: Mutex::new(0),
-            wal_offset,
+            wal_offset: Mutex::new(wal_offset),
             group_commit: true,
         }
     }
@@ -249,9 +249,15 @@ impl WalManager {
         {
             let mut buffer = self.buffer.lock();
             buffer.extend_from_slice(&encoded);
+
+            // Auto-flush when buffer exceeds 1MB (prevent memory buildup during bulk inserts)
+            if buffer.len() >= 1024 * 1024 {
+                drop(buffer);
+                self.flush(backend)?;
+            }
         }
 
-        // Persist to backend
+        // Persist to backend on commit records or when group commit is disabled
         if !self.group_commit || record.record_type == WalRecordType::Commit {
             self.flush(backend)?;
         }
@@ -268,8 +274,10 @@ impl WalManager {
             return Ok(());
         }
 
-        // Write WAL data
-        backend.write_at(self.wal_offset + self.current_size_locked(&buffer), &buffer)?;
+        // Get current offset and write WAL data
+        let mut offset_guard = self.wal_offset.lock();
+        backend.write_at(*offset_guard, &buffer)?;
+        *offset_guard += buffer.len() as u64;
         backend.sync()?;
 
         buffer.clear();
@@ -329,13 +337,6 @@ impl WalManager {
     pub fn clear(&self) {
         self.records.lock().clear();
         self.buffer.lock().clear();
-    }
-
-    fn current_size_locked(&self, _buffer: &Vec<u8>) -> u64 {
-        // In a real implementation this would track the written offset.
-        // For now, we compute from recorded records.
-        let records = self.records.lock();
-        records.iter().map(|r| r.encode().len() as u64).sum()
     }
 }
 

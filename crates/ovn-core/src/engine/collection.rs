@@ -2,6 +2,7 @@
 
 use crate::index::secondary::IndexManager;
 use crate::index::vector::HnswVectorIndex;
+use crate::index::geospatial::GeoSpatialIndex;
 
 #[derive(Debug, Clone, Default)]
 pub struct CollectionOptions {
@@ -31,12 +32,13 @@ pub struct Collection {
     pub index_manager: IndexManager,
     /// Optional Vector Index for similarity search
     pub vector_index: Option<HnswVectorIndex>,
+    /// Optional Geospatial Index for location queries
+    pub geo_index: Option<GeoSpatialIndex>,
     /// Document count
     pub doc_count: u64,
 }
 
 impl Collection {
-    /// Create a new empty collection.
     /// Create a new empty collection with options.
     pub fn new_with_options(name: String, options: CollectionOptions) -> Self {
         Self {
@@ -44,6 +46,7 @@ impl Collection {
             options,
             index_manager: IndexManager::new(),
             vector_index: None,
+            geo_index: None,
             doc_count: 0,
         }
     }

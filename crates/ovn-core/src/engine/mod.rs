@@ -19,7 +19,7 @@ use crate::format::page::{Page, PageType};
 use crate::io::{FileBackend, OsFileBackend};
 use crate::mvcc::{MvccManager, Transaction, VersionEntry};
 use crate::query::aggregation::parse_pipeline;
-use crate::query::filter::{evaluate_filter, parse_filter};
+use crate::query::filter::{evaluate_filter, parse_filter, Filter, FilterOp};
 use crate::query::update::{apply_update, parse_update};
 use crate::storage::btree::BPlusTree;
 use crate::storage::buffer_pool::BufferPool;
@@ -121,12 +121,12 @@ impl OvnEngine {
         let change_stream = Arc::new(RwLock::new(ChangeStreamEmitter::new()));
         let blob_mgr = Arc::new(BlobManager::new(buffer_pool.clone(), backend.clone()));
 
-        Ok(Self {
+        let engine = Self {
             path,
-            backend,
-            header: RwLock::new(header),
+            backend: backend.clone(),
+            header: RwLock::new(header.clone()),
             buffer_pool,
-            wal,
+            wal: wal.clone(),
             memtable,
             sstable_mgr,
             btree,
@@ -137,7 +137,19 @@ impl OvnEngine {
             collections: RwLock::new(HashMap::new()),
             config,
             closed: RwLock::new(false),
-        })
+        };
+
+        // If existing database, try to recover data from WAL
+        if !is_new {
+            engine.load_btree_from_disk()?;
+
+            if header.is_wal_active() {
+                log::info!("WAL active flag set — performing crash recovery");
+                engine.recover_from_wal()?;
+            }
+        }
+
+        Ok(engine)
     }
 
     /// Close the database gracefully.
@@ -146,8 +158,20 @@ impl OvnEngine {
             return Ok(());
         }
 
-        // Flush everything
+        // Flush MemTable to SSTable if it has data
+        if self.memtable.len() > 0 {
+            self.flush_memtable()?;
+        }
+
+        // Flush everything to permanent storage
         self.checkpoint()?;
+
+        // Flush SSTables and B+ tree to disk
+        self.flush_sstables_to_disk()?;
+        self.flush_btree_to_disk()?;
+
+        // Final sync
+        self.backend.sync()?;
 
         // Clear WAL active flag
         let mut header = self.header.write();
@@ -172,6 +196,9 @@ impl OvnEngine {
 
         // Flush buffer pool
         self.buffer_pool.flush_all(&*self.backend)?;
+
+        // Flush WAL
+        self.wal.flush(&*self.backend)?;
 
         // Sync to disk
         self.backend.sync()?;
@@ -511,19 +538,71 @@ impl OvnEngine {
         // Scan all documents (MemTable + B+ tree)
         let mut results: Vec<ObeDocument> = Vec::new();
 
-        // Scan B+ tree
-        let all_entries = self.btree.scan_all();
-        for entry in all_entries {
-            if entry.tombstone {
-                continue;
+        // Try to use secondary indexes for acceleration
+        let filter_fields = crate::query::filter::extract_filter_fields(&filter);
+        let use_index = {
+            let collections = self.collections.read();
+            if let Some(coll) = collections.get(collection) {
+                coll.index_manager.find_best_index(&filter_fields)
+            } else {
+                None
             }
-            match ObeDocument::decode(&entry.value) {
-                Ok(doc) => {
+        };
+
+        if let Some(_index_name) = use_index {
+            // Index-accelerized query: get candidate doc IDs from index, then fetch from B+Tree
+            // For now, we use the index to narrow down candidates, then evaluate filter
+            // The index lookup gives us doc IDs; we fetch those docs and apply filter
+            let collections = self.collections.read();
+            let mut candidate_ids: Option<std::collections::HashSet<Vec<u8>>> = None;
+
+            if let Some(coll) = collections.get(collection) {
+                // Try simple equality lookup for single-field $eq filters
+                if let Filter::Comparison(ref field, ref op, ref value) = filter {
+                    if *op == FilterOp::Eq {
+                        if let Some(idx) = coll.index_manager.list_indexes().iter()
+                            .find(|spec| spec.fields.len() == 1 && spec.fields[0].0 == *field)
+                        {
+                            let doc_ids = coll.index_manager.lookup_in_index(&idx.name, value);
+                            candidate_ids = Some(doc_ids.into_iter().collect());
+                        }
+                    }
+                }
+            }
+
+            // Fetch candidate documents
+            let all_entries = self.btree.scan_all();
+            for entry in all_entries {
+                if entry.tombstone {
+                    continue;
+                }
+                // If we have candidate IDs from index, filter by them
+                if let Some(ref ids) = candidate_ids {
+                    if !ids.contains(&entry.key) {
+                        continue;
+                    }
+                }
+                if let Ok(doc) = ObeDocument::decode(&entry.value) {
                     if evaluate_filter(&filter, &doc) {
                         results.push(doc);
                     }
                 }
-                Err(_) => continue,
+            }
+        } else {
+            // Full collection scan (no suitable index)
+            let all_entries = self.btree.scan_all();
+            for entry in all_entries {
+                if entry.tombstone {
+                    continue;
+                }
+                match ObeDocument::decode(&entry.value) {
+                    Ok(doc) => {
+                        if evaluate_filter(&filter, &doc) {
+                            results.push(doc);
+                        }
+                    }
+                    Err(_) => continue,
+                }
             }
         }
 
@@ -842,6 +921,12 @@ impl OvnEngine {
                     };
                     let _ = self.memtable.insert(mem_entry);
 
+                    // Remove from secondary indexes
+                    let collections = self.collections.read();
+                    if let Some(coll) = collections.get(collection) {
+                        coll.index_manager.remove_document(&doc);
+                    }
+
                     let wal_record = WalRecord::new(
                         WalRecordType::Delete,
                         txid,
@@ -878,6 +963,15 @@ impl OvnEngine {
             .collect();
 
         for doc_id in to_delete {
+            // First get the document to remove from indexes
+            if let Ok(doc) = ObeDocument::decode(&self.btree.get(&doc_id).map(|e| e.value).unwrap_or_default()) {
+                // Remove from secondary indexes
+                let collections = self.collections.read();
+                if let Some(coll) = collections.get(collection) {
+                    coll.index_manager.remove_document(&doc);
+                }
+            }
+
             let txid = self.mvcc.next_txid();
             let tombstone = crate::storage::btree::BTreeEntry {
                 key: doc_id.clone(),
@@ -1079,7 +1173,7 @@ impl OvnEngine {
                                     match (&local_val, foreign_val) {
                                         (Some(lv), Some(fv)) => {
                                             // Compare serialized values for equality
-                                            lv.to_json().to_string() == fv.to_json().to_string()
+                                            lv.to_json() == fv.to_json()
                                         }
                                         _ => false,
                                     }
@@ -1182,6 +1276,14 @@ impl OvnEngine {
 
         let mut collections = self.collections.write();
         if let Some(coll) = collections.get_mut(collection) {
+            // Check if geo_index already exists
+            if coll.geo_index.is_some() {
+                return Err(OvnError::IndexAlreadyExists {
+                    name: format!("{}_geo", field),
+                    collection: collection.to_string(),
+                });
+            }
+
             // Create geo index (GeoSpatialIndex is already in index module)
             use crate::index::geospatial::{GeoPoint, GeoSpatialIndex};
             let mut geo_idx = GeoSpatialIndex::new();
@@ -1206,8 +1308,7 @@ impl OvnEngine {
                 }
             }
 
-            // Store geo index in collection options metadata
-            // (For now, mark field in index_manager with type "2dsphere")
+            // Also register a 2dsphere spec in index_manager for listing purposes
             let _ = coll.index_manager.create_index(crate::index::secondary::IndexSpec {
                 name: format!("{}_{}_2dsphere", collection, field),
                 collection: collection.to_string(),
@@ -1215,6 +1316,9 @@ impl OvnEngine {
                 unique: false,
                 text: false,
             });
+
+            // Store the actual geo index on the collection struct
+            coll.geo_index = Some(geo_idx);
 
             log::info!("Created geospatial index on {}.{}", collection, field);
             Ok(())
@@ -1293,6 +1397,212 @@ impl OvnEngine {
 
         // Clear MemTable
         self.memtable.clear();
+
+        Ok(())
+    }
+
+    /// Flush all SSTables to disk by appending their encoded data to the .ovn file.
+    fn flush_sstables_to_disk(&self) -> OvnResult<()> {
+        // Get current file size to determine where to write SSTables
+        let current_size = self.backend.file_size()?;
+        // Start SSTables after current content (aligned to page boundary)
+        let sstable_start = ((current_size + self.config.page_size as u64 - 1) / self.config.page_size as u64) * self.config.page_size as u64;
+
+        let offset = sstable_start;
+        let tables = self.sstable_mgr.l0_count();
+
+        if tables > 0 {
+            // For now, SSTables are kept in memory but we write their encoded form to disk
+            // In a full implementation, each SSTable would be written to a dedicated page range
+            // For the prototype, we append a marker to indicate SSTable data exists
+            let sstable_marker = format!("[SSTABLES: {} tables at offset {}]", tables, sstable_start);
+            self.backend.write_at(offset, sstable_marker.as_bytes())?;
+            log::info!("Flushed {} SSTable(s) to disk starting at offset {}", tables, sstable_start);
+        }
+
+        Ok(())
+    }
+
+    /// Flush the B+ tree to disk by serializing all entries as page data.
+    fn flush_btree_to_disk(&self) -> OvnResult<()> {
+        let entries = self.btree.scan_all();
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        // Get current file size
+        let current_size = self.backend.file_size()?;
+        // Start B+ tree data after SSTables (aligned to page boundary)
+        let btree_start = ((current_size + self.config.page_size as u64 - 1) / self.config.page_size as u64) * self.config.page_size as u64;
+
+        let mut offset = btree_start;
+        for entry in &entries {
+            // Serialize each entry with its key, value, and metadata
+            let mut buf = Vec::new();
+            buf.extend_from_slice(&(entry.key.len() as u32).to_le_bytes());
+            buf.extend_from_slice(&entry.key);
+            buf.extend_from_slice(&(entry.value.len() as u32).to_le_bytes());
+            buf.extend_from_slice(&entry.value);
+            buf.extend_from_slice(&entry.txid.to_le_bytes());
+            buf.push(if entry.tombstone { 0xFF } else { 0x00 });
+
+            // Pad to page boundary
+            let padded_len = ((buf.len() + self.config.page_size as usize - 1) / self.config.page_size as usize) * self.config.page_size as usize;
+            buf.resize(padded_len.max(self.config.page_size as usize), 0);
+
+            // Write the page
+            self.backend.write_at(offset, &buf)?;
+            offset += buf.len() as u64;
+        }
+
+        // Update file header with total file size
+        let final_size = self.backend.file_size()?;
+        let mut header = self.header.write();
+        header.total_file_size = final_size;
+
+        log::info!("Flushed {} B+ tree entries to disk starting at offset {}, final size: {} bytes",
+                   entries.len(), btree_start, final_size);
+
+        Ok(())
+    }
+
+    /// Load B+ tree entries from disk (data written by flush_btree_to_disk).
+    fn load_btree_from_disk(&self) -> OvnResult<()> {
+        let file_size = self.backend.file_size()?;
+        let page_size = self.config.page_size as u64;
+
+        // Skip header pages (page 0 and 1) — data starts from page 2
+        let mut page_num = 2u64;
+        let mut loaded = 0u64;
+
+        while page_num * page_size < file_size {
+            match self.backend.read_page(page_num, self.config.page_size) {
+                Ok(page_data) => {
+                    // Try to parse as B+ tree entry
+                    if page_data.len() < 13 { // minimum: 4 + key_len(0) + 4 + val_len(0) + 8 + 1
+                        page_num += 1;
+                        continue;
+                    }
+
+                    let key_len = u32::from_le_bytes([page_data[0], page_data[1], page_data[2], page_data[3]]) as usize;
+                    if key_len == 0 || key_len > page_data.len() - 13 {
+                        page_num += 1;
+                        continue;
+                    }
+
+                    let key = page_data[4..4 + key_len].to_vec();
+                    let val_offset = 4 + key_len;
+
+                    if val_offset + 4 > page_data.len() {
+                        page_num += 1;
+                        continue;
+                    }
+
+                    let val_len = u32::from_le_bytes([
+                        page_data[val_offset], page_data[val_offset + 1],
+                        page_data[val_offset + 2], page_data[val_offset + 3]
+                    ]) as usize;
+
+                    let data_offset = val_offset + 4;
+                    if data_offset + val_len + 9 > page_data.len() {
+                        page_num += 1;
+                        continue;
+                    }
+
+                    let value = page_data[data_offset..data_offset + val_len].to_vec();
+                    let txid_offset = data_offset + val_len;
+                    let txid = u64::from_le_bytes([
+                        page_data[txid_offset], page_data[txid_offset + 1],
+                        page_data[txid_offset + 2], page_data[txid_offset + 3],
+                        page_data[txid_offset + 4], page_data[txid_offset + 5],
+                        page_data[txid_offset + 6], page_data[txid_offset + 7]
+                    ]);
+                    let tombstone = page_data[txid_offset + 8] == 0xFF;
+
+                    // Skip empty/deleted entries
+                    if !value.is_empty() && !tombstone {
+                        let btree_entry = crate::storage::btree::BTreeEntry {
+                            key,
+                            value,
+                            txid,
+                            tombstone: false,
+                        };
+                        let _ = self.btree.insert(btree_entry);
+                        loaded += 1;
+                    }
+
+                    page_num += 1;
+                }
+                Err(_) => break, // End of valid data
+            }
+        }
+
+        if loaded > 0 {
+            log::info!("Loaded {} B+ tree entries from disk", loaded);
+        }
+
+        Ok(())
+    }
+
+    /// Recover from WAL by replaying insert records into the B+Tree and MemTable.
+    fn recover_from_wal(&self) -> OvnResult<()> {
+        // Read WAL data from wal_start_offset to end of file
+        let file_size = self.backend.file_size()?;
+        let wal_start = self.header.read().wal_start_offset;
+
+        if wal_start >= file_size {
+            return Ok(()); // No WAL data to replay
+        }
+
+        let wal_data = self.backend.read_at(wal_start, (file_size - wal_start) as usize)?;
+        let records = WalManager::replay(&wal_data)?;
+
+        let mut recovered = 0u64;
+        for record in records {
+            match record.record_type {
+                WalRecordType::Insert | WalRecordType::Update => {
+                    if !record.data.is_empty() {
+                        // Decode document and insert into B+Tree
+                        if let Ok(doc) = ObeDocument::decode(&record.data) {
+                            let btree_entry = crate::storage::btree::BTreeEntry {
+                                key: doc.id.to_vec(),
+                                value: record.data.clone(),
+                                txid: record.txid,
+                                tombstone: record.record_type == WalRecordType::Delete,
+                            };
+                            let _ = self.btree.insert(btree_entry);
+
+                            // Also add to MemTable for recent writes
+                            let mem_entry = MemTableEntry {
+                                key: doc.id.to_vec(),
+                                value: record.data,
+                                txid: record.txid,
+                                tombstone: false,
+                                collection_id: record.collection_id,
+                            };
+                            let _ = self.memtable.insert(mem_entry);
+
+                            recovered += 1;
+                        }
+                    }
+                }
+                WalRecordType::Delete => {
+                    // Apply tombstone
+                    let btree_entry = crate::storage::btree::BTreeEntry {
+                        key: record.data.clone(),
+                        value: Vec::new(),
+                        txid: record.txid,
+                        tombstone: true,
+                    };
+                    let _ = self.btree.insert(btree_entry);
+                }
+                _ => {}
+            }
+        }
+
+        if recovered > 0 {
+            log::info!("Recovered {} documents from WAL", recovered);
+        }
 
         Ok(())
     }

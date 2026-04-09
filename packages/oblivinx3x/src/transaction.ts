@@ -269,15 +269,16 @@ export class Transaction {
   #assertActive(): void {
     if (this.#committed) {
       throw new OvnError(
+        'ERR_INVALID_OPERATION',
         'Transaction sudah di-commit dan tidak bisa digunakan lagi',
-        'TXN_COMMITTED',
       );
     }
     if (this.#aborted) {
       throw new OvnError(
+        'ERR_INVALID_OPERATION',
         'Transaction sudah di-rollback dan tidak bisa digunakan lagi',
-        'TXN_ABORTED',
       );
     }
   }
 }
+

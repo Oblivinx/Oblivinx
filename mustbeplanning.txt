@@ -1,0 +1,402 @@
+# 🧠 FULL PLAN — Oblivinx3x TypeScript SDK (Production Ready)
+
+---
+
+# 🧱 PHASE 0 — Native Contract Layer (WAJIB, FONDASI)
+
+> Tanpa ini, semua phase lain rawan mismatch
+
+### 🎯 Tujuan
+
+Mendefinisikan kontrak jelas antara Rust `.node` ↔ TypeScript
+
+### 📦 Scope
+
+* Definisikan semua method native:
+
+  * `open(path)`
+  * `close()`
+  * `insert(collection, buffer)`
+  * `find(collection, queryBuffer)`
+  * `update`
+  * `delete`
+  * `aggregate`
+  * `transaction_*`
+* Tentukan format data:
+
+  * ✅ Prefer: BSON / binary
+  * ❌ Hindari JSON di hot path
+* Definisikan async behavior:
+
+  * Promise-based
+  * Streaming (cursor)
+* Definisikan error system:
+
+  * code (string/enum)
+  * message
+  * metadata
+
+### 📌 Output
+
+* `native.d.ts` (type contract)
+* `native.ts` (loader wrapper)
+
+---
+
+# ⚙️ PHASE 1 — Core Wrapper Layer
+
+### 🎯 Tujuan
+
+Membungkus `.node` agar aman & konsisten
+
+### 📦 Komponen
+
+* `NativeBridge`
+* Serializer (BSON / binary)
+* Error mapper
+* Resource manager
+
+### 🔥 Features
+
+* Auto serialization/deserialization
+* Error mapping ke TS class
+* Lifecycle:
+
+  * open
+  * close
+  * dispose
+* Internal safety check
+
+---
+
+# 🧩 PHASE 2 — Core SDK Classes
+
+## 1. OblivinxDB
+
+```ts
+db.collection(name)
+db.transaction()
+db.pragma(key, value)
+db.attach(path, alias)
+db.detach(alias)
+db.close()
+db.stats()
+```
+
+---
+
+## 2. Collection<T>
+
+```ts
+insertOne()
+insertMany()
+find()
+findOne()
+updateOne()
+deleteOne()
+aggregate()
+createIndex()
+watch()
+join()
+```
+
+---
+
+## 3. QueryBuilder<T>
+
+Fluent API:
+
+```ts
+.find()
+.project()
+.sort()
+.limit()
+.skip()
+.hint()
+.explain()
+.toArray()
+```
+
+---
+
+## 4. Cursor / Stream (WAJIB)
+
+```ts
+for await (const doc of cursor) {}
+```
+
+👉 Tidak boleh digabung dengan QueryBuilder
+
+---
+
+## 5. Transaction
+
+```ts
+begin()
+commit()
+rollback()
+savepoint(name)
+rollbackTo(name)
+releaseSavepoint(name)
+```
+
+---
+
+## 6. RelationManager
+
+```ts
+defineRelation()
+removeRelation()
+validateRelation()
+```
+
+---
+
+## 7. Error System
+
+Custom classes:
+
+* `OblivinxError`
+* `DuplicateKeyError`
+* `TransactionError`
+* `ValidationError`
+
+---
+
+# 🧬 PHASE 3 — Type System (DX Superpower)
+
+### 🎯 Tujuan
+
+Full Type Safety
+
+### 📦 Features
+
+* Generic collections:
+
+```ts
+collection<User>()
+```
+
+* Typed query operators:
+
+```ts
+{ age: { $gt: number } }
+```
+
+* Projection typing
+* Optional strict mode
+
+---
+
+# 🔗 PHASE 4 — Relational & Hybrid Features
+
+### 🎯 Tujuan
+
+Gabungkan NoSQL + SQL
+
+### 📦 Features
+
+* `$lookup` (join ala Mongo)
+* `join()` API (SDK level)
+* Relation metadata
+* FK validation:
+
+  * off
+  * soft
+  * strict
+* Cascade delete/update
+
+---
+
+# ⚡ PHASE 5 — Performance Engineering
+
+### 🎯 Tujuan
+
+Native performance tanpa bottleneck TS
+
+### 📦 Rules
+
+* Zero-copy buffer jika memungkinkan
+* Batch operation ke native
+* Hindari JSON stringify
+* Async non-blocking
+* Stream untuk dataset besar
+
+### 📊 Tambahan
+
+* Cursor streaming
+* Backpressure handling
+
+---
+
+# 🔄 PHASE 6 — Transaction & Concurrency
+
+### 🎯 Tujuan
+
+Stabilitas ala SQLite
+
+### 📦 Features
+
+* MVCC support
+* Savepoint
+* Retry mechanism
+* Conflict detection
+
+```ts
+db.withRetry(async () => {})
+```
+
+---
+
+# 🧪 PHASE 7 — Testing (PRODUCTION LEVEL)
+
+## 🧩 Unit Test
+
+* CRUD
+* Query builder
+* typing correctness
+* serialization
+
+## 🔗 Integration Test
+
+* multi-collection ops
+* transaction
+* join
+* concurrency
+
+## 💣 Edge Cases
+
+* empty dataset
+* invalid schema
+* duplicate key
+* race condition
+
+## 🔥 Hardcore Tests
+
+* crash mid-write
+* WAL recovery
+* corruption simulation
+* soak test (1–6 jam)
+
+---
+
+# 📊 PHASE 8 — Benchmark (REAL, BUKAN FAKE)
+
+### 🎯 Dataset
+
+* 100K
+* 1M
+* 5M
+
+### 📦 Test
+
+1. Bulk Insert
+2. Read (indexed vs non-indexed)
+3. Update/Delete
+4. Aggregation
+5. Join ($lookup)
+6. Transaction throughput
+
+### ⚡ Tambahan penting
+
+* concurrency benchmark
+* cold vs warm cache
+* disk vs memory bound
+* streaming vs full fetch
+
+### 📈 Metrics
+
+* latency (p50, p95, p99)
+* throughput
+* memory usage
+
+---
+
+# 🧠 PHASE 9 — Observability & Debugging
+
+### 📦 Features
+
+* Query logging
+* Slow query detection
+* Explain plan
+
+```ts
+db.explain()
+```
+
+* Debug mode
+
+---
+
+# 📚 PHASE 10 — Documentation
+
+### 📦 Output
+
+* JSDoc semua API
+* Markdown guide
+* Example:
+
+  * CRUD
+  * transaction
+  * join
+  * streaming
+
+---
+
+# 🧩 PHASE 11 — Packaging & Distribution
+
+### 📦 Requirements
+
+* Prebuilt `.node`
+* Multi-platform:
+
+  * Windows
+  * Linux
+  * macOS
+* NPM ready
+
+---
+
+# 🧠 PHASE 12 — Developer Experience (DX)
+
+### 🎯 Tujuan
+
+Bikin developer betah
+
+### 📦 Features
+
+* Auto-complete full
+* Clean API
+* Minimal config
+* Familiar syntax (Mongo-like)
+
+---
+
+# 🎯 FINAL ARCHITECTURE
+
+```text
+Rust Engine
+   ↓
+.node (napi-rs)
+   ↓
+Native Contract Layer
+   ↓
+Core Wrapper (TS)
+   ↓
+High-level SDK
+   ↓
+User Application
+```
+
+---
+
+# 🔥 FINAL VERDICT
+
+Kalau kamu jalankan plan ini:
+
+👉 kamu tidak cuma bikin database
+👉 kamu bikin **ecosystem**
+
+Dan posisinya akan jadi:
+
+> “SQLite simplicity + MongoDB flexibility + Rust performance + TypeScript DX”

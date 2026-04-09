@@ -354,6 +354,47 @@ export declare class Collection<TSchema extends Document = Document> {
      */
     vectorSearch(queryVector: number[], limit?: number): Promise<TSchema[]>;
     /**
+     * Create a geospatial (2dsphere) index for location-based queries.
+     *
+     * Indexes GeoJSON Point, [lng, lat] arrays, or { type: 'Point', coordinates: [lng, lat] } objects.
+     *
+     * @param field - Field name where geographic data is stored
+     *
+     * @example
+     * ```typescript
+     * await restaurants.createGeoIndex('location');
+     *
+     * // Then query with $geoWithin or $near
+     * const nearby = await restaurants.find({
+     *   location: {
+     *     $geoWithin: {
+     *       $centerSphere: [[-73.935242, 40.730610], 5 / 3963.2] // 5 mile radius
+     *     }
+     *   }
+     * });
+     * ```
+     */
+    createGeoIndex(field: string): Promise<void>;
+    /**
+     * Perform autocomplete/prefix search on a field.
+     *
+     * Finds documents where the indexed field starts with the given prefix.
+     * Useful for type-ahead search, autocomplete, and suggestion features.
+     *
+     * @param field - Field name to search on (typically name, title, etc.)
+     * @param prefix - Prefix string to match
+     * @param limit - Maximum number of results to return (default: 10)
+     * @returns Array of matching documents
+     *
+     * @example
+     * ```typescript
+     * // Type-ahead for user names
+     * const suggestions = await users.autocomplete('name', 'ali', 5);
+     * // Returns users with names like 'Alice', 'Ali', 'Alina', etc.
+     * ```
+     */
+    autocomplete(field: string, prefix: string, limit?: number): Promise<TSchema[]>;
+    /**
      * Watch for real-time change stream events filtered for this collection.
      *
      * @returns Node.js EventEmitter emitting 'change' and 'error' events

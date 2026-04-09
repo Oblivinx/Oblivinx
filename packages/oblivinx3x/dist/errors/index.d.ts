@@ -1,156 +1,110 @@
 /**
  * @module errors
  *
- * Oblivinx3x Error Hierarchy.
+ * Structured error hierarchy for Oblivinx3x.
  *
- * Menyediakan class-class error terstruktur yang memetakan
- * error codes dari Rust engine ke typed JavaScript exceptions.
- *
- * Hierarki:
- * ```
- * Error
- * └── OvnError (base — semua error Oblivinx3x)
- *     ├── CollectionNotFoundError
- *     ├── CollectionExistsError
- *     ├── WriteConflictError
- *     └── ValidationError
- * ```
- *
- * Setiap error memiliki:
- * - `code` — machine-readable error code (string)
- * - `collection` — nama collection terkait (jika relevan)
- * - Stack trace yang benar (menunjuk ke caller, bukan ke constructor error)
+ * All native errors are mapped to typed TypeScript error classes
+ * with error codes, messages, and optional metadata.
  *
  * @packageDocumentation
  */
-/**
- * Base class untuk semua error Oblivinx3x.
- *
- * Menyediakan informasi terstruktur berupa error code
- * dan optional collection name untuk debugging yang lebih mudah.
- *
- * @example
- * ```typescript
- * try {
- *   await db.collection('users').insertOne({ name: 'Alice' });
- * } catch (err) {
- *   if (err instanceof OvnError) {
- *     console.error(`[${err.code}] ${err.message}`);
- *     // Output: [COLLECTION_NOT_FOUND] Collection 'users' not found
- *   }
- * }
- * ```
- */
-export declare class OvnError extends Error {
-    /** Machine-readable error code untuk programmatic error handling */
-    readonly code: string;
-    /** Nama collection yang terkait dengan error (jika ada) */
-    readonly collection?: string;
-    /**
-     * Buat instance OvnError baru.
-     *
-     * @param message - Pesan error yang human-readable
-     * @param code - Error code (default: 'OVN_ERROR')
-     * @param collection - Nama collection (opsional)
-     */
-    constructor(message: string, code?: string, collection?: string);
+/** Base error code for all Oblivinx3x errors */
+export type OblivinxErrorCode = 'ERR_DATABASE_CLOSED' | 'ERR_COLLECTION_NOT_FOUND' | 'ERR_COLLECTION_EXISTS' | 'ERR_DUPLICATE_KEY' | 'ERR_TRANSACTION_ABORTED' | 'ERR_TRANSACTION_CONFLICT' | 'ERR_INVALID_SCHEMA' | 'ERR_QUERY_TIMEOUT' | 'ERR_INDEX_NOT_FOUND' | 'ERR_INDEX_EXISTS' | 'ERR_NATIVE_LOAD_FAILED' | 'ERR_NATIVE_EXECUTION' | 'ERR_SERIALIZATION' | 'ERR_INVALID_OPERATION' | 'ERR_NOT_IMPLEMENTED' | 'ERR_CORRUPT_DATA' | 'ERR_SAVEPOINT_NOT_FOUND';
+/** Base error class for all Oblivinx3x errors */
+export declare class OblivinxError extends Error {
+    /** Error code for programmatic handling */
+    readonly code: OblivinxErrorCode;
+    /** Additional metadata about the error */
+    readonly metadata?: Record<string, unknown>;
+    constructor(code: OblivinxErrorCode, message: string, metadata?: Record<string, unknown>);
 }
-/**
- * Dilempar ketika collection tidak ditemukan (dan auto-create tidak aktif).
- *
- * @example
- * ```typescript
- * try {
- *   await db.dropCollection('nonexistent');
- * } catch (err) {
- *   if (err instanceof CollectionNotFoundError) {
- *     console.log(`Collection "${err.collection}" tidak ada`);
- *   }
- * }
- * ```
- */
-export declare class CollectionNotFoundError extends OvnError {
+/** Thrown when attempting operations on a closed database */
+export declare class DatabaseClosedError extends OblivinxError {
+    constructor(path: string);
+}
+/** Thrown when a collection does not exist */
+export declare class CollectionNotFoundError extends OblivinxError {
     constructor(name: string);
 }
-/**
- * Dilempar ketika mencoba membuat collection yang sudah ada.
- *
- * @example
- * ```typescript
- * try {
- *   await db.createCollection('users'); // sudah ada
- * } catch (err) {
- *   if (err instanceof CollectionExistsError) {
- *     console.log('Collection sudah ada, skip...');
- *   }
- * }
- * ```
- */
-export declare class CollectionExistsError extends OvnError {
+/** Thrown when attempting to create a collection that already exists */
+export declare class CollectionExistsError extends OblivinxError {
     constructor(name: string);
 }
-/**
- * Dilempar ketika terjadi write-write conflict dalam MVCC transaction.
- *
- * Biasanya terjadi ketika dua transaction mencoba mengubah dokumen yang sama
- * secara bersamaan. Solusi: retry transaction.
- *
- * @example
- * ```typescript
- * try {
- *   await txn.commit();
- * } catch (err) {
- *   if (err instanceof WriteConflictError) {
- *     // Retry logic
- *     console.log('Write conflict, retrying...');
- *   }
- * }
- * ```
- */
-export declare class WriteConflictError extends OvnError {
+/** Thrown when a unique constraint is violated */
+export declare class DuplicateKeyError extends OblivinxError {
+    readonly keyValue: Record<string, unknown>;
+    constructor(keyValue: Record<string, unknown>);
+}
+/** Thrown when a transaction is aborted */
+export declare class TransactionAbortedError extends OblivinxError {
+    constructor(txid?: string);
+}
+/** Thrown when a transaction conflict is detected */
+export declare class TransactionConflictError extends OblivinxError {
+    constructor(message?: string);
+}
+/** Thrown when a savepoint does not exist */
+export declare class SavepointNotFoundError extends OblivinxError {
+    constructor(savepoint: string);
+}
+/** Thrown when document validation fails */
+export declare class ValidationError extends OblivinxError {
+    readonly document?: Record<string, unknown>;
+    readonly violations?: string[];
+    constructor(message: string, document?: Record<string, unknown>, violations?: string[]);
+}
+/** Thrown when a query exceeds the timeout */
+export declare class QueryTimeoutError extends OblivinxError {
+    readonly timeoutMs: number;
+    constructor(timeoutMs: number);
+}
+/** Thrown when an index is not found */
+export declare class IndexNotFoundError extends OblivinxError {
+    constructor(index: string, collection: string);
+}
+/** Thrown when attempting to create an index that already exists */
+export declare class IndexExistsError extends OblivinxError {
+    constructor(index: string, collection: string);
+}
+/** Thrown when native module fails to load */
+export declare class NativeLoadError extends OblivinxError {
+    constructor(message: string, originalError?: unknown);
+}
+/** Thrown when native operation fails */
+export declare class NativeExecutionError extends OblivinxError {
+    readonly originalMessage: string;
+    constructor(originalMessage: string);
+}
+/** Thrown when serialization fails */
+export declare class SerializationError extends OblivinxError {
     constructor(message: string);
 }
-/**
- * Dilempar ketika dokumen gagal validasi JSON Schema.
- *
- * @example
- * ```typescript
- * try {
- *   await users.insertOne({ age: 'bukan_angka' });
- * } catch (err) {
- *   if (err instanceof ValidationError) {
- *     console.log('Dokumen tidak valid:', err.message);
- *   }
- * }
- * ```
- */
-export declare class ValidationError extends OvnError {
+/** Thrown when an operation is not supported */
+export declare class InvalidOperationError extends OblivinxError {
     constructor(message: string);
 }
+/** Thrown when a feature is not yet implemented */
+export declare class NotImplementedError extends OblivinxError {
+    constructor(feature: string);
+}
+/** Thrown when data corruption is detected */
+export declare class CorruptDataError extends OblivinxError {
+    constructor(location: string);
+}
 /**
- * Wrap pemanggilan native addon dalam error handling.
- *
- * Fungsi ini menangkap error dari Rust engine dan mengonversinya
- * menjadi typed OvnError instances berdasarkan pola pesan error.
- *
- * Mapping error:
- * - "Collection '...' not found"  → CollectionNotFoundError
- * - "... already exists"          → CollectionExistsError
- * - "Write conflict" / "WRITE_CONFLICT" → WriteConflictError
- * - "validation" / "Validation"   → ValidationError
- * - Lainnya                      → OvnError (generic)
- *
- * @template T — Tipe return value dari fungsi native
- * @param fn — Fungsi yang memanggil native addon
- * @returns Hasil dari fungsi native
- * @throws {OvnError} atau subclass-nya jika terjadi error
- *
- * @internal — Helper ini tidak di-export ke public API.
- *
- * @example
- * ```typescript
- * const result = wrapNative(() => native.insert(handle, 'users', jsonStr));
- * ```
+ * Map native error strings to appropriate TypeScript error classes.
+ * @internal
  */
-export declare function wrapNative<T>(fn: () => T): T;
+export declare function mapNativeError(message: string): OblivinxError;
+/**
+ * Alias for OblivinxError — kept for backward-compatibility.
+ * @deprecated Use OblivinxError instead.
+ */
+export { OblivinxError as OvnError };
+/**
+ * Alias for TransactionConflictError — kept for backward-compatibility.
+ * @deprecated Use TransactionConflictError instead.
+ */
+export { TransactionConflictError as WriteConflictError };
+export { wrapNative, wrapNativeAsync } from './wrap.js';
 //# sourceMappingURL=index.d.ts.map

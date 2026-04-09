@@ -37,7 +37,6 @@
  * @packageDocumentation
  */
 
-import * as crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { native } from './loader.js';
 import { wrapNative } from './errors/index.js';
@@ -142,14 +141,12 @@ export class Collection<TSchema extends Document = Document> {
    * ```
    */
   async insertOne(doc: TSchema): Promise<InsertOneResult> {
-    const lsid = crypto.randomUUID();
-    const txnNumber = 1;
     let attempts = 0;
 
     while (attempts < 2) {
       try {
         const id = wrapNative(() =>
-          native.insert(this.#db._handle, this.#name, JSON.stringify(doc), lsid, txnNumber),
+          native.insert(this.#db._handle, this.#name, JSON.stringify(doc))
         );
         return { insertedId: id };
       } catch (error: any) {
@@ -340,8 +337,6 @@ export class Collection<TSchema extends Document = Document> {
     filter: FilterQuery<TSchema>,
     update: UpdateQuery<TSchema>,
   ): Promise<UpdateResult> {
-    const lsid = crypto.randomUUID();
-    const txnNumber = 1;
     let attempts = 0;
 
     while (attempts < 2) {
@@ -351,10 +346,8 @@ export class Collection<TSchema extends Document = Document> {
             this.#db._handle,
             this.#name,
             JSON.stringify(filter),
-            JSON.stringify(update),
-            lsid,
-            txnNumber,
-          ),
+            JSON.stringify(update)
+          )
         );
         return { matchedCount: count, modifiedCount: count };
       } catch (error: any) {
@@ -584,6 +577,64 @@ export class Collection<TSchema extends Document = Document> {
   async vectorSearch(queryVector: number[], limit: number = 10): Promise<TSchema[]> {
     const json = wrapNative(() =>
       native.vectorSearch(this.#db._handle, this.#name, JSON.stringify(queryVector), limit)
+    );
+    return JSON.parse(json) as TSchema[];
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  GEOSPATIAL SEARCH
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Create a geospatial (2dsphere) index for location-based queries.
+   *
+   * Indexes GeoJSON Point, [lng, lat] arrays, or { type: 'Point', coordinates: [lng, lat] } objects.
+   *
+   * @param field - Field name where geographic data is stored
+   *
+   * @example
+   * ```typescript
+   * await restaurants.createGeoIndex('location');
+   *
+   * // Then query with $geoWithin or $near
+   * const nearby = await restaurants.find({
+   *   location: {
+   *     $geoWithin: {
+   *       $centerSphere: [[-73.935242, 40.730610], 5 / 3963.2] // 5 mile radius
+   *     }
+   *   }
+   * });
+   * ```
+   */
+  async createGeoIndex(field: string): Promise<void> {
+    wrapNative(() => native.createGeoIndex(this.#db._handle, this.#name, field));
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  AUTOCOMPLETE / PREFIX SEARCH
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Perform autocomplete/prefix search on a field.
+   *
+   * Finds documents where the indexed field starts with the given prefix.
+   * Useful for type-ahead search, autocomplete, and suggestion features.
+   *
+   * @param field - Field name to search on (typically name, title, etc.)
+   * @param prefix - Prefix string to match
+   * @param limit - Maximum number of results to return (default: 10)
+   * @returns Array of matching documents
+   *
+   * @example
+   * ```typescript
+   * // Type-ahead for user names
+   * const suggestions = await users.autocomplete('name', 'ali', 5);
+   * // Returns users with names like 'Alice', 'Ali', 'Alina', etc.
+   * ```
+   */
+  async autocomplete(field: string, prefix: string, limit: number = 10): Promise<TSchema[]> {
+    const json = wrapNative(() =>
+      native.autocomplete(this.#db._handle, this.#name, field, prefix, limit)
     );
     return JSON.parse(json) as TSchema[];
   }

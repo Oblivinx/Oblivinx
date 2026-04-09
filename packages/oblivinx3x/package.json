@@ -18,15 +18,17 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
-    "build:clean": "node -e \"const fs=require('fs');fs.rmSync('./dist',{recursive:true,force:true})\" && tsc",
+    "build": "tsc -p tsconfig.build.json",
+    "build:clean": "node -e \"const fs=require('fs');fs.rmSync('./dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "build:rust": "cargo build --release -p ovn-neon && node -e \"const{cpSync,existsSync,mkdirSync}=require('fs');const src='../../target/release/ovn_neon.dll';const dst='./native/ovn_neon.node';if(!existsSync('./native')) mkdirSync('./native');if(existsSync(src)){cpSync(src,dst);console.log('Copied ovn_neon.dll -> native/ovn_neon.node (release)')}\"",
     "build:rust:debug": "cargo build -p ovn-neon && node -e \"const{cpSync,existsSync,mkdirSync}=require('fs');const src='../../target/debug/ovn_neon.dll';const dst='./native/ovn_neon.node';if(!existsSync('./native')) mkdirSync('./native');if(existsSync(src)){cpSync(src,dst);console.log('Copied ovn_neon.dll -> native/ovn_neon.node (debug)')}\"",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json",
     "prepublishOnly": "npm run build:clean",
-    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
-    "test:unit": "node --experimental-strip-types --test tests/unit/**/*.test.ts",
-    "test:integration": "node --experimental-strip-types --test tests/integration/**/*.test.ts"
+    "test": "node --experimental-strip-types --test __tests__/**/*.test.ts",
+    "test:unit": "node --experimental-strip-types --test __tests__/unit/**/*.test.ts",
+    "test:integration": "node --experimental-strip-types --test __tests__/integration/**/*.test.ts",
+    "test:e2e": "node --experimental-strip-types --test __tests__/e2e/**/*.test.ts"
   },
   "keywords": [
     "database",

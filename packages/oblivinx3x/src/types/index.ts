@@ -549,4 +549,14 @@ export interface NativeAddon {
   putBlob(handle: number, data: Uint8Array): string;
   /** Retrieve binary blob natively, returns buffer or null */
   getBlob(handle: number, blobId: string): Uint8Array | null;
+
+  // ── Advanced Features ──
+  /** Export entire database as JSON object string */
+  export(handle: number): string;
+  /** Backup database to file path */
+  backup(handle: number, destPath: string): void;
+  /** Autocomplete/prefix search on a field */
+  autocomplete(handle: number, collection: string, field: string, prefix: string, limit: number): string;
+  /** Create geospatial (2dsphere) index */
+  createGeoIndex(handle: number, collection: string, field: string): void;
 }

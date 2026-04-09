@@ -1,0 +1,196 @@
+{
+   "task": "upgrade_typescript_sdk_oblivinx3x",
+   "context": {
+      "project_name": "Oblivinx3x",
+      "core_language": "Rust",
+      "binding_output": ".node (Node.js native addon)",
+      "binding_system": "napi-rs",
+      "goal": "Build a production-grade TypeScript SDK that wraps the Rust engine with MongoDB-like API and SQLite-like capabilities"
+   },
+   "objectives": [
+      "Design a clean TypeScript SDK layer above the native .node binding",
+      "Ensure full abstraction (no direct native usage by end-users)",
+      "Implement type-safe query system using generics",
+      "Provide fluent API similar to MongoDB",
+      "Support relational features (join, lookup, relation metadata)",
+      "Implement transaction and savepoint system",
+      "Ensure high performance and non-blocking async behavior",
+      "Provide real benchmark tests and stress tests",
+      "Ensure stability for large-scale production usage"
+   ],
+   "architecture_requirements": {
+      "layers": [
+         "Native Layer (.node via napi-rs)",
+         "Core Wrapper Layer (low-level TypeScript bridge)",
+         "High-level SDK Layer (developer-facing API)"
+      ],
+      "rules": [
+         "Do NOT expose native binding directly to users",
+         "All native calls must be wrapped",
+         "All data passed to native must be serialized safely (prefer BSON or efficient binary)",
+         "Avoid blocking Node.js event loop",
+         "Use async/await consistently"
+      ]
+   },
+   "typescript_sdk_spec": {
+      "database_class": {
+         "name": "OblivinxDB",
+         "methods": [
+            "collection(name: string)",
+            "transaction()",
+            "pragma(key: string, value: any)",
+            "attach(path: string, alias: string)",
+            "detach(alias: string)"
+         ]
+      },
+      "collection_api": {
+         "methods": [
+            "insertOne(doc)",
+            "insertMany(docs)",
+            "find(query)",
+            "findOne(query)",
+            "updateOne(filter, update)",
+            "deleteOne(filter)",
+            "aggregate(pipeline)",
+            "createIndex(fields, options)",
+            "watch()",
+            "join(collection, options)"
+         ]
+      },
+      "query_builder": {
+         "features": [
+            "where/query",
+            "projection",
+            "sort",
+            "limit",
+            "skip",
+            "hint",
+            "explain",
+            "toArray",
+            "stream (async iterator)"
+         ]
+      },
+      "transaction_api": {
+         "features": [
+            "begin",
+            "commit",
+            "rollback",
+            "savepoint(name)",
+            "rollbackTo(name)",
+            "releaseSavepoint(name)"
+         ]
+      },
+      "type_safety": {
+         "requirements": [
+            "Use generics for collections",
+            "Strongly typed query operators ($eq, $gt, $lt, $in, etc.)",
+            "Auto-complete support",
+            "Compile-time validation where possible"
+         ]
+      }
+   },
+   "relational_features": {
+      "requirements": [
+         "Implement MongoDB-like $lookup",
+         "Support join() API at SDK level",
+         "Define relation metadata API",
+         "Optional foreign key validation (soft and strict modes)",
+         "Support cascade delete/update behavior"
+      ]
+   },
+   "performance_requirements": {
+      "rules": [
+         "Avoid JSON stringify/parse in hot paths (use binary if possible)",
+         "Batch operations when communicating with native layer",
+         "Use streaming for large datasets",
+         "Ensure Rust operations run in async threads (no blocking main thread)",
+         "Minimize memory copies between Rust and JS"
+      ]
+   },
+   "error_handling": {
+      "requirements": [
+         "Map native errors into structured TypeScript errors",
+         "Create custom error classes (DuplicateKeyError, TransactionError, etc.)",
+         "Do not expose raw Rust error strings",
+         "Provide error codes and metadata"
+      ]
+   },
+   "testing_requirements": {
+      "unit_tests": [
+         "CRUD operations",
+         "query builder chaining",
+         "transaction commit/rollback",
+         "savepoint behavior",
+         "index usage",
+         "relation/join correctness"
+      ],
+      "integration_tests": [
+         "multi-collection operations",
+         "concurrent writes",
+         "crash recovery (WAL)",
+         "large dataset queries"
+      ],
+      "edge_cases": [
+         "empty dataset",
+         "large payload",
+         "invalid schema",
+         "duplicate keys",
+         "concurrent transactions conflict"
+      ]
+   },
+   "benchmark_requirements": {
+      "type": "real-world",
+      "rules": [
+         "DO NOT create fake or trivial benchmarks",
+         "Use realistic dataset sizes (100K, 1M, 5M records)",
+         "Measure insert, read, update, delete performance",
+         "Measure aggregation performance",
+         "Measure join ($lookup) performance",
+         "Measure transaction throughput",
+         "Measure memory usage",
+         "Measure latency (p50, p95, p99)"
+      ],
+      "scenarios": [
+         {
+            "name": "bulk_insert",
+            "description": "Insert 1 million documents with batching"
+         },
+         {
+            "name": "read_heavy",
+            "description": "Query indexed vs non-indexed fields"
+         },
+         {
+            "name": "aggregation",
+            "description": "Group and sum over large dataset"
+         },
+         {
+            "name": "join_lookup",
+            "description": "Simulate relational join across collections"
+         },
+         {
+            "name": "transaction_stress",
+            "description": "Concurrent transactions with rollback scenarios"
+         }
+      ]
+   },
+   "deliverables": [
+      "Fully implemented TypeScript SDK",
+      "Clean API similar to MongoDB",
+      "Relational hybrid features",
+      "Complete test suite",
+      "Benchmark suite with real metrics output",
+      "Documentation with usage examples"
+   ],
+   "constraints": [
+      "Code must be production-ready",
+      "Must be scalable for large applications",
+      "Must be maintainable and modular",
+      "Avoid over-engineering but ensure extensibility"
+   ],
+   "output_format": {
+      "code": "modular TypeScript files",
+      "tests": "Jest or Vitest",
+      "benchmark": "Node.js benchmark scripts with measurable output",
+      "docs": "Markdown"
+   }
+}
