@@ -7,7 +7,7 @@
  *
  * @packageDocumentation
  */
-import type { Document, FilterQuery, FindOptions } from '../types/index.js';
+import type { Document, FilterQuery, FindOptions, ExplainPlan } from '../types/index.js';
 /** Query execution mode */
 type QueryMode = 'find' | 'count' | 'explain';
 /** Cursor options for streaming */
@@ -92,9 +92,9 @@ export declare class QueryBuilder<T extends Document> {
     /**
      * Execute the query and return results as an array.
      *
-     * @returns Array of matching documents
+     * @returns Array of matching documents, or ExplainPlan if explain() was called
      */
-    toArray(): Promise<T[]>;
+    toArray(): Promise<T[] | ExplainPlan>;
     /**
      * Execute the query and return the first document.
      *
@@ -104,9 +104,13 @@ export declare class QueryBuilder<T extends Document> {
     /**
      * Count matching documents.
      *
+     * @param options - Count options (limit, skip)
      * @returns Number of matching documents
      */
-    count(): Promise<number>;
+    count(options?: {
+        limit?: number;
+        skip?: number;
+    }): Promise<number>;
     /**
      * Return a cursor for streaming large result sets.
      *

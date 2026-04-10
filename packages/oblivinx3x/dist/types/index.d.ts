@@ -360,6 +360,45 @@ export interface IndexOptions {
      * @default false
      */
     unique?: boolean;
+    /**
+     * Hanya index dokumen yang memiliki field yang di-index.
+     * @default false
+     */
+    sparse?: boolean;
+    /**
+     * MQL filter — hanya index dokumen yang cocok.
+     */
+    partialFilterExpression?: FilterQuery;
+    /**
+     * Index disimpan tapi tidak pernah dipilih oleh query planner.
+     * @default false
+     */
+    hidden?: boolean;
+    /**
+     * Locale-aware string comparison rules.
+     */
+    collation?: CollationOptions;
+    /**
+     * Build index tanpa blocking writes.
+     * @default true
+     */
+    background?: boolean;
+    /**
+     * TTL index — expire documents setelah N detik.
+     * Single-field Timestamp/Int64 only.
+     */
+    expireAfterSeconds?: number;
+}
+/** Locale-aware collation options */
+export interface CollationOptions {
+    locale?: string;
+    caseLevel?: boolean;
+    caseFirst?: 'upper' | 'lower' | 'off';
+    strength?: number;
+    numericOrdering?: boolean;
+    alternate?: 'non-ignorable' | 'shifted';
+    maxVariable?: 'punct' | 'space';
+    backwards?: boolean;
 }
 /** Informasi index yang dikembalikan oleh `listIndexes()` */
 export interface IndexInfo {
@@ -407,6 +446,147 @@ export interface OvnVersion {
     neon: string;
     features: string[];
 }
+/** View definition */
+export interface ViewDefinition {
+    /** Nama view */
+    name: string;
+    /** Source collection */
+    source: string;
+    /** Pipeline yang mendefinisikan view */
+    pipeline: PipelineStage[];
+    /** Options untuk materialized view */
+    materializedOptions?: MaterializedViewOptions;
+}
+/** Options untuk materialized views */
+export interface MaterializedViewOptions {
+    /**
+     * Refresh mode:
+     * - 'on_write': refresh saat source collection di-write
+     * - 'scheduled': refresh pada interval tertentu
+     * - 'manual': hanya refresh saat dipanggil explicitly
+     */
+    refresh: 'on_write' | 'scheduled' | 'manual';
+    /** Cron expression untuk scheduled mode */
+    schedule?: string;
+    /** Maximum storage untuk precomputed results */
+    maxSize?: string;
+}
+/** Informasi view yang dikembalikan oleh listViews() */
+export interface ViewInfo {
+    name: string;
+    source: string;
+    pipeline: PipelineStage[];
+    materialized: boolean;
+    refreshMode?: string;
+}
+/** Referential integrity mode */
+export type ReferentialIntegrityMode = 'off' | 'soft' | 'strict';
+/** Relation definition */
+export interface RelationDefinition {
+    /** Source collection + field (e.g., 'posts.user_id') */
+    from: string;
+    /** Target collection + field (e.g., 'users._id') */
+    to: string;
+    /** Tipe relasi */
+    type?: 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many';
+    /** Behavior saat referenced document di-delete */
+    onDelete?: 'restrict' | 'cascade' | 'set_null' | 'no_action';
+    /** Behavior saat referenced document di-update */
+    onUpdate?: 'cascade' | 'restrict' | 'set_null';
+    /** Auto-create index on 'from' field */
+    indexed?: boolean;
+}
+/** Informasi relasi yang aktif */
+export interface RelationInfo {
+    from: string;
+    to: string;
+    type: string;
+    onDelete: string;
+    onUpdate: string;
+    indexed: boolean;
+}
+/** Trigger event types */
+export type TriggerEvent = 'beforeInsert' | 'afterInsert' | 'beforeUpdate' | 'afterUpdate' | 'beforeDelete' | 'afterDelete';
+/** Trigger function context */
+export interface TriggerContext {
+    /** Database handle — bisa read tapi tidak write di luar trigger scope */
+    db: unknown;
+    /** Current transaction ID */
+    txnId: string;
+    /** Client session ID */
+    sessionId: string;
+    /** Collection name */
+    collection: string;
+}
+/** Informasi trigger */
+export interface TriggerInfo {
+    name: string;
+    event: TriggerEvent;
+    collection: string;
+}
+/** Supported pragma names */
+export type PragmaName = 'foreign_keys' | 'synchronous' | 'auto_vacuum' | 'cache_size' | 'page_size' | 'journal_mode' | 'referential_integrity' | 'cross_db_transactions' | 'wal_checkpoint' | 'optimize' | 'integrity_check' | 'max_savepoint_depth' | 'materialized_view_size';
+/** Pragma value types */
+export type PragmaValue = boolean | string | number;
+/** Informasi attached database */
+export interface AttachedDatabaseInfo {
+    /** Alias name */
+    alias: string;
+    /** Path ke file .ovn */
+    path: string;
+    /** Status: 'open' | 'closed' */
+    status: 'open' | 'closed';
+}
+/** Query explain verbosity level */
+export type ExplainVerbosity = 'queryPlanner' | 'executionStats' | 'allPlansExecution';
+/** Query plan dari explain() */
+export interface ExplainPlan {
+    /** Index yang dipilih, atau null jika full scan */
+    index: string | null;
+    /** Tipe scan */
+    scanType: 'indexScan' | 'collectionScan' | 'coveredScan';
+    /** Estimasi cost */
+    estimatedCost: number;
+    /** Estimasi dokumen yang dibaca */
+    docsExamined: number;
+    /** Estimasi dokumen yang cocok */
+    docsReturned: number;
+    /** Alasan fallback jika full scan dipilih */
+    fallbackReason: string | null;
+    /** Deskripsi execution stages */
+    stages: string[];
+}
+/** Error untuk savepoint depth exceeded */
+export interface SavepointError {
+    name: 'SavepointDepthError';
+    message: string;
+}
+/** Extended metrics dengan fitur baru */
+export interface OvnMetricsExtended extends OvnMetrics {
+    changeStream?: {
+        activeSubscribers: number;
+        eventsEmitted: number;
+        logUtilizationPct: number;
+    };
+    ttl?: {
+        documentsDeleted: number;
+        lastRunDurationMs: number;
+    };
+    triggers?: {
+        invocations: number;
+        errors: number;
+        avgDurationUs: number;
+    };
+    views?: {
+        materializedRefreshes: number;
+        refreshErrors: number;
+    };
+    relations?: {
+        checksRun: number;
+        violations: number;
+        cascadeDeletes: number;
+    };
+}
 /**
  * Interface yang mendefinisikan semua fungsi yang di-expose oleh
  * native Neon addon (ovn_neon.node).
@@ -453,14 +633,16 @@ export interface NativeAddon {
     deleteMany(handle: number, collection: string, filterJson: string): number;
     /** Execute aggregation pipeline, return JSON doc[] */
     aggregate(handle: number, collection: string, pipelineJson: string): string;
-    /** Buat secondary index, return index name */
-    createIndex(handle: number, collection: string, specJson: string): string;
+    /** Buat secondary index, return index name. Menerima options untuk unique, sparse, hidden, dll. */
+    createIndex(handle: number, collection: string, specJson: string, optionsJson?: string): string;
     /** Hapus index berdasarkan nama */
     dropIndex(handle: number, collection: string, indexName: string): void;
     /** List semua indexes, return JSON IndexInfo[] */
     listIndexes(handle: number, collection: string): string;
-    createVectorIndex(handle: number, collection: string, field: string): void;
-    vectorSearch(handle: number, collection: string, queryVectorJson: string, limit: number): string;
+    /** Create HNSW vector index dengan options */
+    createVectorIndex(handle: number, collection: string, field: string, optionsJson?: string): void;
+    /** Perform vector search dengan optional filter */
+    vectorSearch(handle: number, collection: string, queryVectorJson: string, limit: number, filterJson?: string): string;
     /** Begin transaction, return txid sebagai string */
     beginTransaction(handle: number): string;
     /** Commit transaction */
@@ -481,7 +663,53 @@ export interface NativeAddon {
     /** Autocomplete/prefix search on a field */
     autocomplete(handle: number, collection: string, field: string, prefix: string, limit: number): string;
     /** Create geospatial (2dsphere) index */
-    createGeoIndex(handle: number, collection: string, field: string): void;
+    createGeoIndex(handle: number, collection: string, field: string, optionsJson?: string): void;
+    /** Create a savepoint within a transaction */
+    savepoint(handle: number, txid: string, name: string): void;
+    /** Rollback to a savepoint */
+    rollbackToSavepoint(handle: number, txid: string, name: string): void;
+    /** Release a savepoint */
+    releaseSavepoint(handle: number, txid: string, name: string): void;
+    /** Create a view (logical or materialized) */
+    createView(handle: number, name: string, definitionJson: string): void;
+    /** Drop a view */
+    dropView(handle: number, name: string): void;
+    /** List all views as JSON array */
+    listViews(handle: number): string;
+    /** Refresh a materialized view */
+    refreshView(handle: number, name: string): void;
+    /** Define a relation between collections */
+    defineRelation(handle: number, relationJson: string): void;
+    /** Drop a relation definition */
+    dropRelation(handle: number, from: string, to: string): void;
+    /** List all relations as JSON array */
+    listRelations(handle: number): string;
+    /** Set referential integrity mode */
+    setReferentialIntegrity(handle: number, mode: string): void;
+    /** Register a trigger on a collection */
+    createTrigger(handle: number, collection: string, event: string): void;
+    /** Drop a trigger */
+    dropTrigger(handle: number, collection: string, event: string): void;
+    /** List triggers on a collection as JSON array */
+    listTriggers(handle: number, collection: string): string;
+    /** Set a pragma value */
+    setPragma(handle: number, name: string, valueJson: string): void;
+    /** Get a pragma value as JSON */
+    getPragma(handle: number, name: string): string;
+    /** Attach an external .ovn database with an alias */
+    attach(handle: number, path: string, alias: string): void;
+    /** Detach an attached database */
+    detach(handle: number, alias: string): void;
+    /** List all attached databases as JSON array */
+    listAttached(handle: number): string;
+    /** Explain a find query — return execution plan */
+    explain(handle: number, collection: string, filterJson: string, optionsJson?: string): string;
+    /** Explain an aggregation pipeline */
+    explainAggregate(handle: number, collection: string, pipelineJson: string, optionsJson?: string): string;
+    /** Hide an index from query planner */
+    hideIndex(handle: number, collection: string, indexName: string): void;
+    /** Unhide an index */
+    unhideIndex(handle: number, collection: string, indexName: string): void;
 }
 export {};
 //# sourceMappingURL=index.d.ts.map

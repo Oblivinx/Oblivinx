@@ -82,4 +82,24 @@ export { OvnError, CollectionNotFoundError, CollectionExistsError, WriteConflict
 //  DEFAULT EXPORT
 // ═══════════════════════════════════════════════════════════════════
 export { Oblivinx3x as default } from './database.js';
+// ═══════════════════════════════════════════════════════════════════
+//  QUERY BUILDER
+// ═══════════════════════════════════════════════════════════════════
+export { QueryBuilder, Cursor } from './query/builder.js';
+// ═══════════════════════════════════════════════════════════════════
+//  RELATIONS
+// ═══════════════════════════════════════════════════════════════════
+export { RelationManager } from './relations/index.js';
+// ═══════════════════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════════════════
+export { safeSerialize, safeDeserialize, withRetry, generateId } from './utils/index.js';
+// ═══════════════════════════════════════════════════════════════════
+//  SECURITY
+// ═══════════════════════════════════════════════════════════════════
+export { SecurityContext, createSecurityContext, checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, RateLimiter, } from './security/index.js';
+// ═══════════════════════════════════════════════════════════════════
+//  DATABASE MANAGERS
+// ═══════════════════════════════════════════════════════════════════
+export { ViewManager, TriggerManager, PragmaManager, AttachManager, BlobManager, MetricsManager, } from './db/index.js';
 //# sourceMappingURL=index.js.map

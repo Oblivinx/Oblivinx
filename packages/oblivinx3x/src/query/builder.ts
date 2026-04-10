@@ -8,7 +8,7 @@
  * @packageDocumentation
  */
 
-import type { Document, FilterQuery, FindOptions } from '../types/index.js';
+import type { Document, FilterQuery, FindOptions, ExplainPlan } from '../types/index.js';
 
 /** Query execution mode */
 type QueryMode = 'find' | 'count' | 'explain';
@@ -21,11 +21,11 @@ export interface CursorOptions {
 
 /**
  * Fluent Query Builder — chainable query construction.
- * 
+ *
  * @example
  * ```typescript
  * const users = db.collection<User>('users');
- * 
+ *
  * const results = await users.find()
  *   .where({ age: { $gte: 18 } })
  *   .project({ name: 1, email: 1 })
@@ -64,7 +64,7 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Add filter conditions (equivalent to MongoDB .find(filter)).
-   * 
+   *
    * @param filter - MongoDB-compatible query filter
    * @returns This builder for chaining
    */
@@ -75,7 +75,7 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Set projection — include or exclude fields.
-   * 
+   *
    * @param projection - Field inclusion/exclusion map
    * @returns This builder for chaining
    */
@@ -86,7 +86,7 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Set sort order.
-   * 
+   *
    * @param sort - Field to direction map (1 = asc, -1 = desc)
    * @returns This builder for chaining
    */
@@ -97,7 +97,7 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Limit the number of returned documents.
-   * 
+   *
    * @param n - Maximum documents to return
    * @returns This builder for chaining
    */
@@ -108,7 +108,7 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Skip N documents (for pagination).
-   * 
+   *
    * @param n - Number of documents to skip
    * @returns This builder for chaining
    */
@@ -119,19 +119,19 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Hint the query planner to use a specific index.
-   * 
+   *
    * @param indexName - Name of the index to use
    * @returns This builder for chaining
    */
   hint(indexName: string): this {
-    // Store hint for future planner integration
+    // Store hint for planner integration
     (this.#options as Record<string, unknown>).hint = indexName;
     return this;
   }
 
   /**
    * Set query mode to return execution plan instead of results.
-   * 
+   *
    * @returns This builder for chaining
    */
   explain(): this {
@@ -141,38 +141,45 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Execute the query and return results as an array.
-   * 
-   * @returns Array of matching documents
+   *
+   * @returns Array of matching documents, or ExplainPlan if explain() was called
    */
-  async toArray(): Promise<T[]> {
+  async toArray(): Promise<T[] | ExplainPlan> {
     const result = await this.#execute(
       this.#filter,
       this.#options as FindOptions<T>,
       this.#mode
     );
-    return result as T[];
+    return result as T[] | ExplainPlan;
   }
 
   /**
    * Execute the query and return the first document.
-   * 
+   *
    * @returns First matching document, or null
    */
   async one(): Promise<T | null> {
     this.#options.limit = 1;
     const results = await this.toArray();
-    return results[0] ?? null;
+    return (results as T[])?.[0] ?? null;
   }
 
   /**
    * Count matching documents.
-   * 
+   *
+   * @param options - Count options (limit, skip)
    * @returns Number of matching documents
    */
-  async count(): Promise<number> {
+  async count(options?: { limit?: number; skip?: number }): Promise<number> {
+    const countOptions = {
+      ...this.#options,
+      limit: options?.limit ?? this.#options.limit,
+      skip: options?.skip ?? this.#options.skip,
+    };
+
     const result = await this.#execute(
       this.#filter,
-      undefined,
+      countOptions,
       'count'
     );
     return result as number;
@@ -180,7 +187,7 @@ export class QueryBuilder<T extends Document> {
 
   /**
    * Return a cursor for streaming large result sets.
-   * 
+   *
    * @param options - Cursor configuration
    * @returns Async cursor for iteration
    */

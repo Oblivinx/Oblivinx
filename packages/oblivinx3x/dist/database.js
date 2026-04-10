@@ -39,6 +39,7 @@ import { native } from './loader.js';
 import { wrapNative } from './errors/index.js';
 import { Collection } from './collection.js';
 import { Transaction } from './transaction.js';
+import { ViewManager, TriggerManager, PragmaManager, AttachManager, BlobManager, MetricsManager, } from './db/index.js';
 /**
  * Class utama Oblivinx3x Database.
  *
@@ -91,6 +92,55 @@ export class Oblivinx3x {
     #path;
     /** Track apakah database sudah ditutup */
     #closed = false;
+    // ── Lazy Manager Instances ──
+    #viewManager = null;
+    #triggerManager = null;
+    #pragmaManager = null;
+    #attachManager = null;
+    #blobManager = null;
+    #metricsManager = null;
+    /** @internal — Lazy getter for ViewManager */
+    #getViews() {
+        if (!this.#viewManager) {
+            this.#viewManager = new ViewManager(() => this._handle);
+        }
+        return this.#viewManager;
+    }
+    /** @internal — Lazy getter for TriggerManager */
+    #getTriggers() {
+        if (!this.#triggerManager) {
+            this.#triggerManager = new TriggerManager(() => this._handle);
+        }
+        return this.#triggerManager;
+    }
+    /** @internal — Lazy getter for PragmaManager */
+    #getPragma() {
+        if (!this.#pragmaManager) {
+            this.#pragmaManager = new PragmaManager(() => this._handle);
+        }
+        return this.#pragmaManager;
+    }
+    /** @internal — Lazy getter for AttachManager */
+    #getAttach() {
+        if (!this.#attachManager) {
+            this.#attachManager = new AttachManager(() => this._handle);
+        }
+        return this.#attachManager;
+    }
+    /** @internal — Lazy getter for BlobManager */
+    #getBlob() {
+        if (!this.#blobManager) {
+            this.#blobManager = new BlobManager(() => this._handle);
+        }
+        return this.#blobManager;
+    }
+    /** @internal — Lazy getter for MetricsManager */
+    #getMetricsMgr() {
+        if (!this.#metricsManager) {
+            this.#metricsManager = new MetricsManager(() => this._handle);
+        }
+        return this.#metricsManager;
+    }
     /**
      * Buka atau buat database Oblivinx3x.
      *
@@ -226,7 +276,7 @@ export class Oblivinx3x {
      * ```
      */
     async putBlob(data) {
-        return wrapNative(() => native.putBlob(this._handle, data));
+        return this.#getBlob().putBlob(data);
     }
     /**
      * Ambil data binary (Blob) dari storage engine berdasarkan UUID nya.
@@ -243,7 +293,7 @@ export class Oblivinx3x {
      * ```
      */
     async getBlob(blobId) {
-        return wrapNative(() => native.getBlob(this._handle, blobId));
+        return this.#getBlob().getBlob(blobId);
     }
     // ── TRANSACTION MANAGEMENT ──
     /**
@@ -311,7 +361,7 @@ export class Oblivinx3x {
      * ```
      */
     async checkpoint() {
-        wrapNative(() => native.checkpoint(this._handle));
+        return this.#getMetricsMgr().checkpoint();
     }
     /**
      * Dapatkan database performance and storage metrics.
@@ -334,8 +384,7 @@ export class Oblivinx3x {
      * ```
      */
     async getMetrics() {
-        const json = wrapNative(() => native.getMetrics(this._handle));
-        return JSON.parse(json);
+        return this.#getMetricsMgr().getMetrics();
     }
     /**
      * Dapatkan informasi versi engine dan library.
@@ -350,8 +399,7 @@ export class Oblivinx3x {
      * ```
      */
     async getVersion() {
-        const json = wrapNative(() => native.getVersion(this._handle));
-        return JSON.parse(json);
+        return this.#getMetricsMgr().getVersion();
     }
     /**
      * Export seluruh database sebagai JSON object.
@@ -369,8 +417,7 @@ export class Oblivinx3x {
      * ```
      */
     async export() {
-        const json = wrapNative(() => native.export(this._handle));
-        return JSON.parse(json);
+        return this.#getMetricsMgr().export();
     }
     /**
      * Backup database ke file JSON.
@@ -386,7 +433,7 @@ export class Oblivinx3x {
      * ```
      */
     async backup(destPath) {
-        wrapNative(() => native.backup(this._handle, destPath));
+        return this.#getMetricsMgr().backup(destPath);
     }
     /**
      * Tutup database dengan graceful.
@@ -446,6 +493,234 @@ export class Oblivinx3x {
             });
         });
         return emitter;
+    }
+    // ═══════════════════════════════════════════════════════════════
+    //  VIEWS
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Buat logical view — stored query yang selalu live data.
+     *
+     * @param name - Nama view
+     * @param definition - View definition (source + pipeline)
+     *
+     * @example
+     * ```typescript
+     * await db.createView('active_users', {
+     *   source: 'users',
+     *   pipeline: [
+     *     { $match: { active: true } },
+     *     { $project: { name: 1, email: 1 } }
+     *   ]
+     * });
+     * ```
+     */
+    async createView(name, definition) {
+        return this.#getViews().createView(name, definition);
+    }
+    /**
+     * Hapus sebuah view.
+     *
+     * @param name - Nama view
+     */
+    async dropView(name) {
+        return this.#getViews().dropView(name);
+    }
+    /**
+     * List semua views yang didefinisikan.
+     *
+     * @returns Array informasi views
+     */
+    async listViews() {
+        return this.#getViews().listViews();
+    }
+    /**
+     * Manual refresh sebuah materialized view.
+     *
+     * @param name - Nama view
+     */
+    async refreshView(name) {
+        return this.#getViews().refreshView(name);
+    }
+    // ═══════════════════════════════════════════════════════════════
+    //  RELATIONS
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Definisikan relasi foreign-key-like antar collections.
+     *
+     * @param relation - Relation definition
+     *
+     * @example
+     * ```typescript
+     * await db.defineRelation({
+     *   from: 'posts.user_id',
+     *   to: 'users._id',
+     *   type: 'many-to-one',
+     *   onDelete: 'cascade',
+     *   onUpdate: 'restrict',
+     *   indexed: true
+     * });
+     * ```
+     */
+    async defineRelation(relation) {
+        wrapNative(() => native.defineRelation(this._handle, JSON.stringify(relation)));
+    }
+    /**
+     * Hapus definisi relasi.
+     *
+     * @param from - Source (e.g., 'posts.user_id')
+     * @param to - Target (e.g., 'users._id')
+     */
+    async dropRelation(from, to) {
+        wrapNative(() => native.dropRelation(this._handle, from, to));
+    }
+    /**
+     * List semua relasi yang didefinisikan.
+     *
+     * @returns Array informasi relasi
+     */
+    async listRelations() {
+        const json = wrapNative(() => native.listRelations(this._handle));
+        return JSON.parse(json);
+    }
+    /**
+     * Set mode validasi referential integrity.
+     *
+     * @param mode - 'off' | 'soft' | 'strict'
+     */
+    async setReferentialIntegrity(mode) {
+        wrapNative(() => native.setReferentialIntegrity(this._handle, mode));
+    }
+    // ═══════════════════════════════════════════════════════════════
+    //  TRIGGERS
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Register sebuah trigger pada collection.
+     *
+     * @param collection - Nama collection
+     * @param event - Trigger event type
+     * @param handler - Trigger function (akan dipanggil saat event terjadi)
+     *
+     * @example
+     * ```typescript
+     * await db.createTrigger('users', 'beforeInsert', async (doc, ctx) => {
+     *   if (!doc.email) throw new Error('email is required');
+     *   doc.createdAt = Date.now();
+     *   return doc;
+     * });
+     * ```
+     */
+    async createTrigger(collection, event, handler) {
+        return this.#getTriggers().createTrigger(collection, event, handler);
+    }
+    /**
+     * Hapus sebuah trigger.
+     *
+     * @param collection - Nama collection
+     * @param event - Trigger event type
+     */
+    async dropTrigger(collection, event) {
+        return this.#getTriggers().dropTrigger(collection, event);
+    }
+    /**
+     * List semua triggers pada sebuah collection.
+     *
+     * @param collection - Nama collection
+     * @returns Array informasi triggers
+     */
+    async listTriggers(collection) {
+        return this.#getTriggers().listTriggers(collection);
+    }
+    // ═══════════════════════════════════════════════════════════════
+    //  PRAGMAS
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Set atau read sebuah pragma (engine directive).
+     *
+     * Pragmas persist across sessions di Metadata Segment.
+     *
+     * @param name - Pragma name
+     * @param value - Value to set (omit untuk read)
+     *
+     * @example
+     * ```typescript
+     * await db.pragma('foreign_keys', true);
+     * await db.pragma('synchronous', 'full');
+     * const mode = await db.pragma('synchronous'); // read
+     * ```
+     */
+    async pragma(name, value) {
+        if (value !== undefined) {
+            return this.#getPragma().setPragma(name, value);
+        }
+        return this.#getPragma().getPragma(name);
+    }
+    // ═══════════════════════════════════════════════════════════════
+    //  ATTACHED DATABASES
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Attach sebuah .ovn file dengan alias.
+     *
+     * @param path - Path ke file .ovn
+     * @param alias - Alias name (tidak boleh konflik dengan collection names)
+     *
+     * @example
+     * ```typescript
+     * await db.attach('analytics.ovn', 'analytics');
+     * const events = await db.find('analytics.events', { type: 'purchase' });
+     * ```
+     */
+    async attach(path, alias) {
+        return this.#getAttach().attach(path, alias);
+    }
+    /**
+     * Detach sebuah attached database.
+     *
+     * @param alias - Alias name
+     */
+    async detach(alias) {
+        return this.#getAttach().detach(alias);
+    }
+    /**
+     * List semua attached databases.
+     *
+     * @returns Array informasi attached databases
+     */
+    async listAttached() {
+        return this.#getAttach().listAttached();
+    }
+    // ═══════════════════════════════════════════════════════════════
+    //  EXPLAIN & QUERY DIAGNOSTICS
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Explain sebuah find query — return execution plan tanpa execute query.
+     *
+     * @param collection - Nama collection
+     * @param filter - Filter expression
+     * @param options - Explain options
+     *
+     * @example
+     * ```typescript
+     * const plan = await db.explain('users', { age: { $gt: 18 } });
+     * console.log(plan.chosenIndex); // 'age_1' or null
+     * console.log(plan.scanType);    // 'indexScan' | 'collectionScan'
+     * ```
+     */
+    async explain(collection, filter, options) {
+        const opts = options ? JSON.stringify(options) : undefined;
+        const json = wrapNative(() => native.explain(this._handle, collection, JSON.stringify(filter), opts));
+        return JSON.parse(json);
+    }
+    /**
+     * Explain sebuah aggregation pipeline.
+     *
+     * @param collection - Nama collection
+     * @param pipeline - Aggregation pipeline
+     * @param options - Explain options
+     */
+    async explainAggregate(collection, pipeline, options) {
+        const opts = options ? JSON.stringify(options) : undefined;
+        const json = wrapNative(() => native.explainAggregate(this._handle, collection, JSON.stringify(pipeline), opts));
+        return JSON.parse(json);
     }
 }
 /**

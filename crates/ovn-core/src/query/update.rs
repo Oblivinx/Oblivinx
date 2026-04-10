@@ -96,7 +96,8 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
                 "$push" => {
                     // Check for $each modifier
                     if let Some(each_arr) = value.get("$each").and_then(|v| v.as_array()) {
-                        let items: Vec<ObeValue> = each_arr.iter().map(ObeValue::from_json).collect();
+                        let items: Vec<ObeValue> =
+                            each_arr.iter().map(ObeValue::from_json).collect();
                         ops.push(UpdateOp::PushEach(field.clone(), items));
                     } else {
                         ops.push(UpdateOp::Push(field.clone(), ObeValue::from_json(value)));
@@ -107,7 +108,9 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
                 }
                 "$pullAll" => {
                     let values = match value {
-                        serde_json::Value::Array(arr) => arr.iter().map(ObeValue::from_json).collect(),
+                        serde_json::Value::Array(arr) => {
+                            arr.iter().map(ObeValue::from_json).collect()
+                        }
                         _ => vec![ObeValue::from_json(value)],
                     };
                     ops.push(UpdateOp::PullAll(field.clone(), values));
@@ -115,7 +118,8 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
                 "$addToSet" => {
                     // Check for $each modifier
                     if let Some(each_arr) = value.get("$each").and_then(|v| v.as_array()) {
-                        let items: Vec<ObeValue> = each_arr.iter().map(ObeValue::from_json).collect();
+                        let items: Vec<ObeValue> =
+                            each_arr.iter().map(ObeValue::from_json).collect();
                         ops.push(UpdateOp::AddToSetEach(field.clone(), items));
                     } else {
                         ops.push(UpdateOp::AddToSet(
@@ -132,7 +136,10 @@ pub fn parse_update(json: &serde_json::Value) -> OvnResult<Vec<UpdateOp>> {
                     ops.push(UpdateOp::CurrentDate(field.clone()));
                 }
                 "$setOnInsert" => {
-                    ops.push(UpdateOp::SetOnInsert(field.clone(), ObeValue::from_json(value)));
+                    ops.push(UpdateOp::SetOnInsert(
+                        field.clone(),
+                        ObeValue::from_json(value),
+                    ));
                 }
                 _ => {
                     return Err(OvnError::UnknownOperator(op_key.clone()));
@@ -530,10 +537,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            doc.get("createdAt"),
-            Some(&ObeValue::Timestamp(1234567890))
-        );
+        assert_eq!(doc.get("createdAt"), Some(&ObeValue::Timestamp(1234567890)));
     }
 
     #[test]
@@ -548,10 +552,18 @@ mod tests {
         assert_eq!(ops.len(), 4);
 
         // Check that each operator type is present (order is not guaranteed)
-        let has_push_each = ops.iter().any(|op| matches!(op, UpdateOp::PushEach(_, v) if v.len() == 3));
-        let has_add_to_set_each = ops.iter().any(|op| matches!(op, UpdateOp::AddToSetEach(_, v) if v.len() == 2));
-        let has_pull_all = ops.iter().any(|op| matches!(op, UpdateOp::PullAll(_, v) if v.len() == 2));
-        let has_set_on_insert = ops.iter().any(|op| matches!(op, UpdateOp::SetOnInsert(_, _)));
+        let has_push_each = ops
+            .iter()
+            .any(|op| matches!(op, UpdateOp::PushEach(_, v) if v.len() == 3));
+        let has_add_to_set_each = ops
+            .iter()
+            .any(|op| matches!(op, UpdateOp::AddToSetEach(_, v) if v.len() == 2));
+        let has_pull_all = ops
+            .iter()
+            .any(|op| matches!(op, UpdateOp::PullAll(_, v) if v.len() == 2));
+        let has_set_on_insert = ops
+            .iter()
+            .any(|op| matches!(op, UpdateOp::SetOnInsert(_, _)));
 
         assert!(has_push_each, "Missing $push with $each");
         assert!(has_add_to_set_each, "Missing $addToSet with $each");

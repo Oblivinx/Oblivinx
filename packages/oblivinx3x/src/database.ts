@@ -40,7 +40,30 @@ import { native } from './loader.js';
 import { wrapNative } from './errors/index.js';
 import { Collection } from './collection.js';
 import { Transaction } from './transaction.js';
+import {
+  ViewManager,
+  TriggerManager,
+  PragmaManager,
+  AttachManager,
+  BlobManager,
+  MetricsManager,
+} from './db/index.js';
 import type { OvnConfig, OvnMetrics, OvnVersion, Document } from './types/index.js';
+import type {
+  ViewInfo,
+  RelationDefinition,
+  RelationInfo,
+  ReferentialIntegrityMode,
+  TriggerEvent,
+  TriggerInfo,
+  PragmaName,
+  PragmaValue,
+  AttachedDatabaseInfo,
+  ExplainPlan,
+  ExplainVerbosity,
+  PipelineStage,
+  FilterQuery,
+} from './types/index.js';
 
 /**
  * Class utama Oblivinx3x Database.
@@ -96,6 +119,63 @@ export class Oblivinx3x {
 
   /** Track apakah database sudah ditutup */
   #closed: boolean = false;
+
+  // ── Lazy Manager Instances ──
+
+  #viewManager: ViewManager | null = null;
+  #triggerManager: TriggerManager | null = null;
+  #pragmaManager: PragmaManager | null = null;
+  #attachManager: AttachManager | null = null;
+  #blobManager: BlobManager | null = null;
+  #metricsManager: MetricsManager | null = null;
+
+  /** @internal — Lazy getter for ViewManager */
+  #getViews(): ViewManager {
+    if (!this.#viewManager) {
+      this.#viewManager = new ViewManager(() => this._handle);
+    }
+    return this.#viewManager;
+  }
+
+  /** @internal — Lazy getter for TriggerManager */
+  #getTriggers(): TriggerManager {
+    if (!this.#triggerManager) {
+      this.#triggerManager = new TriggerManager(() => this._handle);
+    }
+    return this.#triggerManager;
+  }
+
+  /** @internal — Lazy getter for PragmaManager */
+  #getPragma(): PragmaManager {
+    if (!this.#pragmaManager) {
+      this.#pragmaManager = new PragmaManager(() => this._handle);
+    }
+    return this.#pragmaManager;
+  }
+
+  /** @internal — Lazy getter for AttachManager */
+  #getAttach(): AttachManager {
+    if (!this.#attachManager) {
+      this.#attachManager = new AttachManager(() => this._handle);
+    }
+    return this.#attachManager;
+  }
+
+  /** @internal — Lazy getter for BlobManager */
+  #getBlob(): BlobManager {
+    if (!this.#blobManager) {
+      this.#blobManager = new BlobManager(() => this._handle);
+    }
+    return this.#blobManager;
+  }
+
+  /** @internal — Lazy getter for MetricsManager */
+  #getMetricsMgr(): MetricsManager {
+    if (!this.#metricsManager) {
+      this.#metricsManager = new MetricsManager(() => this._handle);
+    }
+    return this.#metricsManager;
+  }
 
   /**
    * Buka atau buat database Oblivinx3x.
@@ -245,7 +325,7 @@ export class Oblivinx3x {
    * ```
    */
   async putBlob(data: Uint8Array): Promise<string> {
-    return wrapNative(() => native.putBlob(this._handle, data));
+    return this.#getBlob().putBlob(data);
   }
 
   /**
@@ -263,7 +343,7 @@ export class Oblivinx3x {
    * ```
    */
   async getBlob(blobId: string): Promise<Uint8Array | null> {
-    return wrapNative(() => native.getBlob(this._handle, blobId));
+    return this.#getBlob().getBlob(blobId);
   }
 
   // ── TRANSACTION MANAGEMENT ──
@@ -337,7 +417,7 @@ export class Oblivinx3x {
    * ```
    */
   async checkpoint(): Promise<void> {
-    wrapNative(() => native.checkpoint(this._handle));
+    return this.#getMetricsMgr().checkpoint();
   }
 
   /**
@@ -361,8 +441,7 @@ export class Oblivinx3x {
    * ```
    */
   async getMetrics(): Promise<OvnMetrics> {
-    const json = wrapNative(() => native.getMetrics(this._handle));
-    return JSON.parse(json) as OvnMetrics;
+    return this.#getMetricsMgr().getMetrics();
   }
 
   /**
@@ -378,8 +457,7 @@ export class Oblivinx3x {
    * ```
    */
   async getVersion(): Promise<OvnVersion> {
-    const json = wrapNative(() => native.getVersion(this._handle));
-    return JSON.parse(json) as OvnVersion;
+    return this.#getMetricsMgr().getVersion();
   }
 
   /**
@@ -398,8 +476,7 @@ export class Oblivinx3x {
    * ```
    */
   async export(): Promise<Record<string, Document[]>> {
-    const json = wrapNative(() => native.export(this._handle));
-    return JSON.parse(json) as Record<string, Document[]>;
+    return this.#getMetricsMgr().export();
   }
 
   /**
@@ -416,7 +493,7 @@ export class Oblivinx3x {
    * ```
    */
   async backup(destPath: string): Promise<void> {
-    wrapNative(() => native.backup(this._handle, destPath));
+    return this.#getMetricsMgr().backup(destPath);
   }
 
   /**
@@ -462,7 +539,7 @@ export class Oblivinx3x {
    */
   watch(): EventEmitter {
     const emitter = new EventEmitter();
-    
+
     wrapNative(() => {
       native.watch(this._handle, (err: any, eventJson: string) => {
         if (err) {
@@ -479,6 +556,283 @@ export class Oblivinx3x {
     });
 
     return emitter;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  VIEWS
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Buat logical view — stored query yang selalu live data.
+   *
+   * @param name - Nama view
+   * @param definition - View definition (source + pipeline)
+   *
+   * @example
+   * ```typescript
+   * await db.createView('active_users', {
+   *   source: 'users',
+   *   pipeline: [
+   *     { $match: { active: true } },
+   *     { $project: { name: 1, email: 1 } }
+   *   ]
+   * });
+   * ```
+   */
+  async createView(name: string, definition: {
+    source: string;
+    pipeline: PipelineStage[];
+    materializedOptions?: {
+      refresh: 'on_write' | 'scheduled' | 'manual';
+      schedule?: string;
+      maxSize?: string;
+    };
+  }): Promise<void> {
+    return this.#getViews().createView(name, definition);
+  }
+
+  /**
+   * Hapus sebuah view.
+   *
+   * @param name - Nama view
+   */
+  async dropView(name: string): Promise<void> {
+    return this.#getViews().dropView(name);
+  }
+
+  /**
+   * List semua views yang didefinisikan.
+   *
+   * @returns Array informasi views
+   */
+  async listViews(): Promise<ViewInfo[]> {
+    return this.#getViews().listViews();
+  }
+
+  /**
+   * Manual refresh sebuah materialized view.
+   *
+   * @param name - Nama view
+   */
+  async refreshView(name: string): Promise<void> {
+    return this.#getViews().refreshView(name);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  RELATIONS
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Definisikan relasi foreign-key-like antar collections.
+   *
+   * @param relation - Relation definition
+   *
+   * @example
+   * ```typescript
+   * await db.defineRelation({
+   *   from: 'posts.user_id',
+   *   to: 'users._id',
+   *   type: 'many-to-one',
+   *   onDelete: 'cascade',
+   *   onUpdate: 'restrict',
+   *   indexed: true
+   * });
+   * ```
+   */
+  async defineRelation(relation: RelationDefinition): Promise<void> {
+    wrapNative(() =>
+      native.defineRelation(this._handle, JSON.stringify(relation)),
+    );
+  }
+
+  /**
+   * Hapus definisi relasi.
+   *
+   * @param from - Source (e.g., 'posts.user_id')
+   * @param to - Target (e.g., 'users._id')
+   */
+  async dropRelation(from: string, to: string): Promise<void> {
+    wrapNative(() => native.dropRelation(this._handle, from, to));
+  }
+
+  /**
+   * List semua relasi yang didefinisikan.
+   *
+   * @returns Array informasi relasi
+   */
+  async listRelations(): Promise<RelationInfo[]> {
+    const json = wrapNative(() => native.listRelations(this._handle));
+    return JSON.parse(json) as RelationInfo[];
+  }
+
+  /**
+   * Set mode validasi referential integrity.
+   *
+   * @param mode - 'off' | 'soft' | 'strict'
+   */
+  async setReferentialIntegrity(mode: ReferentialIntegrityMode): Promise<void> {
+    wrapNative(() => native.setReferentialIntegrity(this._handle, mode));
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  TRIGGERS
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Register sebuah trigger pada collection.
+   *
+   * @param collection - Nama collection
+   * @param event - Trigger event type
+   * @param handler - Trigger function (akan dipanggil saat event terjadi)
+   *
+   * @example
+   * ```typescript
+   * await db.createTrigger('users', 'beforeInsert', async (doc, ctx) => {
+   *   if (!doc.email) throw new Error('email is required');
+   *   doc.createdAt = Date.now();
+   *   return doc;
+   * });
+   * ```
+   */
+  async createTrigger(
+    collection: string,
+    event: TriggerEvent,
+    handler: Function,
+  ): Promise<void> {
+    return this.#getTriggers().createTrigger(collection, event, handler as import('./db/trigger-manager.js').TriggerHandler);
+  }
+
+  /**
+   * Hapus sebuah trigger.
+   *
+   * @param collection - Nama collection
+   * @param event - Trigger event type
+   */
+  async dropTrigger(collection: string, event: TriggerEvent): Promise<void> {
+    return this.#getTriggers().dropTrigger(collection, event);
+  }
+
+  /**
+   * List semua triggers pada sebuah collection.
+   *
+   * @param collection - Nama collection
+   * @returns Array informasi triggers
+   */
+  async listTriggers(collection: string): Promise<TriggerInfo[]> {
+    return this.#getTriggers().listTriggers(collection);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  PRAGMAS
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Set atau read sebuah pragma (engine directive).
+   *
+   * Pragmas persist across sessions di Metadata Segment.
+   *
+   * @param name - Pragma name
+   * @param value - Value to set (omit untuk read)
+   *
+   * @example
+   * ```typescript
+   * await db.pragma('foreign_keys', true);
+   * await db.pragma('synchronous', 'full');
+   * const mode = await db.pragma('synchronous'); // read
+   * ```
+   */
+  async pragma(name: PragmaName, value?: PragmaValue): Promise<PragmaValue | void> {
+    if (value !== undefined) {
+      return this.#getPragma().setPragma(name, value);
+    }
+    return this.#getPragma().getPragma(name);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  ATTACHED DATABASES
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Attach sebuah .ovn file dengan alias.
+   *
+   * @param path - Path ke file .ovn
+   * @param alias - Alias name (tidak boleh konflik dengan collection names)
+   *
+   * @example
+   * ```typescript
+   * await db.attach('analytics.ovn', 'analytics');
+   * const events = await db.find('analytics.events', { type: 'purchase' });
+   * ```
+   */
+  async attach(path: string, alias: string): Promise<void> {
+    return this.#getAttach().attach(path, alias);
+  }
+
+  /**
+   * Detach sebuah attached database.
+   *
+   * @param alias - Alias name
+   */
+  async detach(alias: string): Promise<void> {
+    return this.#getAttach().detach(alias);
+  }
+
+  /**
+   * List semua attached databases.
+   *
+   * @returns Array informasi attached databases
+   */
+  async listAttached(): Promise<AttachedDatabaseInfo[]> {
+    return this.#getAttach().listAttached();
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  EXPLAIN & QUERY DIAGNOSTICS
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Explain sebuah find query — return execution plan tanpa execute query.
+   *
+   * @param collection - Nama collection
+   * @param filter - Filter expression
+   * @param options - Explain options
+   *
+   * @example
+   * ```typescript
+   * const plan = await db.explain('users', { age: { $gt: 18 } });
+   * console.log(plan.chosenIndex); // 'age_1' or null
+   * console.log(plan.scanType);    // 'indexScan' | 'collectionScan'
+   * ```
+   */
+  async explain(
+    collection: string,
+    filter: FilterQuery,
+    options?: { verbosity?: ExplainVerbosity },
+  ): Promise<ExplainPlan> {
+    const opts = options ? JSON.stringify(options) : undefined;
+    const json = wrapNative(() =>
+      native.explain(this._handle, collection, JSON.stringify(filter), opts),
+    );
+    return JSON.parse(json) as ExplainPlan;
+  }
+
+  /**
+   * Explain sebuah aggregation pipeline.
+   *
+   * @param collection - Nama collection
+   * @param pipeline - Aggregation pipeline
+   * @param options - Explain options
+   */
+  async explainAggregate(
+    collection: string,
+    pipeline: PipelineStage[],
+    options?: { verbosity?: ExplainVerbosity },
+  ): Promise<ExplainPlan> {
+    const opts = options ? JSON.stringify(options) : undefined;
+    const json = wrapNative(() =>
+      native.explainAggregate(this._handle, collection, JSON.stringify(pipeline), opts),
+    );
+    return JSON.parse(json) as ExplainPlan;
   }
 }
 

@@ -151,27 +151,78 @@ export class CorruptDataError extends OblivinxError {
         this.name = 'CorruptDataError';
     }
 }
+/** Thrown when a savepoint name conflicts with an existing one */
+export class SavepointExistsError extends OblivinxError {
+    constructor(savepoint) {
+        super('ERR_SAVEPOINT_EXISTS', `Savepoint already exists: ${savepoint}`, { savepoint });
+        this.name = 'SavepointExistsError';
+    }
+}
+/** Thrown when an operation is denied due to insufficient permissions */
+export class PermissionDeniedError extends OblivinxError {
+    constructor(operation, resource) {
+        super('ERR_PERMISSION_DENIED', `Permission denied: '${operation}' on '${resource}'`, { operation, resource });
+        this.name = 'PermissionDeniedError';
+    }
+}
+/** Thrown when a rate limit is exceeded */
+export class RateLimitedError extends OblivinxError {
+    constructor(collection, operation) {
+        super('ERR_RATE_LIMITED', `Rate limit exceeded: '${operation}' on collection '${collection}'`, { collection, operation });
+        this.name = 'RateLimitedError';
+    }
+}
+/** Thrown when input document nesting depth exceeds the limit */
+export class InputDepthError extends OblivinxError {
+    maxDepth;
+    constructor(maxDepth) {
+        super('ERR_INPUT_TOO_DEEP', `Document nesting depth exceeds maximum of ${maxDepth}`, { maxDepth });
+        this.name = 'InputDepthError';
+        this.maxDepth = maxDepth;
+    }
+}
+/** Thrown when input document size exceeds the limit */
+export class InputSizeError extends OblivinxError {
+    maxSize;
+    actualSize;
+    constructor(maxSize, actualSize) {
+        super('ERR_INPUT_TOO_LARGE', `Document size ${actualSize} bytes exceeds maximum of ${maxSize} bytes`, { maxSize, actualSize });
+        this.name = 'InputSizeError';
+        this.maxSize = maxSize;
+        this.actualSize = actualSize;
+    }
+}
 /**
  * Map native error strings to appropriate TypeScript error classes.
+ * Uses regex pattern matching for more robust error classification.
  * @internal
  */
 export function mapNativeError(message) {
-    const lower = message.toLowerCase();
-    if (lower.includes('already exists') || lower.includes('collection')) {
-        if (lower.includes('collection')) {
-            return new CollectionExistsError(message);
+    const ERROR_PATTERNS = [
+        [/collection.*not found/i, (m) => new CollectionNotFoundError(m)],
+        [/already exists.*collection/i, (m) => new CollectionExistsError(m)],
+        [/duplicate key/i, (m) => new DuplicateKeyError({ error: m })],
+        [/write conflict/i, (m) => new TransactionConflictError(m)],
+        [/closed/i, (m) => new DatabaseClosedError(m)],
+        [/savepoint.*not found/i, (m) => new SavepointNotFoundError(m)],
+        [/savepoint.*already exists/i, (m) => new SavepointExistsError(m)],
+        [/permission denied/i, (m) => new PermissionDeniedError(m, '')],
+        [/rate limit/i, (m) => new RateLimitedError('', m)],
+        [/depth/i, (_m) => new InputDepthError(20)],
+        [/size.*exceeds/i, (_m) => new InputSizeError(16 * 1024 * 1024, 0)],
+        [/corrupt/i, (m) => new CorruptDataError(m)],
+        [/timeout/i, (_m) => new QueryTimeoutError(30000)],
+        [/index.*not found/i, (m) => new IndexNotFoundError(m, '')],
+        [/index.*already exists/i, (m) => new IndexExistsError(m, '')],
+        [/transaction.*abort/i, (_m) => new TransactionAbortedError()],
+        [/validation/i, (m) => new ValidationError(m)],
+    ];
+    for (const [pattern, factory] of ERROR_PATTERNS) {
+        if (pattern.test(message)) {
+            return factory(message);
         }
-        return new DuplicateKeyError({ error: message });
     }
-    if (lower.includes('not found')) {
-        return new CollectionNotFoundError(message);
-    }
-    if (lower.includes('closed')) {
-        return new DatabaseClosedError(message);
-    }
-    if (lower.includes('conflict')) {
-        return new TransactionConflictError(message);
-    }
+    // Fallback
     return new NativeExecutionError(message);
 }
 // ─── Compatibility Aliases ────────────────────────────────────────────────────

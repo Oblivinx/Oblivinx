@@ -1,8 +1,8 @@
 //! Collection management — maintains per-collection metadata, indexes, and statistics.
 
+use crate::index::geospatial::GeoSpatialIndex;
 use crate::index::secondary::IndexManager;
 use crate::index::vector::HnswVectorIndex;
-use crate::index::geospatial::GeoSpatialIndex;
 
 #[derive(Debug, Clone, Default)]
 pub struct CollectionOptions {

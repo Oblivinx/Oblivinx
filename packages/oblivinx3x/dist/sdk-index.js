@@ -7,7 +7,9 @@
  * @packageDocumentation
  */
 export { Collection } from './collection.js';
-export { Transaction } from './core/transaction.js';
+// Transaction — satu sumber kebenaran: src/transaction.ts
+// core/transaction.ts hanya re-export dari sini
+export { Transaction } from './transaction.js';
 // ═══════════════════════════════════════════════════════════
 //  QUERY SYSTEM
 // ═══════════════════════════════════════════════════════════

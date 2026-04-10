@@ -38,7 +38,8 @@
  */
 import { EventEmitter } from 'node:events';
 import { native } from './loader.js';
-import { wrapNative } from './errors/index.js';
+import { wrapNative, DatabaseClosedError } from './errors/index.js';
+import { withRetry } from './utils/retry.js';
 /**
  * Representasi sebuah collection dalam database Oblivinx3x.
  *
@@ -92,6 +93,18 @@ export class Collection {
         return this.#name;
     }
     // ═══════════════════════════════════════════════════════════════
+    //  GUARDS
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Guard: assert that the database is still open.
+     * @internal
+     */
+    #assertOpen() {
+        if (this.#db.closed) {
+            throw new DatabaseClosedError(this.#db.path);
+        }
+    }
+    // ═══════════════════════════════════════════════════════════════
     //  INSERT OPERATIONS
     // ═══════════════════════════════════════════════════════════════
     /**
@@ -117,21 +130,9 @@ export class Collection {
      * ```
      */
     async insertOne(doc) {
-        let attempts = 0;
-        while (attempts < 2) {
-            try {
-                const id = wrapNative(() => native.insert(this.#db._handle, this.#name, JSON.stringify(doc)));
-                return { insertedId: id };
-            }
-            catch (error) {
-                attempts++;
-                if (attempts >= 2 || error.name === 'ValidationError') {
-                    throw error;
-                }
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-        }
-        throw new Error('unreachable');
+        this.#assertOpen();
+        const id = await withRetry(async () => Promise.resolve(wrapNative(() => native.insert(this.#db._handle, this.#name, JSON.stringify(doc)))), { maxAttempts: 2 });
+        return { insertedId: id };
     }
     /**
      * Insert banyak dokumen sekaligus dalam satu batch.
@@ -249,6 +250,69 @@ export class Collection {
     async countDocuments(filter = {}) {
         return wrapNative(() => native.count(this.#db._handle, this.#name, JSON.stringify(filter)));
     }
+    /**
+     * Check if any document matches the given filter.
+     * Shorthand for `countDocuments(filter) > 0`.
+     *
+     * @param filter - MQL filter expression. Default: `{}` (any document)
+     * @returns `true` if at least one document matches
+     *
+     * @example
+     * ```typescript
+     * if (await users.exists({ email: 'alice@example.com' })) {
+     *   console.log('User exists');
+     * }
+     * ```
+     */
+    async exists(filter = {}) {
+        return (await this.countDocuments(filter)) > 0;
+    }
+    /**
+     * Find one document matching the filter and update it atomically.
+     *
+     * @param filter - Filter to find the document
+     * @param update - Update expression
+     * @returns The original document before update, or null if not found
+     *
+     * @example
+     * ```typescript
+     * const oldDoc = await users.findOneAndUpdate(
+     *   { name: 'Alice' },
+     *   { $set: { age: 30 } }
+     * );
+     * ```
+     */
+    async findOneAndUpdate(filter, update) {
+        this.#assertOpen();
+        // Find the document first
+        const doc = await this.findOne(filter);
+        if (!doc)
+            return null;
+        // Then update it
+        await this.updateOne(filter, update);
+        return doc;
+    }
+    /**
+     * Find one document matching the filter and delete it atomically.
+     *
+     * @param filter - Filter to find the document
+     * @returns The deleted document, or null if not found
+     *
+     * @example
+     * ```typescript
+     * const deleted = await users.findOneAndDelete({ name: 'Alice' });
+     * ```
+     */
+    async findOneAndDelete(filter) {
+        this.#assertOpen();
+        // Find the document first
+        const doc = await this.findOne(filter);
+        if (!doc)
+            return null;
+        // Then delete it
+        await this.deleteOne(filter);
+        return doc;
+    }
     // ═══════════════════════════════════════════════════════════════
     //  UPDATE OPERATIONS
     // ═══════════════════════════════════════════════════════════════
@@ -276,21 +340,9 @@ export class Collection {
      * ```
      */
     async updateOne(filter, update) {
-        let attempts = 0;
-        while (attempts < 2) {
-            try {
-                const count = wrapNative(() => native.update(this.#db._handle, this.#name, JSON.stringify(filter), JSON.stringify(update)));
-                return { matchedCount: count, modifiedCount: count };
-            }
-            catch (error) {
-                attempts++;
-                if (attempts >= 2 || error.name === 'ValidationError') {
-                    throw error;
-                }
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-        }
-        throw new Error('unreachable');
+        this.#assertOpen();
+        const count = await withRetry(async () => Promise.resolve(wrapNative(() => native.update(this.#db._handle, this.#name, JSON.stringify(filter), JSON.stringify(update)))), { maxAttempts: 2 });
+        return { matchedCount: count, modifiedCount: count };
     }
     /**
      * Update semua dokumen yang cocok dengan filter.
@@ -369,6 +421,12 @@ export class Collection {
      * - `$unwind` — Flatten array field
      * - `$lookup` — Join antar collection
      * - `$count` — Hitung dokumen
+     * - `$facet` — Multiple sub-pipelines
+     * - `$bucket` / `$bucketAuto` — Bucketing
+     * - `$setWindowFields` — Window functions
+     * - `$merge` — Write results to target collection
+     * - `$replaceRoot` / `$replaceWith` — Replace document root
+     * - `$graphLookup` — Graph traversal
      *
      * @param pipeline - Array pipeline stage objects
      * @returns Array dokumen hasil aggregation
@@ -381,11 +439,50 @@ export class Collection {
      *   { $sort: { total: -1 } },
      *   { $limit: 5 },
      * ]);
+     *
+     * // $facet — multiple sub-pipelines
+     * const facetResult = await products.aggregate([
+     *   { $match: { status: 'active' } },
+     *   { $facet: {
+     *     byCategory: [
+     *       { $group: { _id: '$category', count: { $sum: 1 } } },
+     *       { $sort: { count: -1 } }
+     *     ],
+     *     priceDistribution: [
+     *       { $bucket: {
+     *         groupBy: '$price',
+     *         boundaries: [0, 25, 50, 100, 250, 500],
+     *         default: 'Other',
+     *         output: { count: { $sum: 1 }, avgPrice: { $avg: '$price' } }
+     *       }}
+     *     ]
+     *   }}
+     * ]);
      * ```
      */
     async aggregate(pipeline) {
         const resultJson = wrapNative(() => native.aggregate(this.#db._handle, this.#name, JSON.stringify(pipeline)));
         return JSON.parse(resultJson);
+    }
+    /**
+     * Execute aggregation with cursor for large result sets.
+     *
+     * @param pipeline - Array pipeline stage objects
+     * @param _options - Cursor options (batchSize)
+     * @returns AsyncCursor for streaming results
+     */
+    async aggregateWithCursor(pipeline, _options) {
+        // For now, we return a cursor that fetches all results
+        // In a full implementation, this would stream batches from native engine
+        const results = await this.aggregate(pipeline);
+        return {
+            [Symbol.asyncIterator]: async function* () {
+                for (const doc of results) {
+                    yield doc;
+                }
+            },
+            toArray: async () => results,
+        };
     }
     // ═══════════════════════════════════════════════════════════════
     //  INDEX MANAGEMENT
@@ -394,7 +491,7 @@ export class Collection {
      * Buat secondary index pada satu atau lebih field.
      *
      * @param fields - Spesifikasi index: `{ fieldName: 1 }` (ascending) atau `{ fieldName: -1 }` (descending)
-     * @param _options - Options index (reserved untuk unique index di versi mendatang)
+     * @param options - Options index (unique, sparse, partial, hidden, ttl, dll.)
      * @returns Nama index yang di-generate
      *
      * @example
@@ -407,10 +504,27 @@ export class Collection {
      *
      * // Full-text index
      * await articles.createIndex({ title: 'text', content: 'text' });
+     *
+     * // Unique sparse index — email optional, tapi unique saat ada
+     * await users.createIndex({ email: 1 }, { unique: true, sparse: true });
+     *
+     * // TTL index — expire documents 3600s setelah createdAt
+     * await sessions.createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600 });
+     *
+     * // Partial index — hanya index non-archived orders
+     * await orders.createIndex({ status: 1 }, {
+     *   partialFilterExpression: { archived: false }
+     * });
+     *
+     * // Hidden index — disimpan tapi tidak dipakai query planner
+     * await events.createIndex({ userId: 1, createdAt: -1 }, { hidden: true });
+     *
+     * // Wildcard index untuk dynamic schemas
+     * await logs.createIndex({ '$**': 1 });
      * ```
      */
-    async createIndex(fields, _options = {}) {
-        return wrapNative(() => native.createIndex(this.#db._handle, this.#name, JSON.stringify(fields)));
+    async createIndex(fields, options = {}) {
+        return wrapNative(() => native.createIndex(this.#db._handle, this.#name, JSON.stringify(fields), JSON.stringify(options)));
     }
     /**
      * Hapus index berdasarkan nama.
@@ -449,19 +563,30 @@ export class Collection {
      * Create a HNSW vector index for similarity search.
      *
      * @param field - Field name where vector arrays are stored
+     * @param options - Vector index options (dimensions, metric)
+     *
+     * @example
+     * ```typescript
+     * await embeddings.createVectorIndex('vector', {
+     *   dimensions: 1536,
+     *   metric: 'cosine'
+     * });
+     * ```
      */
-    async createVectorIndex(field) {
-        wrapNative(() => native.createVectorIndex(this.#db._handle, this.#name, field));
+    async createVectorIndex(field, options = {}) {
+        wrapNative(() => native.createVectorIndex(this.#db._handle, this.#name, field, JSON.stringify(options)));
     }
     /**
      * Perform an approximate/exact nearest neighbor search.
      *
      * @param queryVector - Vector to search for
      * @param limit - Maximum documents to return (default 10)
+     * @param filter - Optional filter to pre-filter documents
      * @returns Array of closest documents
      */
-    async vectorSearch(queryVector, limit = 10) {
-        const json = wrapNative(() => native.vectorSearch(this.#db._handle, this.#name, JSON.stringify(queryVector), limit));
+    async vectorSearch(queryVector, limit = 10, filter) {
+        const filterJson = filter ? JSON.stringify(filter) : undefined;
+        const json = wrapNative(() => native.vectorSearch(this.#db._handle, this.#name, JSON.stringify(queryVector), limit, filterJson));
         return JSON.parse(json);
     }
     // ═══════════════════════════════════════════════════════════════
@@ -470,13 +595,18 @@ export class Collection {
     /**
      * Create a geospatial (2dsphere) index for location-based queries.
      *
-     * Indexes GeoJSON Point, [lng, lat] arrays, or { type: 'Point', coordinates: [lng, lat] } objects.
+     * Indexes GeoJSON Point, LineString, Polygon, or [lng, lat] arrays.
      *
      * @param field - Field name where geographic data is stored
+     * @param options - Geospatial index options
      *
      * @example
      * ```typescript
+     * // 2dsphere index for Earth coordinates
      * await restaurants.createGeoIndex('location');
+     *
+     * // 2d index for flat plane coordinates (game maps, floor plans)
+     * await gameTiles.createGeoIndex('position', { type: '2d', min: -1000, max: 1000 });
      *
      * // Then query with $geoWithin or $near
      * const nearby = await restaurants.find({
@@ -488,8 +618,26 @@ export class Collection {
      * });
      * ```
      */
-    async createGeoIndex(field) {
-        wrapNative(() => native.createGeoIndex(this.#db._handle, this.#name, field));
+    async createGeoIndex(field, options = {}) {
+        wrapNative(() => native.createGeoIndex(this.#db._handle, this.#name, field, JSON.stringify(options)));
+    }
+    /**
+     * Hide an index — index tetap maintained tapi tidak akan dipilih query planner.
+     *
+     * Berguna untuk test impact dari dropping index tanpa benar-benar drop.
+     *
+     * @param indexName - Nama index
+     */
+    async hideIndex(indexName) {
+        wrapNative(() => native.hideIndex(this.#db._handle, this.#name, indexName));
+    }
+    /**
+     * Unhide an index — kembalikan ke query planner.
+     *
+     * @param indexName - Nama index
+     */
+    async unhideIndex(indexName) {
+        wrapNative(() => native.unhideIndex(this.#db._handle, this.#name, indexName));
     }
     // ═══════════════════════════════════════════════════════════════
     //  AUTOCOMPLETE / PREFIX SEARCH

@@ -9,7 +9,7 @@
  * @packageDocumentation
  */
 /** Base error code for all Oblivinx3x errors */
-export type OblivinxErrorCode = 'ERR_DATABASE_CLOSED' | 'ERR_COLLECTION_NOT_FOUND' | 'ERR_COLLECTION_EXISTS' | 'ERR_DUPLICATE_KEY' | 'ERR_TRANSACTION_ABORTED' | 'ERR_TRANSACTION_CONFLICT' | 'ERR_INVALID_SCHEMA' | 'ERR_QUERY_TIMEOUT' | 'ERR_INDEX_NOT_FOUND' | 'ERR_INDEX_EXISTS' | 'ERR_NATIVE_LOAD_FAILED' | 'ERR_NATIVE_EXECUTION' | 'ERR_SERIALIZATION' | 'ERR_INVALID_OPERATION' | 'ERR_NOT_IMPLEMENTED' | 'ERR_CORRUPT_DATA' | 'ERR_SAVEPOINT_NOT_FOUND';
+export type OblivinxErrorCode = 'ERR_DATABASE_CLOSED' | 'ERR_COLLECTION_NOT_FOUND' | 'ERR_COLLECTION_EXISTS' | 'ERR_DUPLICATE_KEY' | 'ERR_TRANSACTION_ABORTED' | 'ERR_TRANSACTION_CONFLICT' | 'ERR_INVALID_SCHEMA' | 'ERR_QUERY_TIMEOUT' | 'ERR_INDEX_NOT_FOUND' | 'ERR_INDEX_EXISTS' | 'ERR_NATIVE_LOAD_FAILED' | 'ERR_NATIVE_EXECUTION' | 'ERR_SERIALIZATION' | 'ERR_INVALID_OPERATION' | 'ERR_NOT_IMPLEMENTED' | 'ERR_CORRUPT_DATA' | 'ERR_SAVEPOINT_NOT_FOUND' | 'ERR_PERMISSION_DENIED' | 'ERR_RATE_LIMITED' | 'ERR_INPUT_TOO_DEEP' | 'ERR_INPUT_TOO_LARGE' | 'ERR_SAVEPOINT_EXISTS';
 /** Base error class for all Oblivinx3x errors */
 export declare class OblivinxError extends Error {
     /** Error code for programmatic handling */
@@ -91,8 +91,32 @@ export declare class NotImplementedError extends OblivinxError {
 export declare class CorruptDataError extends OblivinxError {
     constructor(location: string);
 }
+/** Thrown when a savepoint name conflicts with an existing one */
+export declare class SavepointExistsError extends OblivinxError {
+    constructor(savepoint: string);
+}
+/** Thrown when an operation is denied due to insufficient permissions */
+export declare class PermissionDeniedError extends OblivinxError {
+    constructor(operation: string, resource: string);
+}
+/** Thrown when a rate limit is exceeded */
+export declare class RateLimitedError extends OblivinxError {
+    constructor(collection: string, operation: string);
+}
+/** Thrown when input document nesting depth exceeds the limit */
+export declare class InputDepthError extends OblivinxError {
+    readonly maxDepth: number;
+    constructor(maxDepth: number);
+}
+/** Thrown when input document size exceeds the limit */
+export declare class InputSizeError extends OblivinxError {
+    readonly maxSize: number;
+    readonly actualSize: number;
+    constructor(maxSize: number, actualSize: number);
+}
 /**
  * Map native error strings to appropriate TypeScript error classes.
+ * Uses regex pattern matching for more robust error classification.
  * @internal
  */
 export declare function mapNativeError(message: string): OblivinxError;

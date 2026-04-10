@@ -38,6 +38,7 @@ import { EventEmitter } from 'node:events';
 import { Collection } from './collection.js';
 import { Transaction } from './transaction.js';
 import type { OvnConfig, OvnMetrics, OvnVersion, Document } from './types/index.js';
+import type { ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainPlan, ExplainVerbosity, PipelineStage, FilterQuery } from './types/index.js';
 /**
  * Class utama Oblivinx3x Database.
  *
@@ -362,6 +363,186 @@ export declare class Oblivinx3x {
      * ```
      */
     watch(): EventEmitter;
+    /**
+     * Buat logical view — stored query yang selalu live data.
+     *
+     * @param name - Nama view
+     * @param definition - View definition (source + pipeline)
+     *
+     * @example
+     * ```typescript
+     * await db.createView('active_users', {
+     *   source: 'users',
+     *   pipeline: [
+     *     { $match: { active: true } },
+     *     { $project: { name: 1, email: 1 } }
+     *   ]
+     * });
+     * ```
+     */
+    createView(name: string, definition: {
+        source: string;
+        pipeline: PipelineStage[];
+        materializedOptions?: {
+            refresh: 'on_write' | 'scheduled' | 'manual';
+            schedule?: string;
+            maxSize?: string;
+        };
+    }): Promise<void>;
+    /**
+     * Hapus sebuah view.
+     *
+     * @param name - Nama view
+     */
+    dropView(name: string): Promise<void>;
+    /**
+     * List semua views yang didefinisikan.
+     *
+     * @returns Array informasi views
+     */
+    listViews(): Promise<ViewInfo[]>;
+    /**
+     * Manual refresh sebuah materialized view.
+     *
+     * @param name - Nama view
+     */
+    refreshView(name: string): Promise<void>;
+    /**
+     * Definisikan relasi foreign-key-like antar collections.
+     *
+     * @param relation - Relation definition
+     *
+     * @example
+     * ```typescript
+     * await db.defineRelation({
+     *   from: 'posts.user_id',
+     *   to: 'users._id',
+     *   type: 'many-to-one',
+     *   onDelete: 'cascade',
+     *   onUpdate: 'restrict',
+     *   indexed: true
+     * });
+     * ```
+     */
+    defineRelation(relation: RelationDefinition): Promise<void>;
+    /**
+     * Hapus definisi relasi.
+     *
+     * @param from - Source (e.g., 'posts.user_id')
+     * @param to - Target (e.g., 'users._id')
+     */
+    dropRelation(from: string, to: string): Promise<void>;
+    /**
+     * List semua relasi yang didefinisikan.
+     *
+     * @returns Array informasi relasi
+     */
+    listRelations(): Promise<RelationInfo[]>;
+    /**
+     * Set mode validasi referential integrity.
+     *
+     * @param mode - 'off' | 'soft' | 'strict'
+     */
+    setReferentialIntegrity(mode: ReferentialIntegrityMode): Promise<void>;
+    /**
+     * Register sebuah trigger pada collection.
+     *
+     * @param collection - Nama collection
+     * @param event - Trigger event type
+     * @param handler - Trigger function (akan dipanggil saat event terjadi)
+     *
+     * @example
+     * ```typescript
+     * await db.createTrigger('users', 'beforeInsert', async (doc, ctx) => {
+     *   if (!doc.email) throw new Error('email is required');
+     *   doc.createdAt = Date.now();
+     *   return doc;
+     * });
+     * ```
+     */
+    createTrigger(collection: string, event: TriggerEvent, handler: Function): Promise<void>;
+    /**
+     * Hapus sebuah trigger.
+     *
+     * @param collection - Nama collection
+     * @param event - Trigger event type
+     */
+    dropTrigger(collection: string, event: TriggerEvent): Promise<void>;
+    /**
+     * List semua triggers pada sebuah collection.
+     *
+     * @param collection - Nama collection
+     * @returns Array informasi triggers
+     */
+    listTriggers(collection: string): Promise<TriggerInfo[]>;
+    /**
+     * Set atau read sebuah pragma (engine directive).
+     *
+     * Pragmas persist across sessions di Metadata Segment.
+     *
+     * @param name - Pragma name
+     * @param value - Value to set (omit untuk read)
+     *
+     * @example
+     * ```typescript
+     * await db.pragma('foreign_keys', true);
+     * await db.pragma('synchronous', 'full');
+     * const mode = await db.pragma('synchronous'); // read
+     * ```
+     */
+    pragma(name: PragmaName, value?: PragmaValue): Promise<PragmaValue | void>;
+    /**
+     * Attach sebuah .ovn file dengan alias.
+     *
+     * @param path - Path ke file .ovn
+     * @param alias - Alias name (tidak boleh konflik dengan collection names)
+     *
+     * @example
+     * ```typescript
+     * await db.attach('analytics.ovn', 'analytics');
+     * const events = await db.find('analytics.events', { type: 'purchase' });
+     * ```
+     */
+    attach(path: string, alias: string): Promise<void>;
+    /**
+     * Detach sebuah attached database.
+     *
+     * @param alias - Alias name
+     */
+    detach(alias: string): Promise<void>;
+    /**
+     * List semua attached databases.
+     *
+     * @returns Array informasi attached databases
+     */
+    listAttached(): Promise<AttachedDatabaseInfo[]>;
+    /**
+     * Explain sebuah find query — return execution plan tanpa execute query.
+     *
+     * @param collection - Nama collection
+     * @param filter - Filter expression
+     * @param options - Explain options
+     *
+     * @example
+     * ```typescript
+     * const plan = await db.explain('users', { age: { $gt: 18 } });
+     * console.log(plan.chosenIndex); // 'age_1' or null
+     * console.log(plan.scanType);    // 'indexScan' | 'collectionScan'
+     * ```
+     */
+    explain(collection: string, filter: FilterQuery, options?: {
+        verbosity?: ExplainVerbosity;
+    }): Promise<ExplainPlan>;
+    /**
+     * Explain sebuah aggregation pipeline.
+     *
+     * @param collection - Nama collection
+     * @param pipeline - Aggregation pipeline
+     * @param options - Explain options
+     */
+    explainAggregate(collection: string, pipeline: PipelineStage[], options?: {
+        verbosity?: ExplainVerbosity;
+    }): Promise<ExplainPlan>;
 }
 /**
  * Alias untuk class `Oblivinx3x`.

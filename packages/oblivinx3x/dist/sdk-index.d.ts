@@ -8,7 +8,8 @@
  */
 export type { OblivinxDB } from './core/database.js';
 export { Collection } from './collection.js';
-export { Transaction } from './core/transaction.js';
+export { Transaction } from './transaction.js';
+export type { TransactionState, TransactionInfo } from './transaction.js';
 export { QueryBuilder, Cursor } from './query/builder.js';
 export type { CursorOptions } from './query/builder.js';
 export { RelationManager } from './relations/index.js';

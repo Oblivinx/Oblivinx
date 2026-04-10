@@ -24,7 +24,7 @@ impl TimeBucket {
         doc.set("meta".to_string(), self.meta.clone());
         doc.set("min_time".to_string(), ObeValue::Int64(self.min_time));
         doc.set("max_time".to_string(), ObeValue::Int64(self.max_time));
-        
+
         let mut arr = Vec::new();
         for measurement in &self.measurements {
             arr.push(ObeValue::Document(measurement.fields.clone()));
@@ -37,12 +37,12 @@ impl TimeBucket {
     /// Extract bucket boundaries based on granularity (seconds, minutes, hours)
     pub fn calculate_bucket_bounds(time: i64, granularity: &Option<String>) -> (i64, i64) {
         let span = match granularity.as_deref() {
-            Some("seconds") => 1000,           // 1-second bucket
-            Some("minutes") => 60 * 1000,      // 1-minute bucket
-            Some("hours") => 60 * 60 * 1000,   // 1-hour bucket
-            _ => 60 * 60 * 1000,               // default to hour
+            Some("seconds") => 1000,         // 1-second bucket
+            Some("minutes") => 60 * 1000,    // 1-minute bucket
+            Some("hours") => 60 * 60 * 1000, // 1-hour bucket
+            _ => 60 * 60 * 1000,             // default to hour
         };
-        
+
         let min_time = (time / span) * span;
         let max_time = min_time + span - 1;
         (min_time, max_time)
@@ -60,11 +60,18 @@ impl TimeSeriesManager {
         meta_field: &Option<String>,
         _granularity: &Option<String>,
     ) -> OvnResult<(ObeValue, i64)> {
-        let time_val = doc.get_path(time_field).and_then(|v| {
-            if let ObeValue::Int64(t) = v { Some(*t) }
-            else if let ObeValue::Timestamp(t) = v { Some(*t as i64) }
-            else { None }
-        }).unwrap_or(0);
+        let time_val = doc
+            .get_path(time_field)
+            .and_then(|v| {
+                if let ObeValue::Int64(t) = v {
+                    Some(*t)
+                } else if let ObeValue::Timestamp(t) = v {
+                    Some(*t as i64)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
 
         let meta_val = if let Some(mfield) = meta_field {
             doc.get_path(mfield).cloned().unwrap_or(ObeValue::Null)

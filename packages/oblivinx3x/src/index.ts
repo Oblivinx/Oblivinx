@@ -76,6 +76,7 @@
 export { Oblivinx3x, Database, open } from './database.js';
 export { Collection } from './collection.js';
 export { Transaction } from './transaction.js';
+export type { TransactionState, TransactionInfo } from './transaction.js';
 
 // ═══════════════════════════════════════════════════════════════════
 //  ERROR EXPORTS
@@ -119,10 +120,40 @@ export type {
   IndexFields,
   IndexOptions,
   IndexInfo,
+  CollationOptions,
 
   // Metrics & version
   OvnMetrics,
   OvnVersion,
+
+  // Views [NEW]
+  ViewDefinition,
+  MaterializedViewOptions,
+  ViewInfo,
+
+  // Relations [NEW]
+  RelationDefinition,
+  RelationInfo,
+  ReferentialIntegrityMode,
+
+  // Triggers [NEW]
+  TriggerEvent,
+  TriggerContext,
+  TriggerInfo,
+
+  // Pragmas [NEW]
+  PragmaName,
+  PragmaValue,
+
+  // Attached databases [NEW]
+  AttachedDatabaseInfo,
+
+  // Explain [NEW]
+  ExplainVerbosity,
+  ExplainPlan,
+
+  // Extended metrics [NEW]
+  OvnMetricsExtended,
 } from './types/index.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -130,3 +161,66 @@ export type {
 // ═══════════════════════════════════════════════════════════════════
 
 export { Oblivinx3x as default } from './database.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  QUERY BUILDER
+// ═══════════════════════════════════════════════════════════════════
+
+export { QueryBuilder, Cursor } from './query/builder.js';
+export type { CursorOptions } from './query/builder.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  RELATIONS
+// ═══════════════════════════════════════════════════════════════════
+
+export { RelationManager } from './relations/index.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════════════════
+
+export { safeSerialize, safeDeserialize, withRetry, generateId } from './utils/index.js';
+export type { RetryOptions, IdStrategy, SnowflakeConfig } from './utils/index.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  SECURITY
+// ═══════════════════════════════════════════════════════════════════
+
+export {
+  SecurityContext,
+  createSecurityContext,
+  checkPermission,
+  isFieldReadable,
+  isFieldWritable,
+  filterDocumentByACL,
+  sanitizeDocumentByACL,
+  AuditLogger,
+  InMemoryAuditLogBackend,
+  sanitizeInput,
+  validateDepth,
+  validateSize,
+  RateLimiter,
+} from './security/index.js';
+export type {
+  SecurityOptions,
+  CollectionOperation,
+  CollectionPermissionMap,
+  FieldACL,
+  AuditEvent,
+  AuditLogBackend,
+  InputValidationConfig,
+} from './security/index.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  DATABASE MANAGERS
+// ═══════════════════════════════════════════════════════════════════
+
+export {
+  ViewManager,
+  TriggerManager,
+  PragmaManager,
+  AttachManager,
+  BlobManager,
+  MetricsManager,
+} from './db/index.js';
+export type { TriggerHandler } from './db/index.js';

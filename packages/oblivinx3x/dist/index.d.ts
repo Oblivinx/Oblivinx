@@ -71,7 +71,17 @@
 export { Oblivinx3x, Database, open } from './database.js';
 export { Collection } from './collection.js';
 export { Transaction } from './transaction.js';
+export type { TransactionState, TransactionInfo } from './transaction.js';
 export { OvnError, CollectionNotFoundError, CollectionExistsError, WriteConflictError, ValidationError, } from './errors/index.js';
-export type { OvnConfig, Document, FilterQuery, ComparisonOperators, UpdateQuery, FindOptions, PipelineStage, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult, IndexFields, IndexOptions, IndexInfo, OvnMetrics, OvnVersion, } from './types/index.js';
+export type { OvnConfig, Document, FilterQuery, ComparisonOperators, UpdateQuery, FindOptions, PipelineStage, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult, IndexFields, IndexOptions, IndexInfo, CollationOptions, OvnMetrics, OvnVersion, ViewDefinition, MaterializedViewOptions, ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerContext, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainVerbosity, ExplainPlan, OvnMetricsExtended, } from './types/index.js';
 export { Oblivinx3x as default } from './database.js';
+export { QueryBuilder, Cursor } from './query/builder.js';
+export type { CursorOptions } from './query/builder.js';
+export { RelationManager } from './relations/index.js';
+export { safeSerialize, safeDeserialize, withRetry, generateId } from './utils/index.js';
+export type { RetryOptions, IdStrategy, SnowflakeConfig } from './utils/index.js';
+export { SecurityContext, createSecurityContext, checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, RateLimiter, } from './security/index.js';
+export type { SecurityOptions, CollectionOperation, CollectionPermissionMap, FieldACL, AuditEvent, AuditLogBackend, InputValidationConfig, } from './security/index.js';
+export { ViewManager, TriggerManager, PragmaManager, AttachManager, BlobManager, MetricsManager, } from './db/index.js';
+export type { TriggerHandler } from './db/index.js';
 //# sourceMappingURL=index.d.ts.map

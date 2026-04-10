@@ -39,6 +39,7 @@
 import { EventEmitter } from 'node:events';
 import type { Document, FilterQuery, UpdateQuery, FindOptions, PipelineStage, IndexFields, IndexOptions, IndexInfo, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult } from './types/index.js';
 import type { Oblivinx3x } from './database.js';
+import type { Cursor } from './query/builder.js';
 /**
  * Representasi sebuah collection dalam database Oblivinx3x.
  *
@@ -194,6 +195,49 @@ export declare class Collection<TSchema extends Document = Document> {
      */
     countDocuments(filter?: FilterQuery<TSchema>): Promise<number>;
     /**
+     * Check if any document matches the given filter.
+     * Shorthand for `countDocuments(filter) > 0`.
+     *
+     * @param filter - MQL filter expression. Default: `{}` (any document)
+     * @returns `true` if at least one document matches
+     *
+     * @example
+     * ```typescript
+     * if (await users.exists({ email: 'alice@example.com' })) {
+     *   console.log('User exists');
+     * }
+     * ```
+     */
+    exists(filter?: FilterQuery<TSchema>): Promise<boolean>;
+    /**
+     * Find one document matching the filter and update it atomically.
+     *
+     * @param filter - Filter to find the document
+     * @param update - Update expression
+     * @returns The original document before update, or null if not found
+     *
+     * @example
+     * ```typescript
+     * const oldDoc = await users.findOneAndUpdate(
+     *   { name: 'Alice' },
+     *   { $set: { age: 30 } }
+     * );
+     * ```
+     */
+    findOneAndUpdate(filter: FilterQuery<TSchema>, update: UpdateQuery<TSchema>): Promise<TSchema | null>;
+    /**
+     * Find one document matching the filter and delete it atomically.
+     *
+     * @param filter - Filter to find the document
+     * @returns The deleted document, or null if not found
+     *
+     * @example
+     * ```typescript
+     * const deleted = await users.findOneAndDelete({ name: 'Alice' });
+     * ```
+     */
+    findOneAndDelete(filter: FilterQuery<TSchema>): Promise<TSchema | null>;
+    /**
      * Update dokumen pertama yang cocok dengan filter.
      *
      * Operator update yang didukung:
@@ -279,6 +323,12 @@ export declare class Collection<TSchema extends Document = Document> {
      * - `$unwind` — Flatten array field
      * - `$lookup` — Join antar collection
      * - `$count` — Hitung dokumen
+     * - `$facet` — Multiple sub-pipelines
+     * - `$bucket` / `$bucketAuto` — Bucketing
+     * - `$setWindowFields` — Window functions
+     * - `$merge` — Write results to target collection
+     * - `$replaceRoot` / `$replaceWith` — Replace document root
+     * - `$graphLookup` — Graph traversal
      *
      * @param pipeline - Array pipeline stage objects
      * @returns Array dokumen hasil aggregation
@@ -291,14 +341,43 @@ export declare class Collection<TSchema extends Document = Document> {
      *   { $sort: { total: -1 } },
      *   { $limit: 5 },
      * ]);
+     *
+     * // $facet — multiple sub-pipelines
+     * const facetResult = await products.aggregate([
+     *   { $match: { status: 'active' } },
+     *   { $facet: {
+     *     byCategory: [
+     *       { $group: { _id: '$category', count: { $sum: 1 } } },
+     *       { $sort: { count: -1 } }
+     *     ],
+     *     priceDistribution: [
+     *       { $bucket: {
+     *         groupBy: '$price',
+     *         boundaries: [0, 25, 50, 100, 250, 500],
+     *         default: 'Other',
+     *         output: { count: { $sum: 1 }, avgPrice: { $avg: '$price' } }
+     *       }}
+     *     ]
+     *   }}
+     * ]);
      * ```
      */
     aggregate(pipeline: PipelineStage[]): Promise<Document[]>;
     /**
+     * Execute aggregation with cursor for large result sets.
+     *
+     * @param pipeline - Array pipeline stage objects
+     * @param _options - Cursor options (batchSize)
+     * @returns AsyncCursor for streaming results
+     */
+    aggregateWithCursor(pipeline: PipelineStage[], _options?: {
+        batchSize?: number;
+    }): Promise<Cursor<Document>>;
+    /**
      * Buat secondary index pada satu atau lebih field.
      *
      * @param fields - Spesifikasi index: `{ fieldName: 1 }` (ascending) atau `{ fieldName: -1 }` (descending)
-     * @param _options - Options index (reserved untuk unique index di versi mendatang)
+     * @param options - Options index (unique, sparse, partial, hidden, ttl, dll.)
      * @returns Nama index yang di-generate
      *
      * @example
@@ -311,9 +390,26 @@ export declare class Collection<TSchema extends Document = Document> {
      *
      * // Full-text index
      * await articles.createIndex({ title: 'text', content: 'text' });
+     *
+     * // Unique sparse index — email optional, tapi unique saat ada
+     * await users.createIndex({ email: 1 }, { unique: true, sparse: true });
+     *
+     * // TTL index — expire documents 3600s setelah createdAt
+     * await sessions.createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600 });
+     *
+     * // Partial index — hanya index non-archived orders
+     * await orders.createIndex({ status: 1 }, {
+     *   partialFilterExpression: { archived: false }
+     * });
+     *
+     * // Hidden index — disimpan tapi tidak dipakai query planner
+     * await events.createIndex({ userId: 1, createdAt: -1 }, { hidden: true });
+     *
+     * // Wildcard index untuk dynamic schemas
+     * await logs.createIndex({ '$**': 1 });
      * ```
      */
-    createIndex(fields: IndexFields, _options?: IndexOptions): Promise<string>;
+    createIndex(fields: IndexFields, options?: IndexOptions): Promise<string>;
     /**
      * Hapus index berdasarkan nama.
      *
@@ -343,26 +439,44 @@ export declare class Collection<TSchema extends Document = Document> {
      * Create a HNSW vector index for similarity search.
      *
      * @param field - Field name where vector arrays are stored
+     * @param options - Vector index options (dimensions, metric)
+     *
+     * @example
+     * ```typescript
+     * await embeddings.createVectorIndex('vector', {
+     *   dimensions: 1536,
+     *   metric: 'cosine'
+     * });
+     * ```
      */
-    createVectorIndex(field: string): Promise<void>;
+    createVectorIndex(field: string, options?: {
+        dimensions?: number;
+        metric?: 'euclidean' | 'cosine' | 'inner_product';
+    }): Promise<void>;
     /**
      * Perform an approximate/exact nearest neighbor search.
      *
      * @param queryVector - Vector to search for
      * @param limit - Maximum documents to return (default 10)
+     * @param filter - Optional filter to pre-filter documents
      * @returns Array of closest documents
      */
-    vectorSearch(queryVector: number[], limit?: number): Promise<TSchema[]>;
+    vectorSearch(queryVector: number[], limit?: number, filter?: FilterQuery<TSchema>): Promise<TSchema[]>;
     /**
      * Create a geospatial (2dsphere) index for location-based queries.
      *
-     * Indexes GeoJSON Point, [lng, lat] arrays, or { type: 'Point', coordinates: [lng, lat] } objects.
+     * Indexes GeoJSON Point, LineString, Polygon, or [lng, lat] arrays.
      *
      * @param field - Field name where geographic data is stored
+     * @param options - Geospatial index options
      *
      * @example
      * ```typescript
+     * // 2dsphere index for Earth coordinates
      * await restaurants.createGeoIndex('location');
+     *
+     * // 2d index for flat plane coordinates (game maps, floor plans)
+     * await gameTiles.createGeoIndex('position', { type: '2d', min: -1000, max: 1000 });
      *
      * // Then query with $geoWithin or $near
      * const nearby = await restaurants.find({
@@ -374,7 +488,25 @@ export declare class Collection<TSchema extends Document = Document> {
      * });
      * ```
      */
-    createGeoIndex(field: string): Promise<void>;
+    createGeoIndex(field: string, options?: {
+        type?: '2dsphere' | '2d';
+        min?: number;
+        max?: number;
+    }): Promise<void>;
+    /**
+     * Hide an index — index tetap maintained tapi tidak akan dipilih query planner.
+     *
+     * Berguna untuk test impact dari dropping index tanpa benar-benar drop.
+     *
+     * @param indexName - Nama index
+     */
+    hideIndex(indexName: string): Promise<void>;
+    /**
+     * Unhide an index — kembalikan ke query planner.
+     *
+     * @param indexName - Nama index
+     */
+    unhideIndex(indexName: string): Promise<void>;
     /**
      * Perform autocomplete/prefix search on a field.
      *

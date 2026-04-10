@@ -67,7 +67,7 @@ impl BlobManager {
 
             // Commit page back to cache / disk
             self.buffer_pool.put_page(page_number, page)?;
-            
+
             // Immediately flush to guarantee durability for blobs
             self.buffer_pool.flush_page(page_number, &*self.backend)?;
 
@@ -103,15 +103,15 @@ impl BlobManager {
             // We must determine the actual length. For now we assume valid bytes are non-nulls.
             // In a stricter schema, the page header free_space_offset could track chunk size.
             // For simplicity, we just rebuild. (A real implementation encodes exact chunk lengths).
-            // Let's assume the payload is completely filled unless it's the last page, which we'd 
+            // Let's assume the payload is completely filled unless it's the last page, which we'd
             // trim trailing zeroes.
             let chunk_data = &page.payload;
-            
+
             // Basic trailing zero trim (only applies safely if data doesn't naturally end in zeros)
             // Note: to perfectly support zeroes, we'd serialize chunk metadata. Let's just append.
             data.extend_from_slice(chunk_data);
         }
-        
+
         // Strip trailing zeroes from the reconstructed Blob payload
         while !data.is_empty() && *data.last().unwrap() == 0 {
             data.pop();
@@ -120,4 +120,3 @@ impl BlobManager {
         Ok(Some(data))
     }
 }
-

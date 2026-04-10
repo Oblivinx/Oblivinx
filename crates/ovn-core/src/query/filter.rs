@@ -183,7 +183,8 @@ fn parse_field_filter(field: &str, value: &serde_json::Value) -> OvnResult<Filte
                         let type_str = op_val.as_str().unwrap_or("string");
                         conditions.push(Filter::Type(field.to_string(), type_str.to_string()));
                     }
-                    "$all" | "$elemMatch" | "$size" | "$regex" | "$geoWithin" | "$near" | "$geoNear" => {
+                    "$all" | "$elemMatch" | "$size" | "$regex" | "$geoWithin" | "$near"
+                    | "$geoNear" => {
                         let op = FilterOp::parse_op(op_key)?;
                         conditions.push(Filter::Comparison(
                             field.to_string(),
@@ -332,14 +333,19 @@ fn evaluate_comparison(doc_value: Option<&ObeValue>, op: &FilterOp, target: &Obe
             if let (Some(pt), ObeValue::Document(box_doc)) = (point, target) {
                 if let Some(ObeValue::Array(arr)) = box_doc.get("$box") {
                     if arr.len() == 2 {
-                        if let (ObeValue::Array(min_coords), ObeValue::Array(max_coords)) = (&arr[0], &arr[1]) {
+                        if let (ObeValue::Array(min_coords), ObeValue::Array(max_coords)) =
+                            (&arr[0], &arr[1])
+                        {
                             if min_coords.len() == 2 && max_coords.len() == 2 {
                                 let min_lng = min_coords[0].as_f64().unwrap_or(0.0);
                                 let min_lat = min_coords[1].as_f64().unwrap_or(0.0);
                                 let max_lng = max_coords[0].as_f64().unwrap_or(0.0);
                                 let max_lat = max_coords[1].as_f64().unwrap_or(0.0);
-                                
-                                return pt.lng >= min_lng && pt.lng <= max_lng && pt.lat >= min_lat && pt.lat <= max_lat;
+
+                                return pt.lng >= min_lng
+                                    && pt.lng <= max_lng
+                                    && pt.lat >= min_lat
+                                    && pt.lat <= max_lat;
                             }
                         }
                     }
@@ -353,7 +359,10 @@ fn evaluate_comparison(doc_value: Option<&ObeValue>, op: &FilterOp, target: &Obe
                 if let Some(geom) = near_doc.get("$geometry") {
                     let target_pt = extract_geo_point(Some(geom));
                     if let Some(tpt) = target_pt {
-                        let max_dist = near_doc.get("$maxDistance").and_then(|v| v.as_f64()).unwrap_or(f64::MAX);
+                        let max_dist = near_doc
+                            .get("$maxDistance")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(f64::MAX);
                         let dx = pt.lng - tpt.lng;
                         let dy = pt.lat - tpt.lat;
                         let dist = (dx * dx + dy * dy).sqrt();

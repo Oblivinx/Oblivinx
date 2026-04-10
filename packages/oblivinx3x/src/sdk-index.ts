@@ -13,7 +13,10 @@
 
 export type { OblivinxDB } from './core/database.js';
 export { Collection } from './collection.js';
-export { Transaction } from './core/transaction.js';
+// Transaction — satu sumber kebenaran: src/transaction.ts
+// core/transaction.ts hanya re-export dari sini
+export { Transaction } from './transaction.js';
+export type { TransactionState, TransactionInfo } from './transaction.js';
 
 // ═══════════════════════════════════════════════════════════
 //  QUERY SYSTEM

@@ -93,7 +93,7 @@ export class QueryBuilder {
      * @returns This builder for chaining
      */
     hint(indexName) {
-        // Store hint for future planner integration
+        // Store hint for planner integration
         this.#options.hint = indexName;
         return this;
     }
@@ -109,7 +109,7 @@ export class QueryBuilder {
     /**
      * Execute the query and return results as an array.
      *
-     * @returns Array of matching documents
+     * @returns Array of matching documents, or ExplainPlan if explain() was called
      */
     async toArray() {
         const result = await this.#execute(this.#filter, this.#options, this.#mode);
@@ -123,15 +123,21 @@ export class QueryBuilder {
     async one() {
         this.#options.limit = 1;
         const results = await this.toArray();
-        return results[0] ?? null;
+        return results?.[0] ?? null;
     }
     /**
      * Count matching documents.
      *
+     * @param options - Count options (limit, skip)
      * @returns Number of matching documents
      */
-    async count() {
-        const result = await this.#execute(this.#filter, undefined, 'count');
+    async count(options) {
+        const countOptions = {
+            ...this.#options,
+            limit: options?.limit ?? this.#options.limit,
+            skip: options?.skip ?? this.#options.skip,
+        };
+        const result = await this.#execute(this.#filter, countOptions, 'count');
         return result;
     }
     /**

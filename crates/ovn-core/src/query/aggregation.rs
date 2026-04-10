@@ -236,10 +236,12 @@ fn parse_stage(json: &serde_json::Value) -> OvnResult<AggregateStage> {
             Ok(AggregateStage::ReplaceRoot(new_root))
         }
         "$facet" => {
-            let facet_obj = value.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-                position: 0,
-                message: "$facet must be an object".to_string(),
-            })?;
+            let facet_obj = value
+                .as_object()
+                .ok_or_else(|| OvnError::QuerySyntaxError {
+                    position: 0,
+                    message: "$facet must be an object".to_string(),
+                })?;
             let mut facets = BTreeMap::new();
             for (field, stages_json) in facet_obj {
                 if let Some(arr) = stages_json.as_array() {
@@ -276,10 +278,12 @@ fn parse_stage(json: &serde_json::Value) -> OvnResult<AggregateStage> {
 
 /// Parse a $lookup stage.
 fn parse_lookup_stage(value: &serde_json::Value) -> OvnResult<AggregateStage> {
-    let obj = value.as_object().ok_or_else(|| OvnError::QuerySyntaxError {
-        position: 0,
-        message: "$lookup must be an object".to_string(),
-    })?;
+    let obj = value
+        .as_object()
+        .ok_or_else(|| OvnError::QuerySyntaxError {
+            position: 0,
+            message: "$lookup must be an object".to_string(),
+        })?;
 
     let from = obj
         .get("from")
@@ -479,7 +483,9 @@ fn execute_stage(docs: Vec<ObeDocument>, stage: &AggregateStage) -> OvnResult<Ve
                 .map(|mut doc| {
                     for (field, expr_json) in fields_map {
                         // If expression starts with "$", resolve as field ref
-                        let value = if let Some(field_ref) = expr_json.as_str().and_then(|s| s.strip_prefix('$')) {
+                        let value = if let Some(field_ref) =
+                            expr_json.as_str().and_then(|s| s.strip_prefix('$'))
+                        {
                             doc.get_path(field_ref).cloned().unwrap_or(ObeValue::Null)
                         } else {
                             ObeValue::from_json(expr_json)
@@ -551,7 +557,9 @@ fn execute_stage(docs: Vec<ObeDocument>, stage: &AggregateStage) -> OvnResult<Ve
                 .filter_map(|doc| {
                     if new_root_field.is_empty() {
                         Some(doc)
-                    } else if let Some(ObeValue::Document(nested)) = doc.get_path(new_root_field).cloned() {
+                    } else if let Some(ObeValue::Document(nested)) =
+                        doc.get_path(new_root_field).cloned()
+                    {
                         let mut new_doc = ObeDocument::new();
                         for (k, v) in nested {
                             new_doc.set(k, v);
@@ -725,19 +733,24 @@ fn execute_bucket(
     bucket_cfg: &serde_json::Value,
 ) -> OvnResult<Vec<ObeDocument>> {
     let cfg = bucket_cfg.as_object().unwrap();
-    let group_by = cfg.get("groupBy").and_then(|v| v.as_str()).unwrap_or("").strip_prefix('$').unwrap_or("");
+    let group_by = cfg
+        .get("groupBy")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .strip_prefix('$')
+        .unwrap_or("");
     let boundaries = cfg.get("boundaries").and_then(|v| v.as_array()).unwrap();
-    
+
     // Simplification: assume boundaries are numbers
     let mut buckets: BTreeMap<i64, Vec<&ObeDocument>> = BTreeMap::new();
     let mut default_bucket: Vec<&ObeDocument> = Vec::new();
-    
+
     for doc in &docs {
         if let Some(val) = doc.get_path(group_by).and_then(|v| v.as_f64()) {
             let mut found = false;
             for i in 0..boundaries.len() - 1 {
                 let lower = boundaries[i].as_f64().unwrap_or(f64::MIN);
-                let upper = boundaries[i+1].as_f64().unwrap_or(f64::MAX);
+                let upper = boundaries[i + 1].as_f64().unwrap_or(f64::MAX);
                 if val >= lower && val < upper {
                     buckets.entry(i as i64).or_default().push(doc);
                     found = true;
@@ -751,15 +764,18 @@ fn execute_bucket(
             default_bucket.push(doc);
         }
     }
-    
+
     let mut result = Vec::new();
     for (i, contents) in buckets {
         let mut d = ObeDocument::new();
-        d.set("_id".to_string(), ObeValue::from_json(&boundaries[i as usize]));
+        d.set(
+            "_id".to_string(),
+            ObeValue::from_json(&boundaries[i as usize]),
+        );
         d.set("count".to_string(), ObeValue::Int64(contents.len() as i64));
         result.push(d);
     }
-    
+
     if !default_bucket.is_empty() {
         let mut d = ObeDocument::new();
         if let Some(def_id) = cfg.get("default") {
@@ -767,10 +783,13 @@ fn execute_bucket(
         } else {
             d.set("_id".to_string(), ObeValue::String("Other".to_string()));
         }
-        d.set("count".to_string(), ObeValue::Int64(default_bucket.len() as i64));
+        d.set(
+            "count".to_string(),
+            ObeValue::Int64(default_bucket.len() as i64),
+        );
         result.push(d);
     }
-    
+
     Ok(result)
 }
 
@@ -867,11 +886,14 @@ mod tests {
             ]),
         );
 
-        let result = execute_stage(vec![doc], &AggregateStage::Unwind(UnwindConfig {
-            path: "tags".to_string(),
-            include_array_index: None,
-            preserve_null_and_empty_arrays: false,
-        }))
+        let result = execute_stage(
+            vec![doc],
+            &AggregateStage::Unwind(UnwindConfig {
+                path: "tags".to_string(),
+                include_array_index: None,
+                preserve_null_and_empty_arrays: false,
+            }),
+        )
         .unwrap();
         assert_eq!(result.len(), 3);
     }

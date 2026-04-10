@@ -89,6 +89,10 @@ pub enum OvnError {
     #[error("Transaction {txid} aborted: {reason}")]
     TransactionAborted { txid: u64, reason: String },
 
+    /// Invalid transaction ID or state
+    #[error("Invalid transaction: {detail}")]
+    InvalidTransaction { detail: String },
+
     /// Snapshot is no longer valid (GC purged referenced versions)
     #[error("Snapshot {snapshot_txid} expired: versions have been garbage collected")]
     SnapshotExpired { snapshot_txid: u64 },

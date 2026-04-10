@@ -1,90 +1,20 @@
 /**
  * @module core/transaction
  *
- * Transaction management with savepoints.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Re-Export: Transaction
+ * ─────────────────────────────────────────────────────────────────────────────
  *
- * Provides ACID transaction semantics with nested savepoint support.
+ * File ini adalah re-export tipis dari `../transaction.ts`.
+ *
+ * **Satu sumber kebenaran:**
+ * Seluruh implementasi Transaction ada di `src/transaction.ts`.
+ * File ini hanya agar modul internal yang import dari path `core/transaction`
+ * tidak perlu diubah satu per satu.
+ *
+ * @see {@link ../transaction.ts} — implementasi lengkap
  *
  * @packageDocumentation
  */
-import type { OblivinxDB } from './database.js';
-/**
- * Transaction with savepoint support.
- *
- * @example
- * ```typescript
- * const txn = await db.transaction();
- * try {
- *   await txn.insert('users', { name: 'Alice' });
- *   await txn.savepoint('before_orders');
- *   await txn.insert('orders', { userId: '...', total: 100 });
- *   await txn.commit();
- * } catch (err) {
- *   await txn.rollback();
- *   throw err;
- * }
- * ```
- */
-export declare class Transaction {
-    #private;
-    /**
-     * @internal — Created via db.transaction()
-     */
-    constructor(db: OblivinxDB, txid: string);
-    /** Transaction ID */
-    get txid(): string;
-    /** Whether this transaction is still active */
-    get isActive(): boolean;
-    /**
-     * Insert a document within this transaction.
-     *
-     * @param collection - Collection name
-     * @param doc - Document to insert
-     * @returns Inserted document ID
-     */
-    insert<T extends Record<string, unknown>>(collection: string, doc: T): Promise<string>;
-    /**
-     * Update documents within this transaction.
-     *
-     * @param collection - Collection name
-     * @param filter - Filter expression
-     * @param update - Update operators
-     * @returns Number of modified documents
-     */
-    update(collection: string, filter: Record<string, unknown>, update: Record<string, unknown>): Promise<number>;
-    /**
-     * Delete documents within this transaction.
-     *
-     * @param collection - Collection name
-     * @param filter - Filter expression
-     * @returns Number of deleted documents
-     */
-    delete(collection: string, filter: Record<string, unknown>): Promise<number>;
-    /**
-     * Create a savepoint — a named checkpoint within the transaction.
-     *
-     * @param name - Savepoint name (must be unique within this transaction)
-     */
-    savepoint(name: string): Promise<void>;
-    /**
-     * Rollback to a savepoint — undo all operations since the savepoint.
-     *
-     * @param name - Savepoint name
-     */
-    rollbackTo(name: string): Promise<void>;
-    /**
-     * Release a savepoint — remove it without rolling back.
-     *
-     * @param name - Savepoint name
-     */
-    releaseSavepoint(name: string): void;
-    /**
-     * Commit the transaction — make all changes permanent.
-     */
-    commit(): Promise<void>;
-    /**
-     * Rollback the transaction — undo all changes.
-     */
-    rollback(): Promise<void>;
-}
+export { Transaction, type TransactionState, type TransactionInfo, } from '../transaction.js';
 //# sourceMappingURL=transaction.d.ts.map

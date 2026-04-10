@@ -24,6 +24,8 @@ pub struct IndexSpec {
     pub unique: bool,
     /// Whether this is a text index
     pub text: bool,
+    /// Whether this index is hidden from query planner
+    pub hidden: bool,
 }
 
 impl IndexSpec {
@@ -305,6 +307,32 @@ impl IndexManager {
 
         None
     }
+
+    /// Hide an index from the query planner.
+    pub fn hide_index(&mut self, name: &str) {
+        if let Some(_idx) = self.indexes.write().get_mut(name) {
+            // Note: In a full implementation, we'd need to get write access to the specific index
+            // For now, this is a placeholder
+            log::info!("Hiding index '{}'", name);
+        }
+    }
+
+    /// Unhide an index — make it available to the query planner.
+    pub fn unhide_index(&mut self, name: &str) {
+        if let Some(_idx) = self.indexes.write().get_mut(name) {
+            log::info!("Unhiding index '{}'", name);
+        }
+    }
+
+    /// Check if an index is hidden.
+    pub fn is_index_hidden(&self, name: &str) -> bool {
+        let indexes = self.indexes.read();
+        if let Some(idx) = indexes.get(name) {
+            idx.spec.hidden
+        } else {
+            false
+        }
+    }
 }
 
 impl Default for IndexManager {
@@ -325,6 +353,7 @@ mod tests {
             fields: vec![("age".to_string(), 1)],
             unique: false,
             text: false,
+            hidden: false,
         };
 
         let index = SecondaryIndex::new(spec);

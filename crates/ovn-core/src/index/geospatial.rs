@@ -68,20 +68,14 @@ impl GeoSpatialIndex {
 
     /// Index a document containing a GeoPoint.
     pub fn index_point(&mut self, doc_id: &[u8; 16], point: GeoPoint) -> OvnResult<()> {
-        let doc = GeoDocument {
-            id: *doc_id,
-            point,
-        };
+        let doc = GeoDocument { id: *doc_id, point };
         self.rtree.insert(doc);
         Ok(())
     }
 
     /// Search finding all documents located within a specific bounding box.
     pub fn find_within(&self, bbox: &BoundingBox) -> HashSet<[u8; 16]> {
-        let aabb = AABB::from_corners(
-            [bbox.min.lng, bbox.min.lat],
-            [bbox.max.lng, bbox.max.lat],
-        );
+        let aabb = AABB::from_corners([bbox.min.lng, bbox.min.lat], [bbox.max.lng, bbox.max.lat]);
         let mut results = HashSet::new();
         for doc in self.rtree.locate_in_envelope(&aabb) {
             results.insert(doc.id);
@@ -93,7 +87,10 @@ impl GeoSpatialIndex {
     pub fn find_near(&self, point: GeoPoint, max_distance: f64) -> Vec<([u8; 16], f64)> {
         let mut results = Vec::new();
         let max_dist_2 = max_distance * max_distance;
-        for doc in self.rtree.nearest_neighbor_iter_with_distance_2(&[point.lng, point.lat]) {
+        for doc in self
+            .rtree
+            .nearest_neighbor_iter_with_distance_2(&[point.lng, point.lat])
+        {
             if doc.1 <= max_dist_2 {
                 results.push((doc.0.id, doc.1.sqrt()));
             } else {
