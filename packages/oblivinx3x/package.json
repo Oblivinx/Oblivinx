@@ -1,6 +1,6 @@
 {
   "name": "oblivinx3x",
-  "version": "0.1.0",
+  "version": "0.0.2",
   "description": "Oblivinx3x — High-Performance Embedded Document Database. Hybrid B+/LSM engine with MVCC, ACID transactions, and MongoDB-compatible query language. Zero configuration, single-file, in-process.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -14,6 +14,7 @@
   "type": "module",
   "files": [
     "dist/",
+    "native/",
     "README.md",
     "LICENSE"
   ],

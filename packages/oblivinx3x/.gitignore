@@ -1,0 +1,5 @@
+package-lock.json
+*.ovn
+tsconfig.test.json
+node_modules
+./tests

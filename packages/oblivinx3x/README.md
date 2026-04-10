@@ -1,220 +1,146 @@
-# Oblivinx3x
+# 🌌 Oblivinx3x 
 
-**High-Performance Embedded Document Database** — Built in Rust, available for Node.js.
+> **High-Performance Embedded Document Database** — Built in Rust, powered by Node.js. Single file, zero configuration, in-process, pure ACID.
 
 [![npm version](https://img.shields.io/npm/v/oblivinx3x.svg)](https://npm.im/oblivinx3x)
 [![CI](https://github.com/natz/oblivinx3x/actions/workflows/ci.yml/badge.svg)](https://github.com/natz/oblivinx3x/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A MongoDB-compatible embedded document database. Single file, zero configuration, in-process. Written in Rust with MVCC concurrency and ACID transactions.
+Oblivinx3x bridges the gap between massive scale-out databases and simple embedded key-value stores. It gives you the full power of the MongoDB Query Language (MQL) with an advanced Hybrid B+/LSM storage architecture executing right inside your Node.js process.
 
 ---
 
-## ✨ Features
+## 📖 For Beginners: Getting Started
 
-| Feature | Details |
-|---|---|
-| **Storage** | Hybrid B+/LSM engine — LSM write path + B+ tree read path |
-| **Indexing** | AHIT (Adaptive Hybrid Index Tree) — auto-promotes hot index nodes to memory |
-| **Concurrency** | Full MVCC — multiple readers + single writer, no reader blocking |
-| **Transactions** | ACID with Snapshot Isolation, optional Serializable mode |
-| **Compression** | LZ4 (fast) or Zstd (compact) page-level compression |
-| **Query** | MongoDB Query Language (MQL) subset — filter, update, aggregation pipeline |
-| **Format** | Single `.ovn` file — binary, page-oriented, CRC32 integrity |
-| **Platforms** | Windows x64 · Linux x64 · Linux ARM64 · macOS x64 · macOS ARM64 |
-
----
-
-## 📦 Installation
+### 📦 Installation
 
 ```bash
 npm install oblivinx3x
 ```
 
-Pre-built native binaries are automatically selected for your platform — **no Rust installation required**.
+*Pre-built native binaries are automatically selected for your platform (Windows x64, Linux x64/ARM64, macOS x64/ARM64). **No Rust installation required**!*
 
----
+### 🚀 Quick Start
 
-## 🚀 Quick Start
+Oblivinx3x makes document storage as simple as using an object:
 
-```javascript
+```typescript
 import { Oblivinx3x } from 'oblivinx3x';
 
-// Open or create a database
-const db = new Oblivinx3x('mydb.ovn', {
-  compression: 'lz4',    // Optional: 'none' | 'lz4' | 'zstd'
-  bufferPool: '256MB',   // Optional: buffer pool size
-});
+// 1. Initialize DB (creates file if not exists)
+const db = new Oblivinx3x('mydb.ovn', { compression: 'lz4' });
 
-// Get a collection reference (auto-created on first insert)
+// 2. Access a Collection
 const users = db.collection('users');
 
-// ── Insert ────────────────────────────────────────────────────────
-const { insertedId } = await users.insertOne({
-  name: 'Alice Kim',
-  age: 28,
-  email: 'alice@example.com',
-  address: { city: 'Jakarta', country: 'ID' },
-  tags: ['admin', 'developer'],
-});
-console.log('Inserted:', insertedId);
+// 3. Insert and Query Data!
+await users.insertOne({ name: 'Alice', role: 'developer' });
 
-// ── Find ──────────────────────────────────────────────────────────
-const results = await users.find(
-  { age: { $gt: 18 }, 'address.city': 'Jakarta' },
-  { sort: { age: -1 }, limit: 10, projection: { name: 1, age: 1 } }
-);
+const developers = await users.find({ role: 'developer' });
+console.log(developers);
 
-const alice = await users.findOne({ email: 'alice@example.com' });
-const count  = await users.countDocuments({ active: true });
-
-// ── Update ────────────────────────────────────────────────────────
-await users.updateOne(
-  { name: 'Alice Kim' },
-  { $set: { age: 29 }, $push: { tags: 'senior' } }
-);
-
-await users.updateMany(
-  { 'address.country': 'ID' },
-  { $set: { verified: true } }
-);
-
-// ── Delete ────────────────────────────────────────────────────────
-await users.deleteOne({ name: 'Alice Kim' });
-await users.deleteMany({ active: false });
-
-// ── Aggregation Pipeline ──────────────────────────────────────────
-const stats = await users.aggregate([
-  { $match: { active: true } },
-  { $group: {
-      _id: '$address.country',
-      userCount: { $sum: 1 },
-      avgAge:    { $avg: '$age' },
-  }},
-  { $sort: { userCount: -1 } },
-  { $limit: 5 },
-]);
-
-// ── Indexes ───────────────────────────────────────────────────────
-await users.createIndex({ age: 1 });                          // Single field
-await users.createIndex({ 'address.city': 1, age: -1 });     // Compound
-await users.createIndex({ content: 'text', title: 'text' }); // Full-text
-
-const indexes = await users.listIndexes();
-await users.dropIndex('age_1');
-
-// ── Transactions ──────────────────────────────────────────────────
-const txn = await db.beginTransaction();
-try {
-  await txn.update('accounts', { userId: 'u1' }, { $inc: { balance: -200 } });
-  await txn.update('accounts', { userId: 'u2' }, { $inc: { balance: 200 } });
-  await txn.commit();
-} catch (err) {
-  await txn.rollback();
-  throw err;
-}
-
-// ── Metrics ───────────────────────────────────────────────────────
-const metrics = await db.getMetrics();
-console.log({
-  cacheHitRate: metrics.cache.hitRate,
-  btreeEntries: metrics.storage.btreeEntries,
-  activeTxns:   metrics.txn.activeCount,
-});
-
-// ── Close ─────────────────────────────────────────────────────────
+// 4. Close database gracefully
 await db.close();
 ```
 
----
+### ✨ Core Features at a Glance
 
-## 🔍 Supported MQL Operators
-
-### Filter Operators
-| Category | Operators |
+| Feature | Description |
 |---|---|
-| Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin` |
-| Logical | `$and`, `$or`, `$not`, `$nor` |
-| Array | `$all`, `$elemMatch`, `$size` |
-| Element | `$exists`, `$type` |
-| Evaluation | `$regex` |
-
-### Update Operators
-| Category | Operators |
-|---|---|
-| Field | `$set`, `$unset`, `$inc`, `$mul`, `$min`, `$max`, `$rename`, `$currentDate` |
-| Array | `$push`, `$pull`, `$addToSet`, `$pop` |
-
-### Aggregation Stages
-`$match` · `$group` · `$project` · `$sort` · `$limit` · `$skip` · `$unwind` · `$lookup` · `$count`
-
-### Aggregation Accumulators
-`$sum` · `$avg` · `$min` · `$max` · `$first` · `$last` · `$push` · `$addToSet`
+| **Zero Setup** | Single `.ovn` file stores data, indexes, and logs. No server needed. |
+| **MQL Support** | Familiar `$match`, `$group`, `$set`, `$inc`, etc. |
+| **ACID Guarantees** | Multi-Version Concurrency (MVCC) means readers never block writers. |
+| **TypeScript First** | Fully typed Schemas and Collection logic. |
 
 ---
 
-## ⚙️ Configuration
+## 🧠 For Experts: Advanced Architecture & Deep Dive
 
-```javascript
-const db = new Oblivinx3x('path/to/db.ovn', {
-  pageSize:   4096,      // Page size in bytes: 512–65536 (default: 4096)
-  bufferPool: '256MB',   // Buffer pool: '64MB' | '256MB' | '1GB' (default: '256MB')
-  readOnly:   false,     // Read-only mode (default: false)
-  compression: 'lz4',   // Compression: 'none' | 'lz4' | 'zstd' (default: 'none')
-  walMode:    true,      // Write-Ahead Log (default: true)
-});
+Oblivinx3x is engineered to handle industrial-grade throughput using cutting-edge storage patterns typically found only in enterprise databases.
+
+### 🏗 Architecture Diagram
+
+```mermaid
+graph TD
+    API[Node.js / TS API Layer] --> FFI[Neon FFI Boundary]
+    FFI --> Planner[Query Planner & Optimizer]
+    Planner --> Eng{OvnEngine Core}
+    
+    Eng --> Txn[MVCC Transaction Manager]
+    Eng --> AHIT[AHIT Index Runtime]
+    
+    Txn --> Mem[MemTable WAL SkipList]
+    Txn --> BTree[Persistent B+ Tree]
+```
+
+### 1. Hybrid B+/LSM Storage Engine
+- **The Write Path (LSM):** Writes are buffered to an in-memory `MemTable` and securely logged to the Write-Ahead Log (WAL). Data batches periodically flush to Level-0 SSTables, achieving optimal write amplification.
+- **The Read Path (B+ Tree):** Background compaction seamlessly merges SSTables into a highly-optimized Persistent B+ Tree to maintain rapid range-scans and point lookups.
+
+### 2. AHIT (Adaptive Hybrid Index Tree)
+Oblivinx automatically analyzes access frequencies. Hot index nodes are dynamically promoted to a RAM-based B+ Tree (Hot Zone), while cold nodes stay on disk. 
+
+### 3. Concurrency & Isolation
+Fully supports **Snapshot Isolation** via Multi-Version Concurrency Control (MVCC). 
+Every document is multi-versioned via a TxID. Readers capture a point-in-time snapshot, eliminating read locks entirely while maintaining transactional integrity.
+
+### 4. Advanced Modules
+
+- **Security & ACL:** Built-in Row-Level Security, Document filtering (`filterDocumentByACL`), Field-Level restrictions, and high-performance Audit Logging.
+- **Views & Relations:** Create Materialized Views or define rigorous `defineRelation` dependencies with referential integrity (Cascade/Restrict constraints).
+- **Triggers:** Invoke Rust-Native hooks directly on document events for data enrichment before saving.
+
+### 5. DB Pragma Tweaking
+
+You can optimize the Rust storage behaviour strictly out of Node.js:
+```typescript
+await db.pragma('synchronous', 'normal');  // WAL modes
+await db.pragma('buffer_pool_size', '1GB');
 ```
 
 ---
 
-## 🏗️ Building from Source
+## 🛠 Advanced Usage Examples
 
-If you need to build from source (e.g., unsupported platform):
+### Aggregation Pipeline
+Oblivinx3x packs a powerful, MongoDB-like pipeline processor.
 
-```bash
-# Prerequisites: Rust (https://rustup.rs/) + Node.js >= 18
+```typescript
+const stats = await users.aggregate([
+  { $match: { active: true } },
+  { $lookup: { from: 'orders', localField: '_id', foreignField: 'userId', as: 'userOrders' } },
+  { $unwind: '$userOrders' },
+  { $group: {
+      _id: '$address.country',
+      totalSpent: { $sum: '$userOrders.amount' },
+      userCount:  { $count: {} }
+  }},
+  { $sort: { totalSpent: -1 } },
+  { $limit: 10 }
+]);
+```
 
-# Windows
-.\scripts\build.ps1
+### ACID Transactions
 
-# Linux / macOS
-./scripts/build.sh
-
-# Or via npm
-npm run build
+```typescript
+const txn = await db.beginTransaction();
+try {
+  await txn.update('accounts', { userId: 'alice' }, { $inc: { bal: -100 } });
+  await txn.update('accounts', { userId: 'bob' }, { $inc: { bal: 100 } });
+  await txn.commit();
+} catch (e) {
+  await txn.rollback();
+}
 ```
 
 ---
 
-## 📊 Architecture
+## 📄 Documentation
 
-```
-┌─────────────────────────────────────────────────────┐
-│          JavaScript / TypeScript API                │
-├─────────────────────────────────────────────────────┤
-│          Neon FFI Bindings (Rust → Node.js)         │
-├─────────────────────────────────────────────────────┤
-│          Query Engine (MQL Parser + Optimizer)      │
-├─────────────────────────────────────────────────────┤
-│          AHIT Index Engine (Adaptive B+/LSM Hybrid) │
-├─────────────────────────────────────────────────────┤
-│          MVCC Transaction Layer                     │
-├─────────────────────────────────────────────────────┤
-│          Storage Engine (WAL + MemTable + B+ Tree)  │
-├─────────────────────────────────────────────────────┤
-│          .OVN File Format (single file, CRC32)     │
-└─────────────────────────────────────────────────────┘
-```
+We have curated a detailed documentation website encompassing deep API references, security implementations, and internal details mapping straight into the Rust `crates/`. 
 
-### Key Design Choices
-
-- **AHIT (Adaptive Hybrid Index Tree)** — Combines B+ tree sorted scans with LSM write efficiency. A background "Promoter" thread moves frequently accessed index subtrees to memory (Hot Zone), eliminating disk I/O for hot key ranges.
-- **Hybrid B+/LSM Storage** — Writes go to an in-memory MemTable (skip list), then flush to L0 SSTables. Background compaction merges into a persistent B+ tree. Provides LSM write throughput + B+ scan efficiency.
-- **Full MVCC** — Every document write creates a new version with a TxID. Readers see a snapshot at transaction-start time. A GC thread purges versions older than the oldest active snapshot.
-- **Single `.ovn` File** — All pages (data, index, WAL, metadata) are stored in one file. The header at page 0 contains root pointers and crash-recovery flags.
+Dive in at: `packages/oblivinx3x/docs/index.html` 
 
 ---
 
-## 📄 License
-
-MIT © Natz
+*MIT Licensed — Developed for modern high-intensity environments.*

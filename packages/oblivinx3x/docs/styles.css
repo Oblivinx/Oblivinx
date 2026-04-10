@@ -1,0 +1,574 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;600&display=swap');
+
+:root {
+  --bg-color: #0b0f19;
+  --bg-secondary: #131a2a;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --accent-cyan: #06b6d4;
+  --accent-purple: #8b5cf6;
+  --border-color: #1e293b;
+  --glass-bg: rgba(19, 26, 42, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.05);
+
+  --skeleton-base: #1e293b;
+  --skeleton-highlight: #2dd4bf22;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  line-height: 1.6;
+  overflow-x: hidden;
+  display: flex;
+}
+
+/* ==========================================================================
+   SCROLLBAR
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-purple);
+}
+
+/* ==========================================================================
+   SKELETON LOADING
+   ========================================================================== */
+#skeleton-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-color);
+  z-index: 9999;
+  display: flex;
+  transition: opacity 0.6s ease-in-out;
+}
+
+.skeleton-sidebar {
+  width: 280px;
+  border-right: 1px solid var(--border-color);
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.skeleton-main {
+  flex: 1;
+  padding: 3rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.skel-box {
+  background: var(--skeleton-base);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.skel-box::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg,
+      transparent,
+      rgba(255, 255, 255, 0.08),
+      transparent);
+  animation: skel-shimmer 1.5s infinite ease-in-out;
+}
+
+@keyframes skel-shimmer {
+  100% {
+    left: 200%;
+  }
+}
+
+.skel-logo {
+  height: 40px;
+  width: 60%;
+}
+
+.skel-item {
+  height: 20px;
+  width: 80%;
+  border-radius: 4px;
+}
+
+.skel-title {
+  height: 48px;
+  width: 40%;
+}
+
+.skel-text {
+  height: 16px;
+  width: 90%;
+}
+
+.skel-code {
+  height: 200px;
+  width: 100%;
+  border-radius: 12px;
+}
+
+/* ==========================================================================
+   LAYOUT: SIDEBAR
+   ========================================================================== */
+.sidebar {
+  width: 280px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease;
+  z-index: 100;
+}
+
+.sidebar-header {
+  padding: 2rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 1px;
+}
+
+.sidebar-nav {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.nav-group {
+  margin-bottom: 1.5rem;
+}
+
+.nav-group h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.sidebar-nav ul {
+  list-style: none;
+}
+
+.sidebar-nav li {
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-nav a {
+  text-decoration: none;
+  color: var(--text-main);
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  display: block;
+  transition: all 0.2s ease;
+}
+
+.sidebar-nav a:hover,
+.sidebar-nav a.active {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--accent-purple);
+  padding-left: 1rem;
+}
+
+/* ==========================================================================
+   LAYOUT: MAIN CONTENT
+   ========================================================================== */
+#app-content {
+  opacity: 0;
+  /* Hidden initially, shown via JS after skeleton */
+  transition: opacity 0.8s ease-in-out;
+  display: flex;
+  width: 100%;
+}
+
+.main-content {
+  flex: 1;
+  padding: 4rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.main-content h1 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 3.5rem;
+  line-height: 1.2;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.main-content h2 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2rem;
+  margin: 3rem 0 1.5rem;
+  color: #fff;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+
+.main-content h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.5rem;
+  margin: 2rem 0 1rem;
+  color: var(--text-main);
+}
+
+.main-content p {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+/* ==========================================================================
+   GLASSMORPHISM CARDS
+   ========================================================================== */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 2rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.card .icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  display: inline-block;
+}
+
+.card h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  color: #fff;
+}
+
+.card p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* ==========================================================================
+   CODE BLOCKS
+   ========================================================================== */
+pre {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  overflow-x: auto;
+  margin-bottom: 2rem;
+  position: relative;
+  font-family: 'Space Grotesk', monospace;
+  font-size: 0.9rem;
+}
+
+pre::before {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+}
+
+code {
+  color: #e2e8f0;
+}
+
+.token-keyword {
+  color: var(--accent-purple);
+}
+
+.token-string {
+  color: var(--accent-cyan);
+}
+
+.token-comment {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.token-function {
+  color: #facc15;
+}
+
+/* Inline Code */
+p>code,
+li>code {
+  background: var(--bg-secondary);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Space Grotesk', monospace;
+  font-size: 0.9em;
+  color: var(--accent-cyan);
+}
+
+/* ==========================================================================
+   SCROLL ANIMATIONS (INTERSECTION OBSERVER)
+   ========================================================================== */
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+  will-change: opacity, transform;
+}
+
+.animate-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Delay modifiers */
+.delay-100 {
+  transition-delay: 100ms;
+}
+
+.delay-200 {
+  transition-delay: 200ms;
+}
+
+.delay-300 {
+  transition-delay: 300ms;
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN & MOBILE MENU
+   ========================================================================== */
+.menu-toggle {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 200;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+@media (max-width: 768px) {
+  body {
+    flex-direction: column;
+  }
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .main-content {
+    padding: 2rem;
+    margin-top: 4rem;
+  }
+
+  .main-content h1 {
+    font-size: 2.5rem;
+  }
+}
+
+/* ==========================================================================
+   LANGUAGE TOGGLE
+   ========================================================================== */
+.lang-toggle {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 1rem;
+}
+
+.lang-btn {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: 'Space Grotesk', sans-serif;
+  transition: all 0.2s ease;
+}
+
+.lang-btn:hover {
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+.lang-btn.active {
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
+  color: #fff;
+}
+
+/* ==========================================================================
+   FEATURE TABLE
+   ========================================================================== */
+.feature-table {
+  overflow-x: auto;
+  margin-bottom: 2rem;
+}
+
+.feature-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.feature-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--accent-purple);
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.feature-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.feature-table tr:hover td {
+  background: rgba(139, 92, 246, 0.05);
+  color: var(--text-main);
+}
+
+.feature-table td:first-child {
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+/* ==========================================================================
+   AGGREGATION STAGE GRID
+   ========================================================================== */
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stage-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.stage-card:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+}
+
+.stage-card code {
+  display: block;
+  font-size: 1rem;
+  color: var(--accent-cyan);
+  margin-bottom: 0.25rem;
+}
+
+.stage-card span {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   API LIST
+   ========================================================================== */
+.api-list {
+  margin-bottom: 1.5rem;
+}
+
+.api-item {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-family: 'Space Grotesk', monospace;
+  font-size: 0.9rem;
+  color: var(--accent-cyan);
+}
+
+.api-item span {
+  font-family: 'Inter', sans-serif;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* ==========================================================================
+   HIDDEN ELEMENTS FOR LANGUAGE TOGGLE
+   ========================================================================== */
+[data-en][data-id] {
+  transition: opacity 0.15s ease;
+}
