@@ -46,7 +46,8 @@
         <div class="nav-group">
           <h3 data-en="Getting Started" data-id="Memulai">Getting Started</h3>
           <ul>
-            <li><a href="#introduction" class="active" data-en="Introduction" data-id="Pendahuluan">Introduction</a></li>
+            <li><a href="#introduction" class="active" data-en="Introduction" data-id="Pendahuluan">Introduction</a>
+            </li>
             <li><a href="#quick-start" data-en="Quick Start" data-id="Mulai Cepat">Quick Start</a></li>
             <li><a href="#features" data-en="Features Overview" data-id="Ringkasan Fitur">Features Overview</a></li>
           </ul>
@@ -65,14 +66,16 @@
           <ul>
             <li><a href="#filters" data-en="Filter Operators" data-id="Operator Filter">Filter Operators</a></li>
             <li><a href="#updates" data-en="Update Operators" data-id="Operator Update">Update Operators</a></li>
-            <li><a href="#aggregation" data-en="Aggregation Pipeline" data-id="Pipeline Agregasi">Aggregation Pipeline</a></li>
+            <li><a href="#aggregation" data-en="Aggregation Pipeline" data-id="Pipeline Agregasi">Aggregation
+                Pipeline</a></li>
           </ul>
         </div>
         <div class="nav-group">
           <h3 data-en="Indexes & Search" data-id="Indeks & Pencarian">Indexes &amp; Search</h3>
           <ul>
             <li><a href="#indexes" data-en="Secondary Indexes" data-id="Indeks Sekunder">Secondary Indexes</a></li>
-            <li><a href="#fulltext" data-en="Full-Text Search" data-id="Pencarian Teks Lengkap">Full-Text Search</a></li>
+            <li><a href="#fulltext" data-en="Full-Text Search" data-id="Pencarian Teks Lengkap">Full-Text Search</a>
+            </li>
             <li><a href="#vector" data-en="Vector Search" data-id="Pencarian Vektor">Vector Search</a></li>
             <li><a href="#geospatial" data-en="Geospatial" data-id="Geospasial">Geospatial</a></li>
             <li><a href="#autocomplete" data-en="Autocomplete" data-id="Autolengkap">Autocomplete</a></li>
@@ -81,7 +84,8 @@
         <div class="nav-group">
           <h3 data-en="Advanced Features" data-id="Fitur Lanjutan">Advanced Features</h3>
           <ul>
-            <li><a href="#architecture" data-en="Storage Architecture" data-id="Arsitektur Penyimpanan">Storage Architecture</a></li>
+            <li><a href="#architecture" data-en="Storage Architecture" data-id="Arsitektur Penyimpanan">Storage
+                Architecture</a></li>
             <li><a href="#blob" data-en="Blob Storage" data-id="Penyimpanan Blob">Blob Storage</a></li>
             <li><a href="#views" data-en="Views" data-id="Tampilan">Views</a></li>
             <li><a href="#relations" data-en="Relations & FK" data-id="Relasi & FK">Relations &amp; FK</a></li>
@@ -94,25 +98,31 @@
         <div class="nav-group">
           <h3 data-en="Security" data-id="Keamanan">Security</h3>
           <ul>
-            <li><a href="#security" data-en="Access Control & ACL" data-id="Kontrol Akses & ACL">Access Control &amp; ACL</a></li>
+            <li><a href="#security" data-en="Access Control & ACL" data-id="Kontrol Akses & ACL">Access Control &amp;
+                ACL</a></li>
             <li><a href="#audit-log" data-en="Audit Logging" data-id="Pencatatan Audit">Audit Logging</a></li>
-            <li><a href="#input-validation" data-en="Input Validation" data-id="Validasi Input">Input Validation</a></li>
+            <li><a href="#input-validation" data-en="Input Validation" data-id="Validasi Input">Input Validation</a>
+            </li>
             <li><a href="#rate-limiter" data-en="Rate Limiter" data-id="Pembatas Laju">Rate Limiter</a></li>
           </ul>
         </div>
         <div class="nav-group">
           <h3 data-en="Utilities" data-id="Utilitas">Utilities</h3>
           <ul>
-            <li><a href="#utils" data-en="Utils & ID Generation" data-id="Utilitas & Pembuatan ID">Utils &amp; ID Generation</a></li>
-            <li><a href="#export-backup" data-en="Export & Backup" data-id="Ekspor & Cadangan">Export &amp; Backup</a></li>
-            <li><a href="#explain" data-en="Explain & Diagnostics" data-id="Penjelasan & Diagnostik">Explain &amp; Diagnostics</a></li>
+            <li><a href="#utils" data-en="Utils & ID Generation" data-id="Utilitas & Pembuatan ID">Utils &amp; ID
+                Generation</a></li>
+            <li><a href="#export-backup" data-en="Export & Backup" data-id="Ekspor & Cadangan">Export &amp; Backup</a>
+            </li>
+            <li><a href="#explain" data-en="Explain & Diagnostics" data-id="Penjelasan & Diagnostik">Explain &amp;
+                Diagnostics</a></li>
           </ul>
         </div>
         <div class="nav-group">
           <h3 data-en="Internals" data-id="Internal">Internals</h3>
           <ul>
             <li><a href="#format" data-en="OBE Format" data-id="Format OBE">OBE Format</a></li>
-            <li><a href="#workers" data-en="Background Workers" data-id="Worker Latar Belakang">Background Workers</a></li>
+            <li><a href="#workers" data-en="Background Workers" data-id="Worker Latar Belakang">Background Workers</a>
+            </li>
             <li><a href="#error-codes" data-en="Error Codes" data-id="Kode Error">Error Codes</a></li>
           </ul>
         </div>
@@ -124,25 +134,39 @@
 
       <!-- ===================== INTRODUCTION ===================== -->
       <section id="introduction" class="animate-on-scroll">
-        <h1 data-en="High-Performance Embedded Document Database" data-id="Database Dokumen Embedded Berkinerja Tinggi">High-Performance Embedded Document Database</h1>
-        <p data-en="Built in <strong>Rust</strong>. Wrapped for <strong>Node.js</strong>. Zero configuration, in-process, single file, pure ACID." data-id="Dibangun dengan <strong>Rust</strong>. Dibungkus untuk <strong>Node.js</strong>. Tanpa konfigurasi, dalam-proses, satu file, ACID murni.">Built in <strong>Rust</strong>. Wrapped for <strong>Node.js</strong>. Zero configuration, in-process, single file, pure ACID.</p>
-        <p data-en="Oblivinx3x is a MongoDB-compatible embedded database providing ACID transactions, MVCC concurrency control, and a state-of-the-art Hybrid B+/LSM storage architecture — all executing right inside your Node.js process." data-id="Oblivinx3x adalah database embedded yang kompatibel dengan MongoDB, menyediakan transaksi ACID, kontrol konkurensi MVCC, dan arsitektur penyimpanan Hybrid B+/LSM mutakhir — semua berjalan di dalam proses Node.js Anda.">Oblivinx3x is a MongoDB-compatible embedded database providing ACID transactions, MVCC concurrency control, and a state-of-the-art Hybrid B+/LSM storage architecture — all executing right inside your Node.js process.</p>
+        <h1 data-en="High-Performance Embedded Document Database" data-id="Database Dokumen Embedded Berkinerja Tinggi">
+          High-Performance Embedded Document Database</h1>
+        <p data-en="Built in <strong>Rust</strong>. Wrapped for <strong>Node.js</strong>. Zero configuration, in-process, single file, pure ACID."
+          data-id="Dibangun dengan <strong>Rust</strong>. Dibungkus untuk <strong>Node.js</strong>. Tanpa konfigurasi, dalam-proses, satu file, ACID murni.">
+          Built in <strong>Rust</strong>. Wrapped for <strong>Node.js</strong>. Zero configuration, in-process, single
+          file, pure ACID.</p>
+        <p data-en="Oblivinx3x is a MongoDB-compatible embedded database providing ACID transactions, MVCC concurrency control, and a state-of-the-art Hybrid B+/LSM storage architecture — all executing right inside your Node.js process."
+          data-id="Oblivinx3x adalah database embedded yang kompatibel dengan MongoDB, menyediakan transaksi ACID, kontrol konkurensi MVCC, dan arsitektur penyimpanan Hybrid B+/LSM mutakhir — semua berjalan di dalam proses Node.js Anda.">
+          Oblivinx3x is a MongoDB-compatible embedded database providing ACID transactions, MVCC concurrency control,
+          and a state-of-the-art Hybrid B+/LSM storage architecture — all executing right inside your Node.js process.
+        </p>
 
         <div class="feature-grid">
           <div class="card delay-100">
             <span class="icon">&#x1F680;</span>
             <h3 data-en="Rust Engine" data-id="Mesin Rust">Rust Engine</h3>
-            <p data-en="Maximum performance via Neon FFI. Zero-copy where possible. Memory-safe by design." data-id="Performa maksimal melalui Neon FFI. Zero-copy bila memungkinkan. Aman memori secara desain.">Maximum performance via Neon FFI. Zero-copy where possible. Memory-safe by design.</p>
+            <p data-en="Maximum performance via Neon FFI. Zero-copy where possible. Memory-safe by design."
+              data-id="Performa maksimal melalui Neon FFI. Zero-copy bila memungkinkan. Aman memori secara desain.">
+              Maximum performance via Neon FFI. Zero-copy where possible. Memory-safe by design.</p>
           </div>
           <div class="card delay-200">
             <span class="icon">&#x1F512;</span>
             <h3 data-en="ACID & MVCC" data-id="ACID & MVCC">ACID &amp; MVCC</h3>
-            <p data-en="Snapshot Isolation ensures readers never block writers. Full rollback support with savepoints." data-id="Isolasi Snapshot memastikan pembaca tidak pernah memblokir penulis. Dukungan rollback penuh dengan savepoint.">Snapshot Isolation ensures readers never block writers. Full rollback support with savepoints.</p>
+            <p data-en="Snapshot Isolation ensures readers never block writers. Full rollback support with savepoints."
+              data-id="Isolasi Snapshot memastikan pembaca tidak pernah memblokir penulis. Dukungan rollback penuh dengan savepoint.">
+              Snapshot Isolation ensures readers never block writers. Full rollback support with savepoints.</p>
           </div>
           <div class="card delay-300">
             <span class="icon">&#x1F50D;</span>
             <h3 data-en="MQL Compatible" data-id="Kompatibel MQL">MQL Compatible</h3>
-            <p data-en="MongoDB Query Language: $match, $group, $lookup, $facet, $bucket, window functions, and more." data-id="Bahasa Query MongoDB: $match, $group, $lookup, $facet, $bucket, fungsi window, dan lainnya.">MongoDB Query Language: $match, $group, $lookup, $facet, $bucket, window functions, and more.</p>
+            <p data-en="MongoDB Query Language: $match, $group, $lookup, $facet, $bucket, window functions, and more."
+              data-id="Bahasa Query MongoDB: $match, $group, $lookup, $facet, $bucket, fungsi window, dan lainnya.">
+              MongoDB Query Language: $match, $group, $lookup, $facet, $bucket, window functions, and more.</p>
           </div>
         </div>
       </section>
@@ -150,7 +174,9 @@
       <!-- ===================== QUICK START ===================== -->
       <section id="quick-start" class="animate-on-scroll">
         <h2 data-en="Quick Start" data-id="Mulai Cepat">Quick Start</h2>
-        <p data-en="Install and start using Oblivinx3x in under a minute. No Rust toolchain needed." data-id="Instal dan mulai gunakan Oblivinx3x dalam satu menit. Tidak butuh Rust toolchain.">Install and start using Oblivinx3x in under a minute. No Rust toolchain needed.</p>
+        <p data-en="Install and start using Oblivinx3x in under a minute. No Rust toolchain needed."
+          data-id="Instal dan mulai gunakan Oblivinx3x dalam satu menit. Tidak butuh Rust toolchain.">Install and start
+          using Oblivinx3x in under a minute. No Rust toolchain needed.</p>
         <pre><code><span class="token-comment"># Install via npm</span>
 npm install oblivinx3x</code></pre>
 
@@ -191,38 +217,161 @@ npm install oblivinx3x</code></pre>
               </tr>
             </thead>
             <tbody>
-              <tr><td rowspan="6">Storage</td><td data-en="B+ Tree (Primary Index)" data-id="B+ Tree (Indeks Utama)">B+ Tree (Primary Index)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="MemTable + SSTable (LSM)" data-id="MemTable + SSTable (LSM)">MemTable + SSTable (LSM)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="WAL with Crash Recovery" data-id="WAL dengan Pemulihan Crash">WAL with Crash Recovery</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Segmented LRU Buffer Pool" data-id="Buffer Pool Segmented LRU">Segmented LRU Buffer Pool</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Blob Storage (Chunked)" data-id="Penyimpanan Blob (Terpotong)">Blob Storage (Chunked)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="LZ4 / Zstd Compression" data-id="Kompresi LZ4 / Zstd">LZ4 / Zstd Compression</td><td>&#x2705;</td></tr>
-              <tr><td rowspan="5">Query</td><td data-en="MQL Filter Operators (20+)" data-id="Operator Filter MQL (20+)">MQL Filter Operators (20+)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Update Operators (16+)" data-id="Operator Update (16+)">Update Operators (16+)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Aggregation Pipeline (18+ stages)" data-id="Pipeline Agregasi (18+ tahap)">Aggregation Pipeline (18+ stages)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Cost-based Query Planner" data-id="Perencana Query Berbasis Biaya">Cost-based Query Planner</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Index-accelerized lookups" data-id="Lookup dipercepat indeks">Index-accelerized lookups</td><td>&#x2705;</td></tr>
-              <tr><td rowspan="5">Indexes</td><td data-en="Secondary Indexes (Single/Compound)" data-id="Indeks Sekunder (Tunggal/Komposit)">Secondary Indexes (Single/Compound)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="AHIT (Adaptive Hybrid Index Tree)" data-id="AHIT (Pohon Indeks Hybrid Adaptif)">AHIT (Adaptive Hybrid Index Tree)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Full-Text Search (TF-IDF)" data-id="Pencarian Teks Lengkap (TF-IDF)">Full-Text Search (TF-IDF)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Vector Search (Cosine Similarity)" data-id="Pencarian Vektor (Kesamaan Kosinus)">Vector Search (Cosine Similarity)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Geospatial (R-Tree, $geoWithin, $near)" data-id="Geospasial (R-Tree, $geoWithin, $near)">Geospatial (R-Tree, $geoWithin, $near)</td><td>&#x2705;</td></tr>
-              <tr><td rowspan="4">ACID</td><td data-en="MVCC Snapshot Isolation" data-id="Isolasi Snapshot MVCC">MVCC Snapshot Isolation</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Savepoints (Partial Rollback)" data-id="Savepoint (Rollback Parsial)">Savepoints (Partial Rollback)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Session Idempotency (Retryable Writes)" data-id="Idempotensi Sesi (Tulis Ulang)">Session Idempotency (Retryable Writes)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Write-Write Conflict Detection" data-id="Deteksi Konflik Tulis-Tulis">Write-Write Conflict Detection</td><td>&#x2705;</td></tr>
-              <tr><td rowspan="6">Advanced</td><td data-en="Views (Logical + Materialized)" data-id="Tampilan (Logis + Termaterialisasi)">Views (Logical + Materialized)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Relations / Foreign Keys" data-id="Relasi / Kunci Asing">Relations / Foreign Keys</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Triggers (before/after events)" data-id="Pemicu (event before/after)">Triggers (before/after events)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Change Streams (Real-time)" data-id="Aliran Perubahan (Waktu Nyata)">Change Streams (Real-time)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Attached Databases" data-id="Database Terlampir">Attached Databases</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Pragmas (Runtime Config)" data-id="Pragma (Konfigurasi Runtime)">Pragmas (Runtime Config)</td><td>&#x2705;</td></tr>
-              <tr><td rowspan="4">Security</td><td data-en="Access Control (RBAC)" data-id="Kontrol Akses (RBAC)">Access Control (RBAC)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Field-Level ACL" data-id="ACL Tingkat Field">Field-Level ACL</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Audit Logging" data-id="Pencatatan Audit">Audit Logging</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Input Validation + Rate Limiter" data-id="Validasi Input + Pembatas Laju">Input Validation + Rate Limiter</td><td>&#x2705;</td></tr>
-              <tr><td rowspan="2">Utils</td><td data-en="ID Generation (UUID/Snowflake/Increment)" data-id="Pembuatan ID (UUID/Snowflake/Inkremen)">ID Generation (UUID/Snowflake/Increment)</td><td>&#x2705;</td></tr>
-              <tr><td data-en="Safe Serialization (Depth Guard)" data-id="Serialisasi Aman (Penjaga Kedalaman)">Safe Serialization (Depth Guard)</td><td>&#x2705;</td></tr>
+              <tr>
+                <td rowspan="6">Storage</td>
+                <td data-en="B+ Tree (Primary Index)" data-id="B+ Tree (Indeks Utama)">B+ Tree (Primary Index)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="MemTable + SSTable (LSM)" data-id="MemTable + SSTable (LSM)">MemTable + SSTable (LSM)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="WAL with Crash Recovery" data-id="WAL dengan Pemulihan Crash">WAL with Crash Recovery</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Segmented LRU Buffer Pool" data-id="Buffer Pool Segmented LRU">Segmented LRU Buffer Pool
+                </td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Blob Storage (Chunked)" data-id="Penyimpanan Blob (Terpotong)">Blob Storage (Chunked)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="LZ4 / Zstd Compression" data-id="Kompresi LZ4 / Zstd">LZ4 / Zstd Compression</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td rowspan="5">Query</td>
+                <td data-en="MQL Filter Operators (20+)" data-id="Operator Filter MQL (20+)">MQL Filter Operators (20+)
+                </td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Update Operators (16+)" data-id="Operator Update (16+)">Update Operators (16+)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Aggregation Pipeline (18+ stages)" data-id="Pipeline Agregasi (18+ tahap)">Aggregation
+                  Pipeline (18+ stages)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Cost-based Query Planner" data-id="Perencana Query Berbasis Biaya">Cost-based Query Planner
+                </td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Index-accelerized lookups" data-id="Lookup dipercepat indeks">Index-accelerized lookups
+                </td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td rowspan="5">Indexes</td>
+                <td data-en="Secondary Indexes (Single/Compound)" data-id="Indeks Sekunder (Tunggal/Komposit)">Secondary
+                  Indexes (Single/Compound)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="AHIT (Adaptive Hybrid Index Tree)" data-id="AHIT (Pohon Indeks Hybrid Adaptif)">AHIT
+                  (Adaptive Hybrid Index Tree)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Full-Text Search (TF-IDF)" data-id="Pencarian Teks Lengkap (TF-IDF)">Full-Text Search
+                  (TF-IDF)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Vector Search (Cosine Similarity)" data-id="Pencarian Vektor (Kesamaan Kosinus)">Vector
+                  Search (Cosine Similarity)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Geospatial (R-Tree, $geoWithin, $near)" data-id="Geospasial (R-Tree, $geoWithin, $near)">
+                  Geospatial (R-Tree, $geoWithin, $near)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td rowspan="4">ACID</td>
+                <td data-en="MVCC Snapshot Isolation" data-id="Isolasi Snapshot MVCC">MVCC Snapshot Isolation</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Savepoints (Partial Rollback)" data-id="Savepoint (Rollback Parsial)">Savepoints (Partial
+                  Rollback)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Session Idempotency (Retryable Writes)" data-id="Idempotensi Sesi (Tulis Ulang)">Session
+                  Idempotency (Retryable Writes)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Write-Write Conflict Detection" data-id="Deteksi Konflik Tulis-Tulis">Write-Write Conflict
+                  Detection</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td rowspan="6">Advanced</td>
+                <td data-en="Views (Logical + Materialized)" data-id="Tampilan (Logis + Termaterialisasi)">Views
+                  (Logical + Materialized)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Relations / Foreign Keys" data-id="Relasi / Kunci Asing">Relations / Foreign Keys</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Triggers (before/after events)" data-id="Pemicu (event before/after)">Triggers
+                  (before/after events)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Change Streams (Real-time)" data-id="Aliran Perubahan (Waktu Nyata)">Change Streams
+                  (Real-time)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Attached Databases" data-id="Database Terlampir">Attached Databases</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Pragmas (Runtime Config)" data-id="Pragma (Konfigurasi Runtime)">Pragmas (Runtime Config)
+                </td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td rowspan="4">Security</td>
+                <td data-en="Access Control (RBAC)" data-id="Kontrol Akses (RBAC)">Access Control (RBAC)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Field-Level ACL" data-id="ACL Tingkat Field">Field-Level ACL</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Audit Logging" data-id="Pencatatan Audit">Audit Logging</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Input Validation + Rate Limiter" data-id="Validasi Input + Pembatas Laju">Input Validation
+                  + Rate Limiter</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td rowspan="2">Utils</td>
+                <td data-en="ID Generation (UUID/Snowflake/Increment)" data-id="Pembuatan ID (UUID/Snowflake/Inkremen)">
+                  ID Generation (UUID/Snowflake/Increment)</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Safe Serialization (Depth Guard)" data-id="Serialisasi Aman (Penjaga Kedalaman)">Safe
+                  Serialization (Depth Guard)</td>
+                <td>&#x2705;</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -231,7 +380,10 @@ npm install oblivinx3x</code></pre>
       <!-- ===================== DATABASE API ===================== -->
       <section id="database" class="animate-on-scroll">
         <h2 data-en="Database API" data-id="API Database">Database API</h2>
-        <p data-en="The <code>Oblivinx3x</code> class is the main entry point. It manages database lifecycle, collections, transactions, and advanced features." data-id="Class <code>Oblivinx3x</code> adalah titik masuk utama. Mengelola siklus hidup database, collection, transaksi, dan fitur lanjutan.">The <code>Oblivinx3x</code> class is the main entry point. It manages database lifecycle, collections, transactions, and advanced features.</p>
+        <p data-en="The <code>Oblivinx3x</code> class is the main entry point. It manages database lifecycle, collections, transactions, and advanced features."
+          data-id="Class <code>Oblivinx3x</code> adalah titik masuk utama. Mengelola siklus hidup database, collection, transaksi, dan fitur lanjutan.">
+          The <code>Oblivinx3x</code> class is the main entry point. It manages database lifecycle, collections,
+          transactions, and advanced features.</p>
 
         <h3 data-en="Constructor" data-id="Konstruktor">Constructor</h3>
         <pre><code><span class="token-keyword">new</span> <span class="token-function">Oblivinx3x</span>(path: <span class="token-type">string</span>, options?: <span class="token-type">OvnConfig</span>)</code></pre>
@@ -240,37 +392,85 @@ npm install oblivinx3x</code></pre>
         <div class="feature-table">
           <table>
             <thead>
-              <tr><th data-en="Option" data-id="Opsi">Option</th><th data-en="Type" data-id="Tipe">Type</th><th data-en="Default" data-id="Default">Default</th><th data-en="Description" data-id="Deskripsi">Description</th></tr>
+              <tr>
+                <th data-en="Option" data-id="Opsi">Option</th>
+                <th data-en="Type" data-id="Tipe">Type</th>
+                <th data-en="Default" data-id="Default">Default</th>
+                <th data-en="Description" data-id="Deskripsi">Description</th>
+              </tr>
             </thead>
             <tbody>
-              <tr><td><code>pageSize</code></td><td><code>number</code></td><td>4096</td><td data-en="Page size in bytes (power of 2, 512–65536)" data-id="Ukuran page dalam byte (pangkat 2, 512–65536)">Page size in bytes (power of 2, 512–65536)</td></tr>
-              <tr><td><code>bufferPool</code></td><td><code>string</code></td><td>'256MB'</td><td data-en="Buffer pool size ('64MB', '256MB', '1GB')" data-id="Ukuran buffer pool ('64MB', '256MB', '1GB')">Buffer pool size ('64MB', '256MB', '1GB')</td></tr>
-              <tr><td><code>readOnly</code></td><td><code>boolean</code></td><td>false</td><td data-en="Open in read-only mode" data-id="Buka dalam mode baca-saja">Open in read-only mode</td></tr>
-              <tr><td><code>compression</code></td><td><code>'none'|'lz4'|'zstd'</code></td><td>'none'</td><td data-en="Storage compression algorithm" data-id="Algoritma kompresi penyimpanan">Storage compression algorithm</td></tr>
-              <tr><td><code>walMode</code></td><td><code>boolean</code></td><td>true</td><td data-en="Enable Write-Ahead Log (always on)" data-id="Aktifkan WAL (selalu aktif)">Enable Write-Ahead Log (always on)</td></tr>
+              <tr>
+                <td><code>pageSize</code></td>
+                <td><code>number</code></td>
+                <td>4096</td>
+                <td data-en="Page size in bytes (power of 2, 512–65536)"
+                  data-id="Ukuran page dalam byte (pangkat 2, 512–65536)">Page size in bytes (power of 2, 512–65536)
+                </td>
+              </tr>
+              <tr>
+                <td><code>bufferPool</code></td>
+                <td><code>string</code></td>
+                <td>'256MB'</td>
+                <td data-en="Buffer pool size ('64MB', '256MB', '1GB')"
+                  data-id="Ukuran buffer pool ('64MB', '256MB', '1GB')">Buffer pool size ('64MB', '256MB', '1GB')</td>
+              </tr>
+              <tr>
+                <td><code>readOnly</code></td>
+                <td><code>boolean</code></td>
+                <td>false</td>
+                <td data-en="Open in read-only mode" data-id="Buka dalam mode baca-saja">Open in read-only mode</td>
+              </tr>
+              <tr>
+                <td><code>compression</code></td>
+                <td><code>'none'|'lz4'|'zstd'</code></td>
+                <td>'none'</td>
+                <td data-en="Storage compression algorithm" data-id="Algoritma kompresi penyimpanan">Storage compression
+                  algorithm</td>
+              </tr>
+              <tr>
+                <td><code>walMode</code></td>
+                <td><code>boolean</code></td>
+                <td>true</td>
+                <td data-en="Enable Write-Ahead Log (always on)" data-id="Aktifkan WAL (selalu aktif)">Enable
+                  Write-Ahead Log (always on)</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
         <h3 data-en="Methods" data-id="Method">Methods</h3>
         <div class="api-list">
-          <div class="api-item"><code>collection&lt;T&gt;(name)</code> <span data-en="— Get collection reference" data-id="— Dapatkan referensi collection">— Get collection reference</span></div>
-          <div class="api-item"><code>createCollection(name, options?)</code> <span data-en="— Create collection explicitly" data-id="— Buat collection secara eksplisit">— Create collection explicitly</span></div>
-          <div class="api-item"><code>dropCollection(name)</code> <span data-en="— Drop collection" data-id="— Hapus collection">— Drop collection</span></div>
-          <div class="api-item"><code>listCollections()</code> <span data-en="— List all collection names" data-id="— Daftar semua nama collection">— List all collection names</span></div>
-          <div class="api-item"><code>beginTransaction()</code> <span data-en="— Start MVCC transaction" data-id="— Mulai transaksi MVCC">— Start MVCC transaction</span></div>
-          <div class="api-item"><code>putBlob(data)</code> / <code>getBlob(uuid)</code> <span data-en="— Blob storage" data-id="— Penyimpanan blob">— Blob storage</span></div>
-          <div class="api-item"><code>checkpoint()</code> <span data-en="— Force flush to disk" data-id="— Paksa flush ke disk">— Force flush to disk</span></div>
-          <div class="api-item"><code>getMetrics()</code> / <code>getVersion()</code> <span data-en="— Observability" data-id="— Observabilitas">— Observability</span></div>
-          <div class="api-item"><code>export()</code> / <code>backup(path)</code> <span data-en="— Export/backup" data-id="— Ekspor/cadangan">— Export/backup</span></div>
-          <div class="api-item"><code>close()</code> <span data-en="— Graceful close" data-id="— Tutup dengan graceful">— Graceful close</span></div>
+          <div class="api-item"><code>collection&lt;T&gt;(name)</code> <span data-en="— Get collection reference"
+              data-id="— Dapatkan referensi collection">— Get collection reference</span></div>
+          <div class="api-item"><code>createCollection(name, options?)</code> <span
+              data-en="— Create collection explicitly" data-id="— Buat collection secara eksplisit">— Create collection
+              explicitly</span></div>
+          <div class="api-item"><code>dropCollection(name)</code> <span data-en="— Drop collection"
+              data-id="— Hapus collection">— Drop collection</span></div>
+          <div class="api-item"><code>listCollections()</code> <span data-en="— List all collection names"
+              data-id="— Daftar semua nama collection">— List all collection names</span></div>
+          <div class="api-item"><code>beginTransaction()</code> <span data-en="— Start MVCC transaction"
+              data-id="— Mulai transaksi MVCC">— Start MVCC transaction</span></div>
+          <div class="api-item"><code>putBlob(data)</code> / <code>getBlob(uuid)</code> <span data-en="— Blob storage"
+              data-id="— Penyimpanan blob">— Blob storage</span></div>
+          <div class="api-item"><code>checkpoint()</code> <span data-en="— Force flush to disk"
+              data-id="— Paksa flush ke disk">— Force flush to disk</span></div>
+          <div class="api-item"><code>getMetrics()</code> / <code>getVersion()</code> <span data-en="— Observability"
+              data-id="— Observabilitas">— Observability</span></div>
+          <div class="api-item"><code>export()</code> / <code>backup(path)</code> <span data-en="— Export/backup"
+              data-id="— Ekspor/cadangan">— Export/backup</span></div>
+          <div class="api-item"><code>close()</code> <span data-en="— Graceful close"
+              data-id="— Tutup dengan graceful">— Graceful close</span></div>
         </div>
       </section>
 
       <!-- ===================== COLLECTION API ===================== -->
       <section id="collection" class="animate-on-scroll">
         <h2 data-en="Collection API" data-id="API Collection">Collection API</h2>
-        <p data-en="MongoDB-compatible CRUD interface with generic type support." data-id="Antarmuka CRUD yang kompatibel dengan MongoDB dengan dukungan tipe generik.">MongoDB-compatible CRUD interface with generic type support.</p>
+        <p data-en="MongoDB-compatible CRUD interface with generic type support."
+          data-id="Antarmuka CRUD yang kompatibel dengan MongoDB dengan dukungan tipe generik.">MongoDB-compatible CRUD
+          interface with generic type support.</p>
 
         <h3 data-en="Insert" data-id="Insert">Insert</h3>
         <pre><code><span class="token-keyword">await</span> users.<span class="token-function">insertOne</span>({ name: <span class="token-string">'Alice'</span> });
@@ -303,7 +503,10 @@ npm install oblivinx3x</code></pre>
       <!-- ===================== TRANSACTIONS ===================== -->
       <section id="transactions" class="animate-on-scroll">
         <h2 data-en="Transactions (MVCC)" data-id="Transaksi (MVCC)">Transactions (MVCC)</h2>
-        <p data-en="Full ACID transactions with Snapshot Isolation. Readers never block writers. Savepoints enable partial rollback." data-id="Transaksi ACID penuh dengan Isolasi Snapshot. Pembaca tidak pernah memblokir penulis. Savepoint memungkinkan rollback parsial.">Full ACID transactions with Snapshot Isolation. Readers never block writers. Savepoints enable partial rollback.</p>
+        <p data-en="Full ACID transactions with Snapshot Isolation. Readers never block writers. Savepoints enable partial rollback."
+          data-id="Transaksi ACID penuh dengan Isolasi Snapshot. Pembaca tidak pernah memblokir penulis. Savepoint memungkinkan rollback parsial.">
+          Full ACID transactions with Snapshot Isolation. Readers never block writers. Savepoints enable partial
+          rollback.</p>
 
         <pre><code><span class="token-keyword">const</span> txn <span class="token-keyword">=</span> <span class="token-keyword">await</span> db.<span class="token-function">beginTransaction</span>();
 <span class="token-keyword">try</span> {
@@ -322,21 +525,31 @@ npm install oblivinx3x</code></pre>
 
         <h3 data-en="Transaction API" data-id="API Transaksi">Transaction API</h3>
         <div class="api-list">
-          <div class="api-item"><code>insert(collection, doc)</code> — <span data-en="Insert within transaction" data-id="Insert dalam transaksi">Insert within transaction</span></div>
-          <div class="api-item"><code>insertMany(collection, docs)</code> — <span data-en="Batch insert" data-id="Insert batch">Batch insert</span></div>
-          <div class="api-item"><code>update(collection, filter, update)</code> — <span data-en="Update documents" data-id="Update dokumen">Update documents</span></div>
-          <div class="api-item"><code>delete(collection, filter)</code> — <span data-en="Delete documents" data-id="Hapus dokumen">Delete documents</span></div>
-          <div class="api-item"><code>savepoint(name)</code> — <span data-en="Create checkpoint" data-id="Buat checkpoint">Create checkpoint</span></div>
-          <div class="api-item"><code>rollbackToSavepoint(name)</code> — <span data-en="Undo to checkpoint" data-id="Undo ke checkpoint">Undo to checkpoint</span></div>
-          <div class="api-item"><code>releaseSavepoint(name)</code> — <span data-en="Remove checkpoint" data-id="Hapus checkpoint">Remove checkpoint</span></div>
-          <div class="api-item"><code>commit()</code> / <code>rollback()</code> — <span data-en="Lifecycle" data-id="Siklus hidup">Lifecycle</span></div>
+          <div class="api-item"><code>insert(collection, doc)</code> — <span data-en="Insert within transaction"
+              data-id="Insert dalam transaksi">Insert within transaction</span></div>
+          <div class="api-item"><code>insertMany(collection, docs)</code> — <span data-en="Batch insert"
+              data-id="Insert batch">Batch insert</span></div>
+          <div class="api-item"><code>update(collection, filter, update)</code> — <span data-en="Update documents"
+              data-id="Update dokumen">Update documents</span></div>
+          <div class="api-item"><code>delete(collection, filter)</code> — <span data-en="Delete documents"
+              data-id="Hapus dokumen">Delete documents</span></div>
+          <div class="api-item"><code>savepoint(name)</code> — <span data-en="Create checkpoint"
+              data-id="Buat checkpoint">Create checkpoint</span></div>
+          <div class="api-item"><code>rollbackToSavepoint(name)</code> — <span data-en="Undo to checkpoint"
+              data-id="Undo ke checkpoint">Undo to checkpoint</span></div>
+          <div class="api-item"><code>releaseSavepoint(name)</code> — <span data-en="Remove checkpoint"
+              data-id="Hapus checkpoint">Remove checkpoint</span></div>
+          <div class="api-item"><code>commit()</code> / <code>rollback()</code> — <span data-en="Lifecycle"
+              data-id="Siklus hidup">Lifecycle</span></div>
         </div>
       </section>
 
       <!-- ===================== QUERY BUILDER ===================== -->
       <section id="query-builder" class="animate-on-scroll">
         <h2 data-en="Query Builder" data-id="Query Builder">Query Builder</h2>
-        <p data-en="Fluent, chainable API for building complex queries." data-id="API yang chainable untuk membangun query kompleks.">Fluent, chainable API for building complex queries.</p>
+        <p data-en="Fluent, chainable API for building complex queries."
+          data-id="API yang chainable untuk membangun query kompleks.">Fluent, chainable API for building complex
+          queries.</p>
 
         <pre><code><span class="token-keyword">const</span> results <span class="token-keyword">=</span> <span class="token-keyword">await</span> users.<span class="token-function">find</span>()
   .<span class="token-function">where</span>({ age: { <span class="token-string">$gte</span>: <span class="token-number">18</span> } })
@@ -356,20 +569,52 @@ npm install oblivinx3x</code></pre>
       <!-- ===================== FILTER OPERATORS ===================== -->
       <section id="filters" class="animate-on-scroll">
         <h2 data-en="Filter Operators" data-id="Operator Filter">Filter Operators</h2>
-        <p data-en="Full MongoDB Query Language (MQL) filter support." data-id="Dukungan filter Bahasa Query MongoDB (MQL) penuh.">Full MongoDB Query Language (MQL) filter support.</p>
+        <p data-en="Full MongoDB Query Language (MQL) filter support."
+          data-id="Dukungan filter Bahasa Query MongoDB (MQL) penuh.">Full MongoDB Query Language (MQL) filter support.
+        </p>
 
         <div class="feature-table">
           <table>
-            <thead><tr><th data-en="Category" data-id="Kategori">Category</th><th data-en="Operators" data-id="Operator">Operators</th></tr></thead>
+            <thead>
+              <tr>
+                <th data-en="Category" data-id="Kategori">Category</th>
+                <th data-en="Operators" data-id="Operator">Operators</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr><td data-en="Comparison" data-id="Perbandingan">Comparison</td><td><code>$eq</code> <code>$ne</code> <code>$gt</code> <code>$gte</code> <code>$lt</code> <code>$lte</code> <code>$in</code> <code>$nin</code></td></tr>
-              <tr><td data-en="Logical" data-id="Logika">Logical</td><td><code>$and</code> <code>$or</code> <code>$not</code> <code>$nor</code></td></tr>
-              <tr><td data-en="Array" data-id="Array">Array</td><td><code>$all</code> <code>$elemMatch</code> <code>$size</code></td></tr>
-              <tr><td data-en="Element" data-id="Elemen">Element</td><td><code>$exists</code> <code>$type</code></td></tr>
-              <tr><td data-en="Regex" data-id="Regex">Regex</td><td><code>$regex</code></td></tr>
-              <tr><td data-en="Geospatial" data-id="Geospasial">Geospatial</td><td><code>$geoWithin</code> <code>$near</code> <code>$geoNear</code></td></tr>
-              <tr><td data-en="Text" data-id="Teks">Text</td><td><code>$text</code> { <code>$search</code>: "..." }</td></tr>
-              <tr><td data-en="Expression" data-id="Ekspresi">Expression</td><td><code>$expr</code> { <code>$gt</code>: ["$field1", "$field2"] }</td></tr>
+              <tr>
+                <td data-en="Comparison" data-id="Perbandingan">Comparison</td>
+                <td><code>$eq</code> <code>$ne</code> <code>$gt</code> <code>$gte</code> <code>$lt</code>
+                  <code>$lte</code> <code>$in</code> <code>$nin</code></td>
+              </tr>
+              <tr>
+                <td data-en="Logical" data-id="Logika">Logical</td>
+                <td><code>$and</code> <code>$or</code> <code>$not</code> <code>$nor</code></td>
+              </tr>
+              <tr>
+                <td data-en="Array" data-id="Array">Array</td>
+                <td><code>$all</code> <code>$elemMatch</code> <code>$size</code></td>
+              </tr>
+              <tr>
+                <td data-en="Element" data-id="Elemen">Element</td>
+                <td><code>$exists</code> <code>$type</code></td>
+              </tr>
+              <tr>
+                <td data-en="Regex" data-id="Regex">Regex</td>
+                <td><code>$regex</code></td>
+              </tr>
+              <tr>
+                <td data-en="Geospatial" data-id="Geospasial">Geospatial</td>
+                <td><code>$geoWithin</code> <code>$near</code> <code>$geoNear</code></td>
+              </tr>
+              <tr>
+                <td data-en="Text" data-id="Teks">Text</td>
+                <td><code>$text</code> { <code>$search</code>: "..." }</td>
+              </tr>
+              <tr>
+                <td data-en="Expression" data-id="Ekspresi">Expression</td>
+                <td><code>$expr</code> { <code>$gt</code>: ["$field1", "$field2"] }</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -380,14 +625,38 @@ npm install oblivinx3x</code></pre>
         <h2 data-en="Update Operators" data-id="Operator Update">Update Operators</h2>
         <div class="feature-table">
           <table>
-            <thead><tr><th data-en="Category" data-id="Kategori">Category</th><th data-en="Operators" data-id="Operator">Operators</th></tr></thead>
+            <thead>
+              <tr>
+                <th data-en="Category" data-id="Kategori">Category</th>
+                <th data-en="Operators" data-id="Operator">Operators</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr><td data-en="Field" data-id="Field">Field</td><td><code>$set</code> <code>$unset</code> <code>$rename</code></td></tr>
-              <tr><td data-en="Arithmetic" data-id="Aritmetika">Arithmetic</td><td><code>$inc</code> <code>$mul</code></td></tr>
-              <tr><td data-en="Conditional" data-id="Kondisional">Conditional</td><td><code>$min</code> <code>$max</code></td></tr>
-              <tr><td data-en="Array" data-id="Array">Array</td><td><code>$push</code> <code>$push + $each</code> <code>$pull</code> <code>$pullAll</code> <code>$addToSet</code> <code>$addToSet + $each</code> <code>$pop</code></td></tr>
-              <tr><td data-en="Temporal" data-id="Temporal">Temporal</td><td><code>$currentDate</code></td></tr>
-              <tr><td data-en="Upsert" data-id="Upsert">Upsert</td><td><code>$setOnInsert</code></td></tr>
+              <tr>
+                <td data-en="Field" data-id="Field">Field</td>
+                <td><code>$set</code> <code>$unset</code> <code>$rename</code></td>
+              </tr>
+              <tr>
+                <td data-en="Arithmetic" data-id="Aritmetika">Arithmetic</td>
+                <td><code>$inc</code> <code>$mul</code></td>
+              </tr>
+              <tr>
+                <td data-en="Conditional" data-id="Kondisional">Conditional</td>
+                <td><code>$min</code> <code>$max</code></td>
+              </tr>
+              <tr>
+                <td data-en="Array" data-id="Array">Array</td>
+                <td><code>$push</code> <code>$push + $each</code> <code>$pull</code> <code>$pullAll</code>
+                  <code>$addToSet</code> <code>$addToSet + $each</code> <code>$pop</code></td>
+              </tr>
+              <tr>
+                <td data-en="Temporal" data-id="Temporal">Temporal</td>
+                <td><code>$currentDate</code></td>
+              </tr>
+              <tr>
+                <td data-en="Upsert" data-id="Upsert">Upsert</td>
+                <td><code>$setOnInsert</code></td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -396,28 +665,45 @@ npm install oblivinx3x</code></pre>
       <!-- ===================== AGGREGATION ===================== -->
       <section id="aggregation" class="animate-on-scroll">
         <h2 data-en="Aggregation Pipeline" data-id="Pipeline Agregasi">Aggregation Pipeline</h2>
-        <p data-en="MongoDB-compatible multi-stage pipeline with 18+ stages and 9 accumulator types." data-id="Pipeline multi-tahap yang kompatibel dengan MongoDB dengan 18+ tahap dan 9 jenis akumulator.">MongoDB-compatible multi-stage pipeline with 18+ stages and 9 accumulator types.</p>
+        <p data-en="MongoDB-compatible multi-stage pipeline with 18+ stages and 9 accumulator types."
+          data-id="Pipeline multi-tahap yang kompatibel dengan MongoDB dengan 18+ tahap dan 9 jenis akumulator.">
+          MongoDB-compatible multi-stage pipeline with 18+ stages and 9 accumulator types.</p>
 
         <h3 data-en="Supported Stages" data-id="Tahap yang Didukung">Supported Stages</h3>
         <div class="stage-grid">
-          <div class="stage-card"><code>$match</code><span data-en="Filter documents" data-id="Filter dokumen">Filter documents</span></div>
-          <div class="stage-card"><code>$group</code><span data-en="Group + accumulators" data-id="Grup + akumulator">Group + accumulators</span></div>
-          <div class="stage-card"><code>$project</code><span data-en="Field reshaping" data-id="Bentuk ulang field">Field reshaping</span></div>
-          <div class="stage-card"><code>$sort</code> / <code>$limit</code> / <code>$skip</code><span data-en="Ordering & pagination" data-id="Pengurutan & paginasi">Ordering &amp; pagination</span></div>
-          <div class="stage-card"><code>$unwind</code><span data-en="Flatten arrays" data-id="Ratakan array">Flatten arrays</span></div>
-          <div class="stage-card"><code>$lookup</code><span data-en="Left join" data-id="Left join">Left join</span></div>
-          <div class="stage-card"><code>$count</code><span data-en="Document count" data-id="Jumlah dokumen">Document count</span></div>
-          <div class="stage-card"><code>$facet</code><span data-en="Multi-pipeline" data-id="Multi-pipeline">Multi-pipeline</span></div>
-          <div class="stage-card"><code>$bucket</code> / <code>$bucketAuto</code><span data-en="Bucketing" data-id="Pembuatan bucket">Bucketing</span></div>
-          <div class="stage-card"><code>$addFields</code> / <code>$set</code><span data-en="Add/update fields" data-id="Tambah/update field">Add/update fields</span></div>
-          <div class="stage-card"><code>$replaceRoot</code> / <code>$replaceWith</code><span data-en="Replace root" data-id="Ganti root">Replace root</span></div>
-          <div class="stage-card"><code>$merge</code> / <code>$out</code><span data-en="Write results" data-id="Tulis hasil">Write results</span></div>
-          <div class="stage-card"><code>$setWindowFields</code><span data-en="Window functions" data-id="Fungsi window">Window functions</span></div>
-          <div class="stage-card"><code>$graphLookup</code><span data-en="Graph traversal" data-id="Traversial graf">Graph traversal</span></div>
+          <div class="stage-card"><code>$match</code><span data-en="Filter documents" data-id="Filter dokumen">Filter
+              documents</span></div>
+          <div class="stage-card"><code>$group</code><span data-en="Group + accumulators"
+              data-id="Grup + akumulator">Group + accumulators</span></div>
+          <div class="stage-card"><code>$project</code><span data-en="Field reshaping"
+              data-id="Bentuk ulang field">Field reshaping</span></div>
+          <div class="stage-card"><code>$sort</code> / <code>$limit</code> / <code>$skip</code><span
+              data-en="Ordering & pagination" data-id="Pengurutan & paginasi">Ordering &amp; pagination</span></div>
+          <div class="stage-card"><code>$unwind</code><span data-en="Flatten arrays" data-id="Ratakan array">Flatten
+              arrays</span></div>
+          <div class="stage-card"><code>$lookup</code><span data-en="Left join" data-id="Left join">Left join</span>
+          </div>
+          <div class="stage-card"><code>$count</code><span data-en="Document count" data-id="Jumlah dokumen">Document
+              count</span></div>
+          <div class="stage-card"><code>$facet</code><span data-en="Multi-pipeline"
+              data-id="Multi-pipeline">Multi-pipeline</span></div>
+          <div class="stage-card"><code>$bucket</code> / <code>$bucketAuto</code><span data-en="Bucketing"
+              data-id="Pembuatan bucket">Bucketing</span></div>
+          <div class="stage-card"><code>$addFields</code> / <code>$set</code><span data-en="Add/update fields"
+              data-id="Tambah/update field">Add/update fields</span></div>
+          <div class="stage-card"><code>$replaceRoot</code> / <code>$replaceWith</code><span data-en="Replace root"
+              data-id="Ganti root">Replace root</span></div>
+          <div class="stage-card"><code>$merge</code> / <code>$out</code><span data-en="Write results"
+              data-id="Tulis hasil">Write results</span></div>
+          <div class="stage-card"><code>$setWindowFields</code><span data-en="Window functions"
+              data-id="Fungsi window">Window functions</span></div>
+          <div class="stage-card"><code>$graphLookup</code><span data-en="Graph traversal"
+              data-id="Traversial graf">Graph traversal</span></div>
         </div>
 
         <h3 data-en="Accumulators" data-id="Akumulator">Accumulators</h3>
-        <p><code>$sum</code> <code>$avg</code> <code>$min</code> <code>$max</code> <code>$first</code> <code>$last</code> <code>$push</code> <code>$addToSet</code> <code>$count</code></p>
+        <p><code>$sum</code> <code>$avg</code> <code>$min</code> <code>$max</code> <code>$first</code>
+          <code>$last</code> <code>$push</code> <code>$addToSet</code> <code>$count</code></p>
 
         <pre><code><span class="token-keyword">const</span> stats <span class="token-keyword">=</span> <span class="token-keyword">await</span> orders.<span class="token-function">aggregate</span>([
   { <span class="token-string">$match</span>: { status: <span class="token-string">'completed'</span> } },
@@ -434,33 +720,61 @@ npm install oblivinx3x</code></pre>
       <!-- ===================== SECONDARY INDEXES ===================== -->
       <section id="indexes" class="animate-on-scroll">
         <h2 data-en="Secondary Indexes & AHIT" data-id="Indeks Sekunder & AHIT">Secondary Indexes &amp; AHIT</h2>
-        <p data-en="Secondary indexes are backed by the Adaptive Hybrid Index Tree (AHIT) — a self-optimizing structure that keeps hot entries in RAM and cold entries on disk." data-id="Indeks sekunder didukung oleh Pohon Indeks Hybrid Adaptif (AHIT) — struktur yang mengoptimalkan diri yang menyimpan entri hot di RAM dan entri cold di disk.">Secondary indexes are backed by the Adaptive Hybrid Index Tree (AHIT) — a self-optimizing structure that keeps hot entries in RAM and cold entries on disk.</p>
+        <p data-en="Secondary indexes are backed by the Adaptive Hybrid Index Tree (AHIT) — a self-optimizing structure that keeps hot entries in RAM and cold entries on disk."
+          data-id="Indeks sekunder didukung oleh Pohon Indeks Hybrid Adaptif (AHIT) — struktur yang mengoptimalkan diri yang menyimpan entri hot di RAM dan entri cold di disk.">
+          Secondary indexes are backed by the Adaptive Hybrid Index Tree (AHIT) — a self-optimizing structure that keeps
+          hot entries in RAM and cold entries on disk.</p>
 
         <h3 data-en="AHIT Mechanics" data-id="Mekanisme AHIT">AHIT Mechanics</h3>
         <div class="card">
           <ul>
-            <li><strong data-en="Hot Zone" data-id="Zona Hot">Hot Zone:</strong> <span data-en="In-memory B+ tree for frequently accessed entries" data-id="B+ tree dalam memori untuk entri yang sering diakses">In-memory B+ tree for frequently accessed entries</span></li>
-            <li><strong data-en="Cold Zone" data-id="Zona Cold">Cold Zone:</strong> <span data-en="Disk-backed BTreeMap (SSTable simulation) for infrequent data" data-id="BTreeMap berbasis disk (simulasi SSTable) untuk data yang jarang">Disk-backed BTreeMap (SSTable simulation) for infrequent data</span></li>
-            <li><strong data-en="Promotion" data-id="Promosi">Promotion:</strong> <span data-en="Cold→Hot after 1000 accesses within 60s window" data-id="Cold→Hot setelah 1000 akses dalam window 60 detik">Cold→Hot after 1000 accesses within 60s window</span></li>
-            <li><strong data-en="Demotion" data-id="Demosi">Demotion:</strong> <span data-en="Hot→Cold when access drops below 100/60s" data-id="Hot→Cold ketika akses turun di bawah 100/60 detik">Hot→Cold when access drops below 100/60s</span></li>
-            <li><strong data-en="SCO Bitmap" data-id="Bitmap SCO">SCO Bitmap:</strong> <span data-en="Skip-Column Optimization for compound index keys" data-id="Optimisasi Skip-Column untuk kunci indeks komposit">Skip-Column Optimization for compound index keys</span></li>
+            <li><strong data-en="Hot Zone" data-id="Zona Hot">Hot Zone:</strong> <span
+                data-en="In-memory B+ tree for frequently accessed entries"
+                data-id="B+ tree dalam memori untuk entri yang sering diakses">In-memory B+ tree for frequently accessed
+                entries</span></li>
+            <li><strong data-en="Cold Zone" data-id="Zona Cold">Cold Zone:</strong> <span
+                data-en="Disk-backed BTreeMap (SSTable simulation) for infrequent data"
+                data-id="BTreeMap berbasis disk (simulasi SSTable) untuk data yang jarang">Disk-backed BTreeMap (SSTable
+                simulation) for infrequent data</span></li>
+            <li><strong data-en="Promotion" data-id="Promosi">Promotion:</strong> <span
+                data-en="Cold→Hot after 1000 accesses within 60s window"
+                data-id="Cold→Hot setelah 1000 akses dalam window 60 detik">Cold→Hot after 1000 accesses within 60s
+                window</span></li>
+            <li><strong data-en="Demotion" data-id="Demosi">Demotion:</strong> <span
+                data-en="Hot→Cold when access drops below 100/60s"
+                data-id="Hot→Cold ketika akses turun di bawah 100/60 detik">Hot→Cold when access drops below
+                100/60s</span></li>
+            <li><strong data-en="SCO Bitmap" data-id="Bitmap SCO">SCO Bitmap:</strong> <span
+                data-en="Skip-Column Optimization for compound index keys"
+                data-id="Optimisasi Skip-Column untuk kunci indeks komposit">Skip-Column Optimization for compound index
+                keys</span></li>
           </ul>
         </div>
 
         <h3 data-en="Index Types" data-id="Jenis Indeks">Index Types</h3>
         <div class="api-list">
-          <div class="api-item"><code>createIndex({ field: 1 })</code> — <span data-en="Single ascending" data-id="Ascending tunggal">Single ascending</span></div>
-          <div class="api-item"><code>createIndex({ a: 1, b: -1 })</code> — <span data-en="Compound (leftmost prefix matching)" data-id="Komposit (pencocokan prefiks paling kiri)">Compound (leftmost prefix matching)</span></div>
-          <div class="api-item"><code>createIndex({ field: 1 }, { unique: true })</code> — <span data-en="Unique constraint" data-id="Batasan unik">Unique constraint</span></div>
-          <div class="api-item"><code>createIndex({ field: 'text' })</code> — <span data-en="Full-text search" data-id="Pencarian teks lengkap">Full-text search</span></div>
-          <div class="api-item"><code>createIndex({ field: 1 }, { hidden: true })</code> — <span data-en="Hidden (maintained but not used by planner)" data-id="Tersembunyi (dikelola tapi tidak dipakai planner)">Hidden (maintained but not used by planner)</span></div>
+          <div class="api-item"><code>createIndex({ field: 1 })</code> — <span data-en="Single ascending"
+              data-id="Ascending tunggal">Single ascending</span></div>
+          <div class="api-item"><code>createIndex({ a: 1, b: -1 })</code> — <span
+              data-en="Compound (leftmost prefix matching)" data-id="Komposit (pencocokan prefiks paling kiri)">Compound
+              (leftmost prefix matching)</span></div>
+          <div class="api-item"><code>createIndex({ field: 1 }, { unique: true })</code> — <span
+              data-en="Unique constraint" data-id="Batasan unik">Unique constraint</span></div>
+          <div class="api-item"><code>createIndex({ field: 'text' })</code> — <span data-en="Full-text search"
+              data-id="Pencarian teks lengkap">Full-text search</span></div>
+          <div class="api-item"><code>createIndex({ field: 1 }, { hidden: true })</code> — <span
+              data-en="Hidden (maintained but not used by planner)"
+              data-id="Tersembunyi (dikelola tapi tidak dipakai planner)">Hidden (maintained but not used by
+              planner)</span></div>
         </div>
       </section>
 
       <!-- ===================== FULL-TEXT SEARCH ===================== -->
       <section id="fulltext" class="animate-on-scroll">
         <h2 data-en="Full-Text Search" data-id="Pencarian Teks Lengkap">Full-Text Search</h2>
-        <p data-en="Inverted index with tokenization, English stemming, and TF-IDF scoring." data-id="Indeks terbalik dengan tokenisasi, stemming bahasa Inggris, dan penilaian TF-IDF.">Inverted index with tokenization, English stemming, and TF-IDF scoring.</p>
+        <p data-en="Inverted index with tokenization, English stemming, and TF-IDF scoring."
+          data-id="Indeks terbalik dengan tokenisasi, stemming bahasa Inggris, dan penilaian TF-IDF.">Inverted index
+          with tokenization, English stemming, and TF-IDF scoring.</p>
 
         <pre><code><span class="token-comment">// Create full-text index</span>
 <span class="token-keyword">await</span> articles.<span class="token-function">createIndex</span>({ title: <span class="token-string">'text'</span>, content: <span class="token-string">'text'</span> });
@@ -471,13 +785,18 @@ npm install oblivinx3x</code></pre>
 });</code></pre>
 
         <h3 data-en="Pipeline" data-id="Pipeline">Pipeline</h3>
-        <p data-en="Unicode word segmentation → Lowercase → Suffix stemming (-ing, -tion, -ness, -ment, -ly, -es, -ed, -s) → Token → Posting list with position tracking → TF-IDF scoring" data-id="Segmentasi kata Unicode → Huruf kecil → Stemming sufiks → Token → Daftar posting dengan pelacakan posisi → Penilaian TF-IDF">Unicode word segmentation → Lowercase → Suffix stemming (-ing, -tion, -ness, -ment, -ly, -es, -ed, -s) → Token → Posting list with position tracking → TF-IDF scoring</p>
+        <p data-en="Unicode word segmentation → Lowercase → Suffix stemming (-ing, -tion, -ness, -ment, -ly, -es, -ed, -s) → Token → Posting list with position tracking → TF-IDF scoring"
+          data-id="Segmentasi kata Unicode → Huruf kecil → Stemming sufiks → Token → Daftar posting dengan pelacakan posisi → Penilaian TF-IDF">
+          Unicode word segmentation → Lowercase → Suffix stemming (-ing, -tion, -ness, -ment, -ly, -es, -ed, -s) → Token
+          → Posting list with position tracking → TF-IDF scoring</p>
       </section>
 
       <!-- ===================== VECTOR SEARCH ===================== -->
       <section id="vector" class="animate-on-scroll">
         <h2 data-en="Vector Search" data-id="Pencarian Vektor">Vector Search</h2>
-        <p data-en="Approximate/exact nearest neighbor search using cosine similarity on vector embeddings." data-id="Pencarian tetangga terdekat aproksimasi/eksak menggunakan kesamaan kosinus pada embedding vektor.">Approximate/exact nearest neighbor search using cosine similarity on vector embeddings.</p>
+        <p data-en="Approximate/exact nearest neighbor search using cosine similarity on vector embeddings."
+          data-id="Pencarian tetangga terdekat aproksimasi/eksak menggunakan kesamaan kosinus pada embedding vektor.">
+          Approximate/exact nearest neighbor search using cosine similarity on vector embeddings.</p>
 
         <pre><code><span class="token-comment">// Create vector index</span>
 <span class="token-keyword">await</span> embeddings.<span class="token-function">createVectorIndex</span>(<span class="token-string">'vector'</span>, {
@@ -496,7 +815,9 @@ npm install oblivinx3x</code></pre>
       <!-- ===================== GEOSPATIAL ===================== -->
       <section id="geospatial" class="animate-on-scroll">
         <h2 data-en="Geospatial" data-id="Geospasial">Geospatial</h2>
-        <p data-en="R-Tree based 2D spatial indexing for GeoJSON Point, LineString, Polygon, or [lng, lat] arrays." data-id="Indeks spasial 2D berbasis R-Tree untuk GeoJSON Point, LineString, Polygon, atau array [lng, lat].">R-Tree based 2D spatial indexing for GeoJSON Point, LineString, Polygon, or [lng, lat] arrays.</p>
+        <p data-en="R-Tree based 2D spatial indexing for GeoJSON Point, LineString, Polygon, or [lng, lat] arrays."
+          data-id="Indeks spasial 2D berbasis R-Tree untuk GeoJSON Point, LineString, Polygon, atau array [lng, lat].">
+          R-Tree based 2D spatial indexing for GeoJSON Point, LineString, Polygon, or [lng, lat] arrays.</p>
 
         <pre><code><span class="token-comment">// Create 2dsphere index</span>
 <span class="token-keyword">await</span> restaurants.<span class="token-function">createGeoIndex</span>(<span class="token-string">'location'</span>);
@@ -514,7 +835,9 @@ npm install oblivinx3x</code></pre>
       <!-- ===================== AUTOCOMPLETE ===================== -->
       <section id="autocomplete" class="animate-on-scroll">
         <h2 data-en="Autocomplete" data-id="Autolengkap">Autocomplete</h2>
-        <p data-en="Case-insensitive prefix search on indexed string fields." data-id="Pencarian prefiks yang tidak peka huruf besar/kecil pada field string yang diindeks.">Case-insensitive prefix search on indexed string fields.</p>
+        <p data-en="Case-insensitive prefix search on indexed string fields."
+          data-id="Pencarian prefiks yang tidak peka huruf besar/kecil pada field string yang diindeks.">
+          Case-insensitive prefix search on indexed string fields.</p>
 
         <pre><code><span class="token-keyword">const</span> suggestions <span class="token-keyword">=</span> <span class="token-keyword">await</span> users.<span class="token-function">autocomplete</span>(<span class="token-string">'name'</span>, <span class="token-string">'ali'</span>, <span class="token-number">5</span>);
 <span class="token-comment">// Returns: Alice, Ali, Alina, etc.</span></code></pre>
@@ -526,29 +849,46 @@ npm install oblivinx3x</code></pre>
 
         <div class="card">
           <h3 data-en="Hybrid B+/LSM Engine" data-id="Mesin Hybrid B+/LSM">Hybrid B+/LSM Engine</h3>
-          <p data-en="Writes flow through a Write-Ahead Log (WAL) into an in-memory MemTable (SkipList). When the MemTable reaches its threshold (default 64MB), it freezes and flushes to Level-0 SSTables. Background compaction merges SSTables into a persistent B+ Tree for optimal read performance." data-id="Tulisan mengalir melalui Write-Ahead Log (WAL) ke MemTable dalam memori (SkipList). Ketika MemTable mencapai batasnya (default 64MB), itu membeku dan flush ke SSTable Level-0. Compaction latar belakang menggabungkan SSTable menjadi B+ Tree persisten untuk performa baca optimal.">Writes flow through a Write-Ahead Log (WAL) into an in-memory MemTable (SkipList). When the MemTable reaches its threshold (default 64MB), it freezes and flushes to Level-0 SSTables. Background compaction merges SSTables into a persistent B+ Tree for optimal read performance.</p>
+          <p data-en="Writes flow through a Write-Ahead Log (WAL) into an in-memory MemTable (SkipList). When the MemTable reaches its threshold (default 64MB), it freezes and flushes to Level-0 SSTables. Background compaction merges SSTables into a persistent B+ Tree for optimal read performance."
+            data-id="Tulisan mengalir melalui Write-Ahead Log (WAL) ke MemTable dalam memori (SkipList). Ketika MemTable mencapai batasnya (default 64MB), itu membeku dan flush ke SSTable Level-0. Compaction latar belakang menggabungkan SSTable menjadi B+ Tree persisten untuk performa baca optimal.">
+            Writes flow through a Write-Ahead Log (WAL) into an in-memory MemTable (SkipList). When the MemTable reaches
+            its threshold (default 64MB), it freezes and flushes to Level-0 SSTables. Background compaction merges
+            SSTables into a persistent B+ Tree for optimal read performance.</p>
         </div>
 
         <div class="card" style="margin-top: 1.5rem;">
           <h3 data-en="WAL Crash Recovery" data-id="Pemulihan Crash WAL">WAL Crash Recovery</h3>
-          <p data-en="Every write is logged with CRC32 checksums. On restart, the engine detects the WAL active flag, finds the last checkpoint position, and replays all records after it. Group commit and fsync ensure durability." data-id="Setiap write dicatat dengan checksum CRC32. Saat restart, engine mendeteksi flag aktif WAL, menemukan posisi checkpoint terakhir, dan memutar ulang semua record setelahnya. Group commit dan fsync memastikan durabilitas.">Every write is logged with CRC32 checksums. On restart, the engine detects the WAL active flag, finds the last checkpoint position, and replays all records after it. Group commit and fsync ensure durability.</p>
+          <p data-en="Every write is logged with CRC32 checksums. On restart, the engine detects the WAL active flag, finds the last checkpoint position, and replays all records after it. Group commit and fsync ensure durability."
+            data-id="Setiap write dicatat dengan checksum CRC32. Saat restart, engine mendeteksi flag aktif WAL, menemukan posisi checkpoint terakhir, dan memutar ulang semua record setelahnya. Group commit dan fsync memastikan durabilitas.">
+            Every write is logged with CRC32 checksums. On restart, the engine detects the WAL active flag, finds the
+            last checkpoint position, and replays all records after it. Group commit and fsync ensure durability.</p>
         </div>
 
         <div class="card" style="margin-top: 1.5rem;">
-          <h3 data-en="Buffer Pool (Segmented LRU)" data-id="Buffer Pool (LRU Tersegmentasi)">Buffer Pool (Segmented LRU)</h3>
-          <p data-en="Pages are cached in two segments: probationary (new) and protected (frequently accessed). Eviction prioritizes unpinned probationary pages. Dirty pages are tracked and flushed on checkpoint." data-id="Page di-cache dalam dua segmen: probationary (baru) dan protected (sering diakses). Eviction memprioritaskan page probationary yang tidak dipin. Page kotor dilacak dan di-flush saat checkpoint.">Pages are cached in two segments: probationary (new) and protected (frequently accessed). Eviction prioritizes unpinned probationary pages. Dirty pages are tracked and flushed on checkpoint.</p>
+          <h3 data-en="Buffer Pool (Segmented LRU)" data-id="Buffer Pool (LRU Tersegmentasi)">Buffer Pool (Segmented
+            LRU)</h3>
+          <p data-en="Pages are cached in two segments: probationary (new) and protected (frequently accessed). Eviction prioritizes unpinned probationary pages. Dirty pages are tracked and flushed on checkpoint."
+            data-id="Page di-cache dalam dua segmen: probationary (baru) dan protected (sering diakses). Eviction memprioritaskan page probationary yang tidak dipin. Page kotor dilacak dan di-flush saat checkpoint.">
+            Pages are cached in two segments: probationary (new) and protected (frequently accessed). Eviction
+            prioritizes unpinned probationary pages. Dirty pages are tracked and flushed on checkpoint.</p>
         </div>
 
         <div class="card" style="margin-top: 1.5rem;">
           <h3 data-en="SSTable + Bloom Filter" data-id="SSTable + Filter Bloom">SSTable + Bloom Filter</h3>
-          <p data-en="Each SSTable includes a Bloom filter (7 hash functions, ~1% false positive rate) for O(1) negative lookups. L0 tables are scanned newest-first. Compaction triggers at L0 count ≥ 4." data-id="Setiap SSTable menyertakan filter Bloom (7 fungsi hash, tingkat false positive ~1%) untuk lookup negatif O(1). Tabel L0 dipindai dari yang terbaru. Compaction memicu pada jumlah L0 ≥ 4.">Each SSTable includes a Bloom filter (7 hash functions, ~1% false positive rate) for O(1) negative lookups. L0 tables are scanned newest-first. Compaction triggers at L0 count ≥ 4.</p>
+          <p data-en="Each SSTable includes a Bloom filter (7 hash functions, ~1% false positive rate) for O(1) negative lookups. L0 tables are scanned newest-first. Compaction triggers at L0 count ≥ 4."
+            data-id="Setiap SSTable menyertakan filter Bloom (7 fungsi hash, tingkat false positive ~1%) untuk lookup negatif O(1). Tabel L0 dipindai dari yang terbaru. Compaction memicu pada jumlah L0 ≥ 4.">
+            Each SSTable includes a Bloom filter (7 hash functions, ~1% false positive rate) for O(1) negative lookups.
+            L0 tables are scanned newest-first. Compaction triggers at L0 count ≥ 4.</p>
         </div>
       </section>
 
       <!-- ===================== BLOB STORAGE ===================== -->
       <section id="blob" class="animate-on-scroll">
         <h2 data-en="Blob Storage" data-id="Penyimpanan Blob">Blob Storage</h2>
-        <p data-en="Store large binary files (images, videos, documents) directly in the storage engine. Blobs are chunked into 256KB pages for efficient streaming." data-id="Simpan file biner besar (gambar, video, dokumen) langsung di engine penyimpanan. Blob dipotong menjadi page 256KB untuk streaming yang efisien.">Store large binary files (images, videos, documents) directly in the storage engine. Blobs are chunked into 256KB pages for efficient streaming.</p>
+        <p data-en="Store large binary files (images, videos, documents) directly in the storage engine. Blobs are chunked into 256KB pages for efficient streaming."
+          data-id="Simpan file biner besar (gambar, video, dokumen) langsung di engine penyimpanan. Blob dipotong menjadi page 256KB untuk streaming yang efisien.">
+          Store large binary files (images, videos, documents) directly in the storage engine. Blobs are chunked into
+          256KB pages for efficient streaming.</p>
 
         <pre><code><span class="token-keyword">const</span> fs <span class="token-keyword">=</span> <span class="token-keyword">await</span> <span class="token-keyword">import</span>(<span class="token-string">'node:fs/promises'</span>);
 <span class="token-keyword">const</span> buffer <span class="token-keyword">=</span> <span class="token-keyword">await</span> fs.<span class="token-function">readFile</span>(<span class="token-string">'video.mp4'</span>);
@@ -562,7 +902,10 @@ console.<span class="token-function">log</span>(<span class="token-string">`Save
       <!-- ===================== VIEWS ===================== -->
       <section id="views" class="animate-on-scroll">
         <h2 data-en="Views" data-id="Tampilan">Views</h2>
-        <p data-en="Logical views are stored queries that always read live data. Materialized views precompute results for faster reads." data-id="Tampilan logis adalah query tersimpan yang selalu membaca data langsung. Tampilan termaterialisasi menghitung ulang hasil untuk pembacaan lebih cepat.">Logical views are stored queries that always read live data. Materialized views precompute results for faster reads.</p>
+        <p data-en="Logical views are stored queries that always read live data. Materialized views precompute results for faster reads."
+          data-id="Tampilan logis adalah query tersimpan yang selalu membaca data langsung. Tampilan termaterialisasi menghitung ulang hasil untuk pembacaan lebih cepat.">
+          Logical views are stored queries that always read live data. Materialized views precompute results for faster
+          reads.</p>
 
         <pre><code><span class="token-comment">// Logical view</span>
 <span class="token-keyword">await</span> db.<span class="token-function">createView</span>(<span class="token-string">'active_users'</span>, {
@@ -584,7 +927,9 @@ console.<span class="token-function">log</span>(<span class="token-string">`Save
       <!-- ===================== RELATIONS ===================== -->
       <section id="relations" class="animate-on-scroll">
         <h2 data-en="Relations & Foreign Keys" data-id="Relasi & Kunci Asing">Relations &amp; Foreign Keys</h2>
-        <p data-en="Define foreign-key-like relationships between collections with configurable referential integrity." data-id="Tentukan hubungan seperti kunci asing antar collection dengan integritas referensial yang dapat dikonfigurasi.">Define foreign-key-like relationships between collections with configurable referential integrity.</p>
+        <p data-en="Define foreign-key-like relationships between collections with configurable referential integrity."
+          data-id="Tentukan hubungan seperti kunci asing antar collection dengan integritas referensial yang dapat dikonfigurasi.">
+          Define foreign-key-like relationships between collections with configurable referential integrity.</p>
 
         <pre><code><span class="token-keyword">await</span> db.<span class="token-function">defineRelation</span>({
   from: <span class="token-string">'posts.user_id'</span>,
@@ -602,7 +947,10 @@ console.<span class="token-function">log</span>(<span class="token-string">`Save
       <!-- ===================== TRIGGERS ===================== -->
       <section id="triggers" class="animate-on-scroll">
         <h2 data-en="Triggers" data-id="Pemicu">Triggers</h2>
-        <p data-en="Execute JavaScript handlers on document events: beforeInsert, afterInsert, beforeUpdate, afterUpdate, beforeDelete, afterDelete." data-id="Jalankan handler JavaScript pada event dokumen: beforeInsert, afterInsert, beforeUpdate, afterUpdate, beforeDelete, afterDelete.">Execute JavaScript handlers on document events: beforeInsert, afterInsert, beforeUpdate, afterUpdate, beforeDelete, afterDelete.</p>
+        <p data-en="Execute JavaScript handlers on document events: beforeInsert, afterInsert, beforeUpdate, afterUpdate, beforeDelete, afterDelete."
+          data-id="Jalankan handler JavaScript pada event dokumen: beforeInsert, afterInsert, beforeUpdate, afterUpdate, beforeDelete, afterDelete.">
+          Execute JavaScript handlers on document events: beforeInsert, afterInsert, beforeUpdate, afterUpdate,
+          beforeDelete, afterDelete.</p>
 
         <pre><code><span class="token-keyword">await</span> db.<span class="token-function">createTrigger</span>(<span class="token-string">'users'</span>, <span class="token-string">'beforeInsert'</span>, <span class="token-keyword">async</span> (doc, ctx) <span class="token-keyword">=&gt;</span> {
   <span class="token-keyword">if</span> (!doc.email) <span class="token-keyword">throw</span> <span class="token-keyword">new</span> <span class="token-function">Error</span>(<span class="token-string">'email is required'</span>);
@@ -614,7 +962,10 @@ console.<span class="token-function">log</span>(<span class="token-string">`Save
       <!-- ===================== CHANGE STREAMS ===================== -->
       <section id="change-streams" class="animate-on-scroll">
         <h2 data-en="Change Streams" data-id="Aliran Perubahan">Change Streams</h2>
-        <p data-en="Real-time event streaming using MPSC channels. Events include Insert, Update, Replace, Delete, and Invalidate." data-id="Streaming event waktu nyata menggunakan saluran MPSC. Event meliputi Insert, Update, Replace, Delete, dan Invalidate.">Real-time event streaming using MPSC channels. Events include Insert, Update, Replace, Delete, and Invalidate.</p>
+        <p data-en="Real-time event streaming using MPSC channels. Events include Insert, Update, Replace, Delete, and Invalidate."
+          data-id="Streaming event waktu nyata menggunakan saluran MPSC. Event meliputi Insert, Update, Replace, Delete, dan Invalidate.">
+          Real-time event streaming using MPSC channels. Events include Insert, Update, Replace, Delete, and Invalidate.
+        </p>
 
         <pre><code><span class="token-comment">// Database-level watch</span>
 <span class="token-keyword">const</span> dbStream <span class="token-keyword">=</span> db.<span class="token-function">watch</span>();
@@ -632,7 +983,9 @@ colStream.<span class="token-function">on</span>(<span class="token-string">'cha
       <!-- ===================== PRAGMAS ===================== -->
       <section id="pragma" class="animate-on-scroll">
         <h2 data-en="Pragmas" data-id="Pragma">Pragmas</h2>
-        <p data-en="Runtime configuration directives that persist across sessions in the Metadata Segment." data-id="Arahan konfigurasi runtime yang bertahan lintas sesi di Segmen Metadata.">Runtime configuration directives that persist across sessions in the Metadata Segment.</p>
+        <p data-en="Runtime configuration directives that persist across sessions in the Metadata Segment."
+          data-id="Arahan konfigurasi runtime yang bertahan lintas sesi di Segmen Metadata.">Runtime configuration
+          directives that persist across sessions in the Metadata Segment.</p>
 
         <pre><code><span class="token-keyword">await</span> db.<span class="token-function">pragma</span>(<span class="token-string">'foreign_keys'</span>, <span class="token-keyword">true</span>);
 <span class="token-keyword">await</span> db.<span class="token-function">pragma</span>(<span class="token-string">'synchronous'</span>, <span class="token-string">'full'</span>);
@@ -640,13 +993,18 @@ colStream.<span class="token-function">on</span>(<span class="token-string">'cha
 <span class="token-keyword">const</span> mode <span class="token-keyword">=</span> <span class="token-keyword">await</span> db.<span class="token-function">pragma</span>(<span class="token-string">'synchronous'</span>); <span class="token-comment">// Read</span></code></pre>
 
         <h3 data-en="Available Pragmas" data-id="Pragma Tersedia">Available Pragmas</h3>
-        <p><code>foreign_keys</code> <code>synchronous</code> <code>auto_vacuum</code> <code>cache_size</code> <code>page_size</code> <code>journal_mode</code> <code>referential_integrity</code> <code>cross_db_transactions</code> <code>wal_checkpoint</code> <code>optimize</code> <code>integrity_check</code> <code>max_savepoint_depth</code> <code>materialized_view_size</code></p>
+        <p><code>foreign_keys</code> <code>synchronous</code> <code>auto_vacuum</code> <code>cache_size</code>
+          <code>page_size</code> <code>journal_mode</code> <code>referential_integrity</code>
+          <code>cross_db_transactions</code> <code>wal_checkpoint</code> <code>optimize</code>
+          <code>integrity_check</code> <code>max_savepoint_depth</code> <code>materialized_view_size</code></p>
       </section>
 
       <!-- ===================== ATTACHED DATABASES ===================== -->
       <section id="attach" class="animate-on-scroll">
         <h2 data-en="Attached Databases" data-id="Database Terlampir">Attached Databases</h2>
-        <p data-en="Attach additional .ovn files with aliases for cross-database queries." data-id="Lampirkan file .ovn tambahan dengan alias untuk query lintas database.">Attach additional .ovn files with aliases for cross-database queries.</p>
+        <p data-en="Attach additional .ovn files with aliases for cross-database queries."
+          data-id="Lampirkan file .ovn tambahan dengan alias untuk query lintas database.">Attach additional .ovn files
+          with aliases for cross-database queries.</p>
 
         <pre><code><span class="token-keyword">await</span> db.<span class="token-function">attach</span>(<span class="token-string">'analytics.ovn'</span>, <span class="token-string">'analytics'</span>);
 <span class="token-comment">// Query attached database collections via aliased namespace</span>
@@ -657,7 +1015,9 @@ colStream.<span class="token-function">on</span>(<span class="token-string">'cha
       <!-- ===================== SECURITY ===================== -->
       <section id="security" class="animate-on-scroll">
         <h2 data-en="Access Control & ACL" data-id="Kontrol Akses & ACL">Access Control &amp; ACL</h2>
-        <p data-en="Built-in security primitives for multi-tenant environments." data-id="Primitif keamanan bawaan untuk lingkungan multi-tenant.">Built-in security primitives for multi-tenant environments.</p>
+        <p data-en="Built-in security primitives for multi-tenant environments."
+          data-id="Primitif keamanan bawaan untuk lingkungan multi-tenant.">Built-in security primitives for
+          multi-tenant environments.</p>
 
         <pre><code><span class="token-keyword">import</span> { SecurityContext, checkPermission } <span class="token-keyword">from</span> <span class="token-string">'oblivinx3x'</span>;
 
@@ -676,13 +1036,18 @@ colStream.<span class="token-function">on</span>(<span class="token-string">'cha
 }</code></pre>
 
         <h3 data-en="Field-Level ACL" data-id="ACL Tingkat Field">Field-Level ACL</h3>
-        <p data-en="Control read/write access per field. Use <code>filterDocumentByACL</code> for reads and <code>sanitizeDocumentByACL</code> for writes." data-id="Kontrol akses baca/tulis per field. Gunakan <code>filterDocumentByACL</code> untuk baca dan <code>sanitizeDocumentByACL</code> untuk tulis.">Control read/write access per field. Use <code>filterDocumentByACL</code> for reads and <code>sanitizeDocumentByACL</code> for writes.</p>
+        <p data-en="Control read/write access per field. Use <code>filterDocumentByACL</code> for reads and <code>sanitizeDocumentByACL</code> for writes."
+          data-id="Kontrol akses baca/tulis per field. Gunakan <code>filterDocumentByACL</code> untuk baca dan <code>sanitizeDocumentByACL</code> untuk tulis.">
+          Control read/write access per field. Use <code>filterDocumentByACL</code> for reads and
+          <code>sanitizeDocumentByACL</code> for writes.</p>
       </section>
 
       <!-- ===================== AUDIT LOG ===================== -->
       <section id="audit-log" class="animate-on-scroll">
         <h2 data-en="Audit Logging" data-id="Pencatatan Audit">Audit Logging</h2>
-        <p data-en="Immutable append-only log of database operations for compliance and debugging." data-id="Log append-only yang tidak dapat diubah dari operasi database untuk kepatuhan dan debugging.">Immutable append-only log of database operations for compliance and debugging.</p>
+        <p data-en="Immutable append-only log of database operations for compliance and debugging."
+          data-id="Log append-only yang tidak dapat diubah dari operasi database untuk kepatuhan dan debugging.">
+          Immutable append-only log of database operations for compliance and debugging.</p>
 
         <pre><code><span class="token-keyword">import</span> { AuditLogger } <span class="token-keyword">from</span> <span class="token-string">'oblivinx3x'</span>;
 
@@ -702,7 +1067,9 @@ auditor.<span class="token-function">log</span>({
       <!-- ===================== INPUT VALIDATION ===================== -->
       <section id="input-validation" class="animate-on-scroll">
         <h2 data-en="Input Validation" data-id="Validasi Input">Input Validation</h2>
-        <p data-en="Protect against NoSQL injection and oversized payloads." data-id="Lindungi dari injeksi NoSQL dan payload berukuran besar.">Protect against NoSQL injection and oversized payloads.</p>
+        <p data-en="Protect against NoSQL injection and oversized payloads."
+          data-id="Lindungi dari injeksi NoSQL dan payload berukuran besar.">Protect against NoSQL injection and
+          oversized payloads.</p>
 
         <pre><code><span class="token-keyword">import</span> { sanitizeInput, validateDepth, validateSize } <span class="token-keyword">from</span> <span class="token-string">'oblivinx3x'</span>;
 
@@ -723,7 +1090,9 @@ auditor.<span class="token-function">log</span>({
       <!-- ===================== RATE LIMITER ===================== -->
       <section id="rate-limiter" class="animate-on-scroll">
         <h2 data-en="Rate Limiter" data-id="Pembatas Laju">Rate Limiter</h2>
-        <p data-en="Token bucket algorithm for per-collection read/write rate limiting." data-id="Algoritma token bucket untuk pembatasan laju baca/tulis per-collection.">Token bucket algorithm for per-collection read/write rate limiting.</p>
+        <p data-en="Token bucket algorithm for per-collection read/write rate limiting."
+          data-id="Algoritma token bucket untuk pembatasan laju baca/tulis per-collection.">Token bucket algorithm for
+          per-collection read/write rate limiting.</p>
 
         <pre><code><span class="token-keyword">import</span> { RateLimiter, RateLimitedError } <span class="token-keyword">from</span> <span class="token-string">'oblivinx3x'</span>;
 
@@ -802,21 +1171,51 @@ console.<span class="token-function">log</span>(plan.fallbackReason);
 
       <!-- ===================== OBE FORMAT ===================== -->
       <section id="format" class="animate-on-scroll">
-        <h2 data-en="OBE Format (Binary Encoding)" data-id="Format OBE (Encoding Biner)">OBE Format (Binary Encoding)</h2>
-        <p data-en="Oblivinx Binary Encoding — the compact binary format for document storage." data-id="Oblivinx Binary Encoding — format biner ringkas untuk penyimpanan dokumen.">Oblivinx Binary Encoding — the compact binary format for document storage.</p>
+        <h2 data-en="OBE Format (Binary Encoding)" data-id="Format OBE (Encoding Biner)">OBE Format (Binary Encoding)
+        </h2>
+        <p data-en="Oblivinx Binary Encoding — the compact binary format for document storage."
+          data-id="Oblivinx Binary Encoding — format biner ringkas untuk penyimpanan dokumen.">Oblivinx Binary Encoding
+          — the compact binary format for document storage.</p>
 
         <h3 data-en="Document Structure" data-id="Struktur Dokumen">Document Structure</h3>
-        <p data-en="4-byte total length → 16-byte UUID → 8-byte txid → 1-byte tombstone flag → Varint field count → Encoded fields" data-id="Panjang total 4-byte → UUID 16-byte → txid 8-byte → Flag tombstone 1-byte → Jumlah field Varint → Field terencoding">4-byte total length → 16-byte UUID → 8-byte txid → 1-byte tombstone flag → Varint field count → Encoded fields</p>
+        <p data-en="4-byte total length → 16-byte UUID → 8-byte txid → 1-byte tombstone flag → Varint field count → Encoded fields"
+          data-id="Panjang total 4-byte → UUID 16-byte → txid 8-byte → Flag tombstone 1-byte → Jumlah field Varint → Field terencoding">
+          4-byte total length → 16-byte UUID → 8-byte txid → 1-byte tombstone flag → Varint field count → Encoded fields
+        </p>
 
         <h3 data-en="Value Types (16 tags)" data-id="Jenis Nilai (16 tag)">Value Types (16 tags)</h3>
         <div class="feature-table">
           <table>
             <tbody>
-              <tr><td><code>Null</code></td><td><code>BoolTrue</code></td><td><code>BoolFalse</code></td><td><code>Int32</code></td></tr>
-              <tr><td><code>Int64</code></td><td><code>Float64</code></td><td><code>Varint</code> (LEB128)</td><td><code>String</code></td></tr>
-              <tr><td><code>Binary</code></td><td><code>Document</code></td><td><code>Array</code></td><td><code>Timestamp</code></td></tr>
-              <tr><td><code>ObjectId</code></td><td><code>Decimal128</code></td><td><code>BlobRef</code></td><td><code>GeoPoint</code></td></tr>
-              <tr><td colspan="2"><code>GeoJSON</code></td><td colspan="2"><em data-en="16 type tags total" data-id="Total 16 tag tipe">16 type tags total</em></td></tr>
+              <tr>
+                <td><code>Null</code></td>
+                <td><code>BoolTrue</code></td>
+                <td><code>BoolFalse</code></td>
+                <td><code>Int32</code></td>
+              </tr>
+              <tr>
+                <td><code>Int64</code></td>
+                <td><code>Float64</code></td>
+                <td><code>Varint</code> (LEB128)</td>
+                <td><code>String</code></td>
+              </tr>
+              <tr>
+                <td><code>Binary</code></td>
+                <td><code>Document</code></td>
+                <td><code>Array</code></td>
+                <td><code>Timestamp</code></td>
+              </tr>
+              <tr>
+                <td><code>ObjectId</code></td>
+                <td><code>Decimal128</code></td>
+                <td><code>BlobRef</code></td>
+                <td><code>GeoPoint</code></td>
+              </tr>
+              <tr>
+                <td colspan="2"><code>GeoJSON</code></td>
+                <td colspan="2"><em data-en="16 type tags total" data-id="Total 16 tag tipe">16 type tags total</em>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -825,18 +1224,57 @@ console.<span class="token-function">log</span>(plan.fallbackReason);
       <!-- ===================== BACKGROUND WORKERS ===================== -->
       <section id="workers" class="animate-on-scroll">
         <h2 data-en="Background Workers" data-id="Worker Latar Belakang">Background Workers</h2>
-        <p data-en="Automated maintenance tasks running on configurable intervals." data-id="Tugas pemeliharaan otomatis yang berjalan pada interval yang dapat dikonfigurasi.">Automated maintenance tasks running on configurable intervals.</p>
+        <p data-en="Automated maintenance tasks running on configurable intervals."
+          data-id="Tugas pemeliharaan otomatis yang berjalan pada interval yang dapat dikonfigurasi.">Automated
+          maintenance tasks running on configurable intervals.</p>
 
         <div class="feature-table">
           <table>
-            <thead><tr><th data-en="Worker" data-id="Worker">Worker</th><th data-en="Interval" data-id="Interval">Interval</th><th data-en="Description" data-id="Deskripsi">Description</th></tr></thead>
+            <thead>
+              <tr>
+                <th data-en="Worker" data-id="Worker">Worker</th>
+                <th data-en="Interval" data-id="Interval">Interval</th>
+                <th data-en="Description" data-id="Deskripsi">Description</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr><td data-en="Compaction" data-id="Compaction">Compaction</td><td>30s</td><td data-en="Merge L0 SSTables into higher levels" data-id="Gabungkan SSTable L0 ke level lebih tinggi">Merge L0 SSTables into higher levels</td></tr>
-              <tr><td data-en="GC" data-id="GC">GC</td><td>60s</td><td data-en="Prune old MVCC versions beyond horizon" data-id="Pangkas versi MVCC lama di luar horizon">Prune old MVCC versions beyond horizon</td></tr>
-              <tr><td data-en="TTL Expire" data-id="Kadaluarsa TTL">TTL Expire</td><td>60s</td><td data-en="Delete documents past their expireAfterSeconds" data-id="Hapus dokumen yang melewati expireAfterSeconds">Delete documents past their expireAfterSeconds</td></tr>
-              <tr><td data-en="Checkpoint" data-id="Checkpoint">Checkpoint</td><td>120s</td><td data-en="Flush MemTable + WAL checkpoint" data-id="Flush MemTable + checkpoint WAL">Flush MemTable + WAL checkpoint</td></tr>
-              <tr><td data-en="Buffer Eviction" data-id="Eviksi Buffer">Buffer Eviction</td><td>10s</td><td data-en="Evict cold pages from segmented LRU" data-id="Evict page cold dari LRU tersegmentasi">Evict cold pages from segmented LRU</td></tr>
-              <tr><td data-en="Change Stream GC" data-id="GC Aliran Perubahan">Change Stream GC</td><td>300s</td><td data-en="Clean closed subscriber channels" data-id="Bersihkan saluran subscriber yang ditutup">Clean closed subscriber channels</td></tr>
+              <tr>
+                <td data-en="Compaction" data-id="Compaction">Compaction</td>
+                <td>30s</td>
+                <td data-en="Merge L0 SSTables into higher levels" data-id="Gabungkan SSTable L0 ke level lebih tinggi">
+                  Merge L0 SSTables into higher levels</td>
+              </tr>
+              <tr>
+                <td data-en="GC" data-id="GC">GC</td>
+                <td>60s</td>
+                <td data-en="Prune old MVCC versions beyond horizon" data-id="Pangkas versi MVCC lama di luar horizon">
+                  Prune old MVCC versions beyond horizon</td>
+              </tr>
+              <tr>
+                <td data-en="TTL Expire" data-id="Kadaluarsa TTL">TTL Expire</td>
+                <td>60s</td>
+                <td data-en="Delete documents past their expireAfterSeconds"
+                  data-id="Hapus dokumen yang melewati expireAfterSeconds">Delete documents past their
+                  expireAfterSeconds</td>
+              </tr>
+              <tr>
+                <td data-en="Checkpoint" data-id="Checkpoint">Checkpoint</td>
+                <td>120s</td>
+                <td data-en="Flush MemTable + WAL checkpoint" data-id="Flush MemTable + checkpoint WAL">Flush MemTable +
+                  WAL checkpoint</td>
+              </tr>
+              <tr>
+                <td data-en="Buffer Eviction" data-id="Eviksi Buffer">Buffer Eviction</td>
+                <td>10s</td>
+                <td data-en="Evict cold pages from segmented LRU" data-id="Evict page cold dari LRU tersegmentasi">Evict
+                  cold pages from segmented LRU</td>
+              </tr>
+              <tr>
+                <td data-en="Change Stream GC" data-id="GC Aliran Perubahan">Change Stream GC</td>
+                <td>300s</td>
+                <td data-en="Clean closed subscriber channels" data-id="Bersihkan saluran subscriber yang ditutup">Clean
+                  closed subscriber channels</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -847,31 +1285,106 @@ console.<span class="token-function">log</span>(plan.fallbackReason);
         <h2 data-en="Error Codes" data-id="Kode Error">Error Codes</h2>
         <div class="feature-table">
           <table>
-            <thead><tr><th data-en="Code" data-id="Kode">Code</th><th data-en="Class" data-id="Class">Class</th><th data-en="Description" data-id="Deskripsi">Description</th></tr></thead>
+            <thead>
+              <tr>
+                <th data-en="Code" data-id="Kode">Code</th>
+                <th data-en="Class" data-id="Class">Class</th>
+                <th data-en="Description" data-id="Deskripsi">Description</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr><td><code>ERR_DATABASE_CLOSED</code></td><td><code>DatabaseClosedError</code></td><td data-en="Operation on closed database" data-id="Operasi pada database tertutup">Operation on closed database</td></tr>
-              <tr><td><code>ERR_COLLECTION_NOT_FOUND</code></td><td><code>CollectionNotFoundError</code></td><td data-en="Collection does not exist" data-id="Collection tidak ada">Collection does not exist</td></tr>
-              <tr><td><code>ERR_COLLECTION_EXISTS</code></td><td><code>CollectionExistsError</code></td><td data-en="Collection already exists" data-id="Collection sudah ada">Collection already exists</td></tr>
-              <tr><td><code>ERR_DUPLICATE_KEY</code></td><td><code>DuplicateKeyError</code></td><td data-en="Unique constraint violation" data-id="Pelanggaran batasan unik">Unique constraint violation</td></tr>
-              <tr><td><code>ERR_TRANSACTION_ABORTED</code></td><td><code>TransactionAbortedError</code></td><td data-en="Transaction was aborted" data-id="Transaksi telah diaborsi">Transaction was aborted</td></tr>
-              <tr><td><code>ERR_TRANSACTION_CONFLICT</code></td><td><code>TransactionConflictError</code></td><td data-en="Write-write conflict detected" data-id="Konflik tulis-tulis terdeteksi">Write-write conflict detected</td></tr>
-              <tr><td><code>ERR_SAVEPOINT_NOT_FOUND</code></td><td><code>SavepointNotFoundError</code></td><td data-en="Savepoint does not exist" data-id="Savepoint tidak ada">Savepoint does not exist</td></tr>
-              <tr><td><code>ERR_SAVEPOINT_EXISTS</code></td><td><code>SavepointExistsError</code></td><td data-en="Savepoint name conflict" data-id="Konflik nama savepoint">Savepoint name conflict</td></tr>
-              <tr><td><code>ERR_PERMISSION_DENIED</code></td><td><code>PermissionDeniedError</code></td><td data-en="Insufficient permissions" data-id="Izin tidak cukup">Insufficient permissions</td></tr>
-              <tr><td><code>ERR_RATE_LIMITED</code></td><td><code>RateLimitedError</code></td><td data-en="Rate limit exceeded" data-id="Batas laju terlampaui">Rate limit exceeded</td></tr>
-              <tr><td><code>ERR_INPUT_TOO_DEEP</code></td><td><code>InputDepthError</code></td><td data-en="Document nesting depth exceeded" data-id="Kedalaman bersarang dokumen terlampaui">Document nesting depth exceeded</td></tr>
-              <tr><td><code>ERR_INPUT_TOO_LARGE</code></td><td><code>InputSizeError</code></td><td data-en="Document size exceeds limit" data-id="Ukuran dokumen melebihi batas">Document size exceeds limit</td></tr>
-              <tr><td><code>ERR_SERIALIZATION</code></td><td><code>SerializationError</code></td><td data-en="JSON serialization failed" data-id="Serialisasi JSON gagal">JSON serialization failed</td></tr>
-              <tr><td><code>ERR_NOT_IMPLEMENTED</code></td><td><code>NotImplementedError</code></td><td data-en="Feature not yet implemented" data-id="Fitur belum diimplementasi">Feature not yet implemented</td></tr>
-              <tr><td><code>ERR_CORRUPT_DATA</code></td><td><code>CorruptDataError</code></td><td data-en="Data corruption detected" data-id="Korupsi data terdeteksi">Data corruption detected</td></tr>
+              <tr>
+                <td><code>ERR_DATABASE_CLOSED</code></td>
+                <td><code>DatabaseClosedError</code></td>
+                <td data-en="Operation on closed database" data-id="Operasi pada database tertutup">Operation on closed
+                  database</td>
+              </tr>
+              <tr>
+                <td><code>ERR_COLLECTION_NOT_FOUND</code></td>
+                <td><code>CollectionNotFoundError</code></td>
+                <td data-en="Collection does not exist" data-id="Collection tidak ada">Collection does not exist</td>
+              </tr>
+              <tr>
+                <td><code>ERR_COLLECTION_EXISTS</code></td>
+                <td><code>CollectionExistsError</code></td>
+                <td data-en="Collection already exists" data-id="Collection sudah ada">Collection already exists</td>
+              </tr>
+              <tr>
+                <td><code>ERR_DUPLICATE_KEY</code></td>
+                <td><code>DuplicateKeyError</code></td>
+                <td data-en="Unique constraint violation" data-id="Pelanggaran batasan unik">Unique constraint violation
+                </td>
+              </tr>
+              <tr>
+                <td><code>ERR_TRANSACTION_ABORTED</code></td>
+                <td><code>TransactionAbortedError</code></td>
+                <td data-en="Transaction was aborted" data-id="Transaksi telah diaborsi">Transaction was aborted</td>
+              </tr>
+              <tr>
+                <td><code>ERR_TRANSACTION_CONFLICT</code></td>
+                <td><code>TransactionConflictError</code></td>
+                <td data-en="Write-write conflict detected" data-id="Konflik tulis-tulis terdeteksi">Write-write
+                  conflict detected</td>
+              </tr>
+              <tr>
+                <td><code>ERR_SAVEPOINT_NOT_FOUND</code></td>
+                <td><code>SavepointNotFoundError</code></td>
+                <td data-en="Savepoint does not exist" data-id="Savepoint tidak ada">Savepoint does not exist</td>
+              </tr>
+              <tr>
+                <td><code>ERR_SAVEPOINT_EXISTS</code></td>
+                <td><code>SavepointExistsError</code></td>
+                <td data-en="Savepoint name conflict" data-id="Konflik nama savepoint">Savepoint name conflict</td>
+              </tr>
+              <tr>
+                <td><code>ERR_PERMISSION_DENIED</code></td>
+                <td><code>PermissionDeniedError</code></td>
+                <td data-en="Insufficient permissions" data-id="Izin tidak cukup">Insufficient permissions</td>
+              </tr>
+              <tr>
+                <td><code>ERR_RATE_LIMITED</code></td>
+                <td><code>RateLimitedError</code></td>
+                <td data-en="Rate limit exceeded" data-id="Batas laju terlampaui">Rate limit exceeded</td>
+              </tr>
+              <tr>
+                <td><code>ERR_INPUT_TOO_DEEP</code></td>
+                <td><code>InputDepthError</code></td>
+                <td data-en="Document nesting depth exceeded" data-id="Kedalaman bersarang dokumen terlampaui">Document
+                  nesting depth exceeded</td>
+              </tr>
+              <tr>
+                <td><code>ERR_INPUT_TOO_LARGE</code></td>
+                <td><code>InputSizeError</code></td>
+                <td data-en="Document size exceeds limit" data-id="Ukuran dokumen melebihi batas">Document size exceeds
+                  limit</td>
+              </tr>
+              <tr>
+                <td><code>ERR_SERIALIZATION</code></td>
+                <td><code>SerializationError</code></td>
+                <td data-en="JSON serialization failed" data-id="Serialisasi JSON gagal">JSON serialization failed</td>
+              </tr>
+              <tr>
+                <td><code>ERR_NOT_IMPLEMENTED</code></td>
+                <td><code>NotImplementedError</code></td>
+                <td data-en="Feature not yet implemented" data-id="Fitur belum diimplementasi">Feature not yet
+                  implemented</td>
+              </tr>
+              <tr>
+                <td><code>ERR_CORRUPT_DATA</code></td>
+                <td><code>CorruptDataError</code></td>
+                <td data-en="Data corruption detected" data-id="Korupsi data terdeteksi">Data corruption detected</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </section>
 
       <!-- FOOTER -->
-      <footer style="margin-top: 5rem; text-align: center; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 2rem;">
-        <p data-en="© 2026 Oblivinx. Built for high-performance applications." data-id="© 2026 Oblivinx. Dibangun untuk aplikasi berkinerja tinggi.">&copy; 2026 Oblivinx. Built for high-performance applications.</p>
+      <footer
+        style="margin-top: 5rem; text-align: center; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 2rem;">
+        <p data-en="© 2026 Oblivinx. Built for high-performance applications."
+          data-id="© 2026 Oblivinx. Dibangun untuk aplikasi berkinerja tinggi.">&copy; 2026 Oblivinx. Built for
+          high-performance applications.</p>
       </footer>
     </main>
 

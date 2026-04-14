@@ -90,6 +90,11 @@ impl FileHeader {
         let name = b"Oblivinx3x";
         app_id[..name.len()].copy_from_slice(name);
 
+        // WAL must start AFTER page 0 (header) and page 1 (segment directory).
+        // wal_start_offset = 0 causes WAL records to overwrite the file header,
+        // corrupting the magic number (0x4F564E58 → 0x00000001 = Insert record type).
+        let wal_start = page_size as u64 * 2;
+
         Self {
             magic: OVN_MAGIC,
             version_major: FORMAT_VERSION_MAJOR,
@@ -98,7 +103,7 @@ impl FileHeader {
             total_file_size: page_size as u64 * 2, // header + segment directory
             primary_root_page: 0,
             metadata_root_page: 0,
-            wal_start_offset: 0,
+            wal_start_offset: wal_start,
             wal_size: 0,
             collection_count: 0,
             checksum: 0, // computed on write

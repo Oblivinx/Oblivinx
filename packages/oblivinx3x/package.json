@@ -1,6 +1,6 @@
 {
   "name": "oblivinx3x",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Oblivinx3x — High-Performance Embedded Document Database. Hybrid B+/LSM engine with MVCC, ACID transactions, and MongoDB-compatible query language. Zero configuration, single-file, in-process.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -58,10 +58,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/natz/oblivinx3x.git"
+    "url": "https://github.com/Oblivinx/OblivinxDB"
   },
   "bugs": {
-    "url": "https://github.com/natz/oblivinx3x/issues"
+    "url": "https://github.com/Oblivinx/OblivinxDB/issues"
   },
-  "homepage": "https://github.com/natz/oblivinx3x#readme"
+  "homepage": "https://oblivinx.github.io/OblivinxDB/"
 }

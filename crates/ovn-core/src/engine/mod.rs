@@ -128,7 +128,28 @@ impl OvnEngine {
         };
 
         let buffer_pool = Arc::new(BufferPool::new(config.buffer_pool_size, config.page_size));
-        let wal_offset = header.wal_start_offset;
+
+        // Guard: WAL must NEVER start before offset (page_size * 2).
+        // Databases created with older buggy builds may have wal_start_offset = 0,
+        // which causes WAL records to overwrite Page 0 (the file header),
+        // corrupting the magic number on next open.
+        let min_wal_offset = config.page_size as u64 * 2;
+        let wal_offset = if header.wal_start_offset < min_wal_offset {
+            if !is_new {
+                log::warn!(
+                    "Detected wal_start_offset={} < minimum {}. \
+                     Database may have been created with a buggy build. \
+                     Resetting WAL offset to {} to prevent header corruption.",
+                    header.wal_start_offset,
+                    min_wal_offset,
+                    min_wal_offset
+                );
+            }
+            min_wal_offset
+        } else {
+            header.wal_start_offset
+        };
+
         let wal = Arc::new(WalManager::new(wal_offset));
         let memtable = Arc::new(MemTable::new(config.memtable_threshold));
         let sstable_mgr = Arc::new(SSTableManager::new());
