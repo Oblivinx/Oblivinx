@@ -7,8 +7,8 @@ use crate::{with_engine, DATABASES};
 /// JS signature: `beginTransaction(handle): string`
 pub fn ovn_begin_transaction(mut cx: FunctionContext) -> JsResult<JsString> {
     let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
-    let txn = with_engine(&mut cx, handle_idx, |engine| engine.begin_transaction())?;
-    Ok(cx.string(txn.txid.to_string()))
+    let txid = with_engine(&mut cx, handle_idx, |engine| engine.begin_transaction())?;
+    Ok(cx.string(txid.to_string()))
 }
 
 /// Commit a transaction.

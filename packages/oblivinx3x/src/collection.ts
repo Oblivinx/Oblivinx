@@ -54,6 +54,9 @@ import type {
   InsertManyResult,
   UpdateResult,
   DeleteResult,
+  VersioningConfig,
+  VersionInfo,
+  VersionDiff,
 } from './types/index.js';
 
 // Forward-declare Database type to avoid circular dependency
@@ -889,5 +892,216 @@ export class Collection<TSchema extends Document = Document> {
    */
   async drop(): Promise<void> {
     wrapNative(() => native.dropCollection(this.#db._handle, this.#name));
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  VERSIONING
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Enable versioning for this collection.
+   *
+   * Once enabled, every insert and update will automatically record
+   * a new version in the version history, enabling point-in-time queries,
+   * diffs, and rollbacks.
+   *
+   * @param config - Versioning options (mode, maxVersions, etc.)
+   *
+   * @example
+   * ```typescript
+   * await users.enableVersioning({
+   *   mode: 'diff',
+   *   maxVersions: 100,
+   *   retainFor: '30d',
+   *   trackAuthor: true,
+   * });
+   * ```
+   */
+  async enableVersioning(config: VersioningConfig = {}): Promise<void> {
+    this.#assertOpen();
+    wrapNative(() =>
+      native.enableVersioning(
+        this.#db._handle,
+        this.#name,
+        JSON.stringify(config),
+      ),
+    );
+  }
+
+  /**
+   * Disable versioning for this collection.
+   *
+   * Removes all stored version history. This operation is irreversible.
+   *
+   * @example
+   * ```typescript
+   * await users.disableVersioning();
+   * ```
+   */
+  async disableVersioning(): Promise<void> {
+    this.#assertOpen();
+    wrapNative(() =>
+      native.disableVersioning(this.#db._handle, this.#name),
+    );
+  }
+
+  /**
+   * List all recorded versions for a document.
+   *
+   * @param docId - The `_id` of the document
+   * @returns Array of VersionInfo objects, sorted oldest to newest
+   *
+   * @example
+   * ```typescript
+   * const versions = await users.listVersions('user-abc-123');
+   * for (const v of versions) {
+   *   console.log(`v${v.version} at ${new Date(v.createdAt).toISOString()} (${v.changeCount} changes)`);
+   * }
+   * ```
+   */
+  async listVersions(docId: string): Promise<VersionInfo[]> {
+    this.#assertOpen();
+    const json = wrapNative(() =>
+      native.listDocumentVersions(this.#db._handle, this.#name, docId),
+    );
+    return JSON.parse(json) as VersionInfo[];
+  }
+
+  /**
+   * Get the document as it existed at a specific version.
+   *
+   * The returned document includes metadata fields:
+   * - `__version` — Version number
+   * - `__versionedAt` — Unix epoch ms timestamp
+   * - `__author` — Optional author ID
+   * - `__tag` — Optional user-defined tag
+   *
+   * @param docId - The `_id` of the document
+   * @param version - Version number to retrieve (1-based)
+   * @returns The document at that version, or `null` if not found
+   *
+   * @example
+   * ```typescript
+   * const v2 = await users.getVersion('user-abc-123', 2);
+   * if (v2) {
+   *   console.log(`v2 data:`, v2);
+   * }
+   * ```
+   */
+  async getVersion(docId: string, version: number): Promise<TSchema | null> {
+    this.#assertOpen();
+    const json = wrapNative(() =>
+      native.getDocumentVersion(this.#db._handle, this.#name, docId, version),
+    );
+    return JSON.parse(json) as TSchema | null;
+  }
+
+  /**
+   * Compute the difference between two versions of a document.
+   *
+   * @param docId - The `_id` of the document
+   * @param v1 - Source version number
+   * @param v2 - Target version number
+   * @returns VersionDiff with `added`, `modified`, and `removed` fields
+   *
+   * @example
+   * ```typescript
+   * const diff = await users.diffVersions('user-abc-123', 1, 3);
+   * console.log('Added:', diff.added);
+   * console.log('Modified:', diff.modified);
+   * console.log('Removed:', diff.removed);
+   * ```
+   */
+  async diffVersions(docId: string, v1: number, v2: number): Promise<VersionDiff> {
+    this.#assertOpen();
+    const json = wrapNative(() =>
+      native.diffDocumentVersions(this.#db._handle, this.#name, docId, v1, v2),
+    );
+    return JSON.parse(json) as VersionDiff;
+  }
+
+  /**
+   * Rollback a document to a prior version.
+   *
+   * This is non-destructive: it creates a **new** version with the old content,
+   * preserving the full history. Equivalent to `git revert`.
+   *
+   * @param docId - The `_id` of the document
+   * @param version - Version number to restore
+   * @param author - Optional author ID to record in the new version
+   * @returns The restored document
+   *
+   * @example
+   * ```typescript
+   * const restored = await users.rollbackToVersion('user-abc-123', 1);
+   * console.log('Restored user:', restored);
+   * ```
+   */
+  async rollbackToVersion(
+    docId: string,
+    version: number,
+    author?: string,
+  ): Promise<TSchema> {
+    this.#assertOpen();
+    const json = wrapNative(() =>
+      native.rollbackToVersion(
+        this.#db._handle,
+        this.#name,
+        docId,
+        version,
+        author,
+      ),
+    );
+    return JSON.parse(json) as TSchema;
+  }
+
+  /**
+   * Tag a specific document version with a human-readable label.
+   *
+   * @param docId - The `_id` of the document
+   * @param version - Version number to tag
+   * @param tag - Tag label (e.g. 'before-migration', 'stable')
+   *
+   * @example
+   * ```typescript
+   * await users.tagVersion('user-abc-123', 3, 'before-migration');
+   * ```
+   */
+  async tagVersion(docId: string, version: number, tag: string): Promise<void> {
+    this.#assertOpen();
+    wrapNative(() =>
+      native.tagDocumentVersion(this.#db._handle, this.#name, docId, version, tag),
+    );
+  }
+
+  /**
+   * Restore a document to the version associated with a specific tag.
+   *
+   * @param docId - The `_id` of the document
+   * @param tag - Tag label to restore from
+   * @param author - Optional author ID for the new version record
+   * @returns The restored document
+   *
+   * @example
+   * ```typescript
+   * const restored = await users.restoreFromTag('user-abc-123', 'before-migration');
+   * ```
+   */
+  async restoreFromTag(
+    docId: string,
+    tag: string,
+    author?: string,
+  ): Promise<TSchema> {
+    this.#assertOpen();
+    const json = wrapNative(() =>
+      native.restoreFromTag(
+        this.#db._handle,
+        this.#name,
+        docId,
+        tag,
+        author,
+      ),
+    );
+    return JSON.parse(json) as TSchema;
   }
 }

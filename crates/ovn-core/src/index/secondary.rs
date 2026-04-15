@@ -278,6 +278,24 @@ impl IndexManager {
         }
     }
 
+    /// Range scan on an index: returns document IDs for keys in [from, to].
+    pub fn range_scan_index(
+        &self,
+        name: &str,
+        from: &ObeValue,
+        to: &ObeValue,
+    ) -> Vec<Vec<u8>> {
+        let indexes = self.indexes.read();
+        if let Some(idx) = indexes.get(name) {
+            idx.range_scan(from, to)
+                .into_iter()
+                .map(|e| e.value)
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
     /// List all index names.
     pub fn list_indexes(&self) -> Vec<IndexSpec> {
         let indexes = self.indexes.read();

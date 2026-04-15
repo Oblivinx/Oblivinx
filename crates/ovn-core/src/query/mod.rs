@@ -14,7 +14,9 @@ pub mod aggregation;
 pub mod filter;
 pub mod planner;
 pub mod update;
+pub mod sql_parser;
 
 pub use aggregation::{execute_pipeline, AggregateStage};
 pub use filter::{evaluate_filter, Filter, FilterOp};
 pub use update::{apply_update, UpdateOp};
+pub use sql_parser::SqlQuery;

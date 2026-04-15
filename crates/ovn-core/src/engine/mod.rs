@@ -17,11 +17,18 @@ mod metrics;
 mod pragma;
 mod txn_ops;
 mod view;
+mod relation;
+mod trigger;
+mod versioning;
+mod backup;
+mod encryption;
+mod audit;
+mod security;
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::error::{OvnError, OvnResult};
 use crate::format::header::FileHeader;
@@ -41,6 +48,7 @@ use crate::storage::wal::{WalManager, WalRecordType};
 
 use self::collection::Collection;
 use self::config::OvnConfig;
+use self::txn_ops::SavepointState;
 
 /// Options for write operations (insert, update, delete).
 #[derive(Debug, Clone, Default)]
@@ -95,6 +103,34 @@ pub struct OvnEngine {
     config: OvnConfig,
     /// Whether the engine is closed
     closed: RwLock<bool>,
+    /// Savepoint state per transaction (txid → SavepointState)
+    savepoint_states: Mutex<HashMap<u64, SavepointState>>,
+    /// View registry: name → ViewDefinition
+    views: Mutex<HashMap<String, view::ViewDefinition>>,
+    /// Materialized view cache: name → cached results
+    materialized_caches: Mutex<HashMap<String, view::MaterializedViewCache>>,
+    /// Relation definitions: stored for referential integrity validation
+    relations: Mutex<Vec<relation::RelationDefinition>>,
+    /// Referential integrity mode: 'off', 'soft', 'strict'
+    integrity_mode: RwLock<String>,
+    /// Trigger definitions: collection → event → trigger function metadata
+    triggers: Mutex<HashMap<String, HashMap<String, trigger::TriggerDefinition>>>,
+    /// Pragma key-value store
+    pragmas: Mutex<HashMap<String, serde_json::Value>>,
+    /// Attached databases: alias → engine instance
+    attached_databases: Mutex<HashMap<String, Arc<OvnEngine>>>,
+    /// Version history registry: collection → doc_id → versions
+    version_history: Mutex<HashMap<String, versioning::CollectionVersionHistory>>,
+    /// Versioning configs per collection
+    versioning_configs: Mutex<HashMap<String, versioning::VersioningConfig>>,
+    /// Encryption configs per collection
+    encryption_configs: Mutex<HashMap<String, encryption::CollectionEncryptionConfig>>,
+    /// Key provider for encryption
+    key_provider: Mutex<Option<Box<dyn encryption::KeyProvider>>>,
+    /// Audit log entries (ring buffer)
+    audit_log: Mutex<Vec<audit::AuditEntry>>,
+    /// Rate limiter state
+    rate_limiter: Mutex<security::RateLimiter>,
 }
 
 impl OvnEngine {
@@ -175,6 +211,20 @@ impl OvnEngine {
             collections: RwLock::new(HashMap::new()),
             config,
             closed: RwLock::new(false),
+            savepoint_states: Mutex::new(HashMap::new()),
+            views: Mutex::new(HashMap::new()),
+            materialized_caches: Mutex::new(HashMap::new()),
+            relations: Mutex::new(Vec::new()),
+            integrity_mode: RwLock::new("off".to_string()),
+            triggers: Mutex::new(HashMap::new()),
+            pragmas: Mutex::new(HashMap::new()),
+            attached_databases: Mutex::new(HashMap::new()),
+            version_history: Mutex::new(HashMap::new()),
+            versioning_configs: Mutex::new(HashMap::new()),
+            encryption_configs: Mutex::new(HashMap::new()),
+            key_provider: Mutex::new(None),
+            audit_log: Mutex::new(Vec::new()),
+            rate_limiter: Mutex::new(security::RateLimiter::new(1000)), // 1000 QPS default
         };
 
         if !is_new {
@@ -437,59 +487,20 @@ impl OvnEngine {
         Ok(results)
     }
 
-    // ── Relations ──────────────────────────────────────────────
-
-    /// Define a relation between collections.
-    pub fn define_relation(&self, definition: &serde_json::Value) -> OvnResult<()> {
-        log::info!("Relation defined: {:?}", definition);
-        Ok(())
-    }
-
-    /// Drop a relation definition.
-    pub fn drop_relation(&self, from: &str, to: &str) -> OvnResult<()> {
-        log::info!("Relation dropped: {} -> {}", from, to);
-        Ok(())
-    }
-
-    /// List all relations.
-    pub fn list_relations(&self) -> OvnResult<Vec<serde_json::Value>> {
-        Ok(vec![])
-    }
-
-    /// Set referential integrity mode.
-    pub fn set_referential_integrity(&self, mode: &str) -> OvnResult<()> {
-        log::info!("Referential integrity set to '{}'", mode);
-        Ok(())
-    }
-
-    // ── Triggers ───────────────────────────────────────────────
-
-    /// Register a trigger on a collection.
-    pub fn create_trigger(&self, collection: &str, event: &str) -> OvnResult<()> {
-        log::info!("Trigger '{}' created on '{}'", event, collection);
-        Ok(())
-    }
-
-    /// Drop a trigger.
-    pub fn drop_trigger(&self, collection: &str, event: &str) -> OvnResult<()> {
-        log::info!("Trigger '{}' dropped from '{}'", event, collection);
-        Ok(())
-    }
-
-    /// List triggers on a collection.
-    pub fn list_triggers(&self, collection: &str) -> OvnResult<Vec<serde_json::Value>> {
-        log::info!("Listing triggers for '{}'", collection);
-        Ok(vec![])
-    }
-
     // ── Internal helpers ───────────────────────────────────────
 
+    /// Check if the engine is closed.
     fn check_closed(&self) -> OvnResult<()> {
         if *self.closed.read() {
             Err(OvnError::DatabaseClosed)
         } else {
             Ok(())
         }
+    }
+
+    /// Get the database file path.
+    pub fn get_path(&self) -> &PathBuf {
+        &self.path
     }
 
     fn collection_id(name: &str) -> u32 {

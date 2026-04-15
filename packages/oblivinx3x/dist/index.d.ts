@@ -73,7 +73,7 @@ export { Collection } from './collection.js';
 export { Transaction } from './transaction.js';
 export type { TransactionState, TransactionInfo } from './transaction.js';
 export { OvnError, CollectionNotFoundError, CollectionExistsError, WriteConflictError, ValidationError, } from './errors/index.js';
-export type { OvnConfig, Document, FilterQuery, ComparisonOperators, UpdateQuery, FindOptions, PipelineStage, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult, IndexFields, IndexOptions, IndexInfo, CollationOptions, OvnMetrics, OvnVersion, ViewDefinition, MaterializedViewOptions, ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerContext, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainVerbosity, ExplainPlan, OvnMetricsExtended, } from './types/index.js';
+export type { OvnConfig, Document, FilterQuery, ComparisonOperators, UpdateQuery, FindOptions, PipelineStage, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult, IndexFields, IndexOptions, IndexInfo, CollationOptions, OvnMetrics, OvnVersion, ViewDefinition, MaterializedViewOptions, ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerContext, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainVerbosity, ExplainPlan, OvnMetricsExtended, VersioningConfig, VersionInfo, VersionDiffEntry, VersionDiff, } from './types/index.js';
 export { Oblivinx3x as default } from './database.js';
 export { QueryBuilder, Cursor } from './query/builder.js';
 export type { CursorOptions } from './query/builder.js';

@@ -328,6 +328,20 @@ export declare class Oblivinx3x {
      */
     backup(destPath: string): Promise<void>;
     /**
+     * Execute a SQL-like query and return results.
+     *
+     * Supports: SELECT, INSERT, UPDATE, DELETE with WHERE, ORDER BY, LIMIT, SKIP.
+     *
+     * @param sql - SQL query string
+     * @returns Query results as array of documents
+     *
+     * @example
+     * ```typescript
+     * const users = await db.executeSql('SELECT name, age FROM users WHERE age > 18 ORDER BY name DESC LIMIT 10');
+     * ```
+     */
+    executeSql(sql: string): Promise<Document[]>;
+    /**
      * Tutup database dengan graceful.
      *
      * Melakukan:

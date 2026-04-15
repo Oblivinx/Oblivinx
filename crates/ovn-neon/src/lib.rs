@@ -33,6 +33,7 @@ mod pragma;
 mod relations;
 mod triggers;
 mod txn;
+mod versioning;
 mod views;
 mod watch;
 
@@ -119,6 +120,21 @@ fn ovn_backup(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
     with_engine(&mut cx, handle_idx, |engine| engine.backup(&dest_path))?;
     Ok(cx.undefined())
+}
+
+/// Execute a SQL-like query.
+///
+/// JS signature: `executeSql(handle, sql): string` (JSON results[])
+fn ovn_execute_sql(mut cx: FunctionContext) -> JsResult<JsString> {
+    let handle_idx = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+    let sql = cx.argument::<JsString>(1)?.value(&mut cx);
+
+    let results = with_engine(&mut cx, handle_idx, |engine| {
+        engine.execute_sql(&sql)
+    })?;
+
+    let json = serde_json::to_string(&results).unwrap_or_else(|_| "[]".to_string());
+    Ok(cx.string(json))
 }
 
 // ── Module Registration ─────────────────────────────────────
@@ -212,10 +228,21 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     // Real-Time Events
     cx.export_function("watch", watch::ovn_watch)?;
 
+    // Versioning
+    cx.export_function("enableVersioning", versioning::ovn_enable_versioning)?;
+    cx.export_function("disableVersioning", versioning::ovn_disable_versioning)?;
+    cx.export_function("getDocumentVersion", versioning::ovn_get_document_version)?;
+    cx.export_function("listDocumentVersions", versioning::ovn_list_document_versions)?;
+    cx.export_function("diffDocumentVersions", versioning::ovn_diff_document_versions)?;
+    cx.export_function("rollbackToVersion", versioning::ovn_rollback_to_version)?;
+    cx.export_function("tagDocumentVersion", versioning::ovn_tag_document_version)?;
+    cx.export_function("restoreFromTag", versioning::ovn_restore_from_tag)?;
+
     // Advanced Features
     cx.export_function("autocomplete", ovn_autocomplete)?;
     cx.export_function("export", ovn_export)?;
     cx.export_function("backup", ovn_backup)?;
+    cx.export_function("executeSql", ovn_execute_sql)?;
 
     Ok(())
 }

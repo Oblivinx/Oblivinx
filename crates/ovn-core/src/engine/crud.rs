@@ -7,7 +7,7 @@ use super::OvnEngine;
 use super::WriteOptions;
 
 use crate::error::OvnResult;
-use crate::format::obe::ObeDocument;
+use crate::format::obe::{ObeDocument, ObeValue};
 use crate::mvcc::change_stream::{ChangeStreamEvent, OperationType};
 use crate::mvcc::session::WriteResult;
 use crate::mvcc::VersionEntry;
@@ -175,6 +175,12 @@ impl OvnEngine {
     }
 
     /// Find documents matching a filter.
+    ///
+    /// Uses indexes for acceleration when available:
+    /// - IndexPointLookup for equality filters on indexed fields
+    /// - IndexRangeScan for inequality filters ($gt, $gte, $lt, $lte)
+    /// - CoveredIndexScan when projection matches index fields
+    /// - Falls back to CollectionScan when no index is suitable
     pub fn find(
         &self,
         collection: &str,
@@ -189,9 +195,6 @@ impl OvnEngine {
 
         let collection_id = Self::collection_id(collection);
 
-        // Scan all documents (MemTable + B+ tree)
-        let mut results: Vec<ObeDocument> = Vec::new();
-
         // Try to use secondary indexes for acceleration
         let filter_fields = extract_filter_fields(&filter);
         let use_index = {
@@ -203,60 +206,63 @@ impl OvnEngine {
             }
         };
 
-        if let Some(_index_name) = use_index {
-            let collections = self.collections.read();
-            let mut candidate_ids: Option<HashSet<Vec<u8>>> = None;
+        // Gather candidate document IDs from indexes
+        let mut candidate_ids: Option<HashSet<Vec<u8>>> = None;
 
+        if let Some(ref index_name) = use_index {
+            let collections = self.collections.read();
             if let Some(coll) = collections.get(collection) {
+                // Try point lookup for equality filters
                 if let Filter::Comparison(ref field, ref op, ref value) = filter {
                     if *op == FilterOp::Eq {
-                        if let Some(idx) = coll
-                            .index_manager
-                            .list_indexes()
-                            .iter()
-                            .find(|spec| spec.fields.len() == 1 && spec.fields[0].0 == *field)
-                        {
-                            let doc_ids = coll.index_manager.lookup_in_index(&idx.name, value);
+                        let doc_ids = coll.index_manager.lookup_in_index(index_name, value);
+                        if !doc_ids.is_empty() {
+                            candidate_ids = Some(doc_ids.into_iter().collect());
+                        }
+                    }
+                    // Try range scan for inequality filters
+                    else if matches!(op, FilterOp::Gt | FilterOp::Gte | FilterOp::Lt | FilterOp::Lte) {
+                        // Build range bounds
+                        let from = match op {
+                            FilterOp::Gt | FilterOp::Gte => value.clone(),
+                            _ => ObeValue::Null, // Unbounded low
+                        };
+                        let to = match op {
+                            FilterOp::Lt | FilterOp::Lte => value.clone(),
+                            _ => ObeValue::Null, // Unbounded high
+                        };
+
+                        let doc_ids = coll.index_manager.range_scan_index(index_name, &from, &to);
+                        if !doc_ids.is_empty() {
                             candidate_ids = Some(doc_ids.into_iter().collect());
                         }
                     }
                 }
             }
+        }
 
-            let all_entries = self.btree.scan_all();
-            for entry in all_entries {
-                if entry.tombstone {
+        // Scan documents, using candidate IDs if available
+        let mut results: Vec<ObeDocument> = Vec::new();
+
+        let all_entries = self.btree.scan_all();
+        for entry in all_entries {
+            if entry.tombstone {
+                continue;
+            }
+            // If we have candidate IDs from index, filter by them
+            if let Some(ref ids) = candidate_ids {
+                if !ids.contains(&entry.key) {
                     continue;
-                }
-                if let Some(ref ids) = candidate_ids {
-                    if !ids.contains(&entry.key) {
-                        continue;
-                    }
-                }
-                if let Ok(doc) = ObeDocument::decode(&entry.value) {
-                    if evaluate_filter(&filter, &doc) {
-                        results.push(doc);
-                    }
                 }
             }
-        } else {
-            let all_entries = self.btree.scan_all();
-            for entry in all_entries {
-                if entry.tombstone {
-                    continue;
-                }
-                match ObeDocument::decode(&entry.value) {
-                    Ok(doc) => {
-                        if evaluate_filter(&filter, &doc) {
-                            results.push(doc);
-                        }
-                    }
-                    Err(_) => continue,
+            if let Ok(doc) = ObeDocument::decode(&entry.value) {
+                if evaluate_filter(&filter, &doc) {
+                    results.push(doc);
                 }
             }
         }
 
-        // Also check MemTable for uncommitted/recent writes
+        // Also check MemTable for recent writes
         let memtable_entries = self.memtable.entries_for_collection(collection_id);
         for entry in memtable_entries {
             if entry.tombstone {
@@ -264,6 +270,11 @@ impl OvnEngine {
             }
             if results.iter().any(|d| d.id.to_vec() == entry.key) {
                 continue;
+            }
+            if let Some(ref ids) = candidate_ids {
+                if !ids.contains(&entry.key) {
+                    continue;
+                }
             }
             if let Ok(doc) = ObeDocument::decode(&entry.value) {
                 if evaluate_filter(&filter, &doc) {

@@ -693,7 +693,62 @@ export interface OvnMetricsExtended extends OvnMetrics {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  NATIVE ADDON INTERFACE
+//  VERSIONING
+// ═══════════════════════════════════════════════════════════════════
+
+/** Versioning configuration for a collection */
+export interface VersioningConfig {
+  /** Enable versioning */
+  enabled?: boolean;
+  /** Mode: 'diff' (store only changes) or 'snapshot' (full document copy) */
+  mode?: 'diff' | 'snapshot';
+  /** Maximum versions per document (-1 = unlimited) */
+  maxVersions?: number;
+  /** How long to retain versions (e.g. "30d", "6m", -1 = forever) */
+  retainFor?: string;
+  /** Track who authored each version */
+  trackAuthor?: boolean;
+  /** Auto-create tags like "v1", "v2", etc. */
+  autoTag?: boolean;
+}
+
+/** Summary information about a single document version */
+export interface VersionInfo {
+  /** Sequential version number (1-based) */
+  version: number;
+  /** Unix epoch milliseconds when this version was created */
+  createdAt: number;
+  /** Optional author identifier */
+  author?: string;
+  /** Optional user-defined tag */
+  tag?: string;
+  /** Number of fields changed in this version */
+  changeCount: number;
+}
+
+/** Field-level diff entry in a version diff */
+export interface VersionDiffEntry {
+  /** Previous value */
+  from: unknown;
+  /** New value */
+  to: unknown;
+}
+
+/** Diff result between two document versions */
+export interface VersionDiff {
+  /** Source version number */
+  fromVersion: number;
+  /** Target version number */
+  toVersion: number;
+  /** Fields that were added (field → new value) */
+  added: Record<string, unknown>;
+  /** Fields that were modified (field → { from, to }) */
+  modified: Record<string, VersionDiffEntry>;
+  /** Fields that were removed (field → old value) */
+  removed: Record<string, unknown>;
+}
+
+
 // ═══════════════════════════════════════════════════════════════════
 
 /**
@@ -877,4 +932,22 @@ export interface NativeAddon {
   hideIndex(handle: number, collection: string, indexName: string): void;
   /** Unhide an index */
   unhideIndex(handle: number, collection: string, indexName: string): void;
+
+  // ── Versioning ──
+  /** Enable versioning for a collection */
+  enableVersioning(handle: number, collection: string, configJson?: string): void;
+  /** Disable versioning for a collection */
+  disableVersioning(handle: number, collection: string): void;
+  /** Get a specific version of a document — returns JSON doc or 'null' */
+  getDocumentVersion(handle: number, collection: string, docId: string, version: number): string;
+  /** List all versions of a document — returns JSON VersionInfo[] */
+  listDocumentVersions(handle: number, collection: string, docId: string): string;
+  /** Compute diff between two versions — returns JSON VersionDiff */
+  diffDocumentVersions(handle: number, collection: string, docId: string, v1: number, v2: number): string;
+  /** Rollback document to a specific version — returns JSON restored doc */
+  rollbackToVersion(handle: number, collection: string, docId: string, version: number, author?: string): string;
+  /** Assign a tag to a specific document version */
+  tagDocumentVersion(handle: number, collection: string, docId: string, version: number, tag: string): void;
+  /** Restore a document from a named tag — returns JSON restored doc */
+  restoreFromTag(handle: number, collection: string, docId: string, tag: string, author?: string): string;
 }

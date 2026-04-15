@@ -97,6 +97,18 @@ pub enum OvnError {
     #[error("Snapshot {snapshot_txid} expired: versions have been garbage collected")]
     SnapshotExpired { snapshot_txid: u64 },
 
+    /// Savepoint error
+    #[error("Savepoint '{name}' error: {reason}")]
+    SavepointError { name: String, reason: String },
+
+    /// Savepoint depth limit exceeded
+    #[error("Savepoint depth limit exceeded: maximum depth is {max_depth}")]
+    SavepointDepthError { max_depth: usize },
+
+    /// Transaction error
+    #[error("Transaction {txid} error: {reason}")]
+    TransactionError { txid: u64, reason: String },
+
     // ── Collection Errors ──────────────────────────────────────
     /// Collection not found
     #[error("Collection '{name}' not found")]
@@ -118,6 +130,14 @@ pub enum OvnError {
     /// Invalid query plan
     #[error("Query plan error: {0}")]
     QueryPlanError(String),
+
+    /// Query error (rate limit, timeout, etc.)
+    #[error("Query error: {0}")]
+    QueryError(String),
+
+    /// Encryption error
+    #[error("Encryption error: {0}")]
+    EncryptionError(String),
 
     // ── Index Errors ───────────────────────────────────────────
     /// Index not found

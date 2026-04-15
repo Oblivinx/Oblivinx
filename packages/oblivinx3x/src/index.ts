@@ -154,6 +154,12 @@ export type {
 
   // Extended metrics [NEW]
   OvnMetricsExtended,
+
+  // Versioning [NEW]
+  VersioningConfig,
+  VersionInfo,
+  VersionDiffEntry,
+  VersionDiff,
 } from './types/index.js';
 
 // ═══════════════════════════════════════════════════════════════════
