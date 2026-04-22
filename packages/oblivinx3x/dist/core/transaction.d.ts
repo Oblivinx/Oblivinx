@@ -1,20 +1,18 @@
 /**
- * @module core/transaction
+ * @file core/transaction.ts
+ * @module oblivinx3x/core
+ * @description
+ *   Re-export tipis dari `../transaction.ts`.
  *
- * ─────────────────────────────────────────────────────────────────────────────
- * Re-Export: Transaction
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * File ini adalah re-export tipis dari `../transaction.ts`.
- *
- * **Satu sumber kebenaran:**
- * Seluruh implementasi Transaction ada di `src/transaction.ts`.
- * File ini hanya agar modul internal yang import dari path `core/transaction`
- * tidak perlu diubah satu per satu.
+ *   Satu sumber kebenaran: seluruh implementasi Transaction ada di
+ *   `src/transaction.ts`. File ini hanya memastikan modul yang import
+ *   dari path `core/transaction` tetap berjalan tanpa perlu refactor.
  *
  * @see {@link ../transaction.ts} — implementasi lengkap
  *
- * @packageDocumentation
+ * @author Oblivinx3x Team
+ * @version 1.2.0
+ * @since 1.0.0
  */
 export { Transaction, type TransactionState, type TransactionInfo, } from '../transaction.js';
 //# sourceMappingURL=transaction.d.ts.map

@@ -1,10 +1,15 @@
 /**
- * @module core/database
+ * @file core/database.ts
+ * @module oblivinx3x/core
+ * @description
+ *   Re-export `Oblivinx3x` sebagai `OblivinxDB` type alias.
  *
- * Re-exports the Oblivinx3x database class as the OblivinxDB interface
- * used internally by the core transaction module and relations manager.
+ *   File ini menjaga kompatibilitas modul internal yang import
+ *   dari path `core/database` tanpa perlu mengubah semua import.
  *
- * @packageDocumentation
+ * @author Oblivinx3x Team
+ * @version 1.2.0
+ * @since 1.0.0
  */
 export {};
 //# sourceMappingURL=database.js.map

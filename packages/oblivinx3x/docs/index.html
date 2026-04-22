@@ -90,6 +90,7 @@
             <li><a href="#views" data-en="Views" data-id="Tampilan">Views</a></li>
             <li><a href="#relations" data-en="Relations & FK" data-id="Relasi & FK">Relations &amp; FK</a></li>
             <li><a href="#triggers" data-en="Triggers" data-id="Pemicu">Triggers</a></li>
+            <li><a href="#versioning" data-en="Document Versioning" data-id="Versi Dokumen">Document Versioning</a></li>
             <li><a href="#change-streams" data-en="Change Streams" data-id="Aliran Perubahan">Change Streams</a></li>
             <li><a href="#pragma" data-en="Pragmas" data-id="Pragma">Pragmas</a></li>
             <li><a href="#attach" data-en="Attached Databases" data-id="Database Terlampir">Attached Databases</a></li>
@@ -315,7 +316,7 @@ npm install oblivinx3x</code></pre>
                 <td>&#x2705;</td>
               </tr>
               <tr>
-                <td rowspan="6">Advanced</td>
+                <td rowspan="7">Advanced</td>
                 <td data-en="Views (Logical + Materialized)" data-id="Tampilan (Logis + Termaterialisasi)">Views
                   (Logical + Materialized)</td>
                 <td>&#x2705;</td>
@@ -336,6 +337,10 @@ npm install oblivinx3x</code></pre>
               </tr>
               <tr>
                 <td data-en="Attached Databases" data-id="Database Terlampir">Attached Databases</td>
+                <td>&#x2705;</td>
+              </tr>
+              <tr>
+                <td data-en="Document Versioning (Time Travel)" data-id="Versi Dokumen (Perjalanan Waktu)">Document Versioning (Time Travel)</td>
                 <td>&#x2705;</td>
               </tr>
               <tr>
@@ -957,6 +962,40 @@ console.<span class="token-function">log</span>(<span class="token-string">`Save
   doc.createdAt <span class="token-keyword">=</span> Date.<span class="token-function">now</span>();
   <span class="token-keyword">return</span> doc;
 });</code></pre>
+      </section>
+
+      <!-- ===================== VERSIONING ===================== -->
+      <section id="versioning" class="animate-on-scroll">
+        <h2 data-en="Document Versioning" data-id="Versi Dokumen">Document Versioning (Time Travel)</h2>
+        <p data-en="Natively track full document history, compute granular diffs, and perform non-destructive rollbacks."
+          data-id="Melacak riwayat dokumen secara native, menghitung diff secara granular, dan melakukan rollback yang tidak merusak.">
+          Natively track full document history, compute granular diffs, and perform non-destructive rollbacks.</p>
+        
+        <pre><code><span class="token-comment">// 1. Enable tracking</span>
+<span class="token-keyword">await</span> users.<span class="token-function">enableVersioning</span>({ 
+  mode: <span class="token-string">'diff'</span>, 
+  maxVersions: <span class="token-number">50</span> 
+});
+
+<span class="token-comment">// 2. Operations are saved as versions</span>
+<span class="token-keyword">await</span> users.<span class="token-function">updateOne</span>({ _id: <span class="token-string">'u1'</span> }, { <span class="token-string">$set</span>: { role: <span class="token-string">'admin'</span> } });
+
+<span class="token-comment">// 3. View history and diffs</span>
+<span class="token-keyword">const</span> history <span class="token-keyword">=</span> <span class="token-keyword">await</span> users.<span class="token-function">listVersions</span>(<span class="token-string">'u1'</span>);
+<span class="token-keyword">const</span> diff <span class="token-keyword">=</span> <span class="token-keyword">await</span> users.<span class="token-function">diffVersions</span>(<span class="token-string">'u1'</span>, <span class="token-number">1</span>, <span class="token-number">2</span>);
+
+<span class="token-comment">// 4. Rollback safely (creates a new version!)</span>
+<span class="token-keyword">await</span> users.<span class="token-function">rollbackToVersion</span>(<span class="token-string">'u1'</span>, <span class="token-number">1</span>);</code></pre>
+
+        <h3 data-en="Versioning API" data-id="API Versi">Versioning API</h3>
+        <div class="api-list">
+          <div class="api-item"><code>enableVersioning(config)</code> — <span data-en="Start tracking versions" data-id="Mulai melacak versi">Start tracking versions</span></div>
+          <div class="api-item"><code>listVersions(docId)</code> — <span data-en="Get version history" data-id="Dapatkan riwayat versi">Get version history</span></div>
+          <div class="api-item"><code>getVersion(docId, ver)</code> — <span data-en="Get specific revision" data-id="Dapatkan revisi spesifik">Get specific revision</span></div>
+          <div class="api-item"><code>diffVersions(docId, v1, v2)</code> — <span data-en="Compute changes between versions" data-id="Hitung perubahan antar versi">Compute changes between versions</span></div>
+          <div class="api-item"><code>rollbackToVersion(docId, ver)</code> — <span data-en="Safe restore by appending" data-id="Pemulihan aman dengan menamba">Safe restore by appending</span></div>
+          <div class="api-item"><code>tagVersion(docId, ver, tag)</code> / <code>restoreFromTag(docId, tag)</code> — <span data-en="Labeling" data-id="Pelabelan">Labeling</span></div>
+        </div>
       </section>
 
       <!-- ===================== CHANGE STREAMS ===================== -->

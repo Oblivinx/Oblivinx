@@ -31,9 +31,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::error::{OvnError, OvnResult};
-use crate::format::header::FileHeader;
+use crate::format::header::{FileHeader, FileVersion};
 use crate::format::obe::{ObeDocument, ObeValue};
 use crate::format::page::{Page, PageType};
+use crate::format::segment::SegmentDirectory;
 use crate::io::{FileBackend, OsFileBackend};
 use crate::mvcc::change_stream::ChangeStreamEmitter;
 use crate::mvcc::session::SessionManager;
@@ -131,36 +132,63 @@ pub struct OvnEngine {
     audit_log: Mutex<Vec<audit::AuditEntry>>,
     /// Rate limiter state
     rate_limiter: Mutex<security::RateLimiter>,
+    /// v2 Segment Directory (catalog of segment locations)
+    segment_dir: Mutex<SegmentDirectory>,
 }
 
 impl OvnEngine {
     /// Open or create a database at the given path.
-    pub fn open(path: &str, config: OvnConfig) -> OvnResult<Self> {
+    ///
+    /// For v1 `.ovn` files (magic OVNX): opens in read-only compatibility mode.
+    /// Write operations on a v1 file return `OvnError::ReadOnly`.
+    /// To migrate, call `engine.migrate_v1_to_v2(dest_path)` explicitly.
+    pub fn open(path: &str, mut config: OvnConfig) -> OvnResult<Self> {
         let path = PathBuf::from(path);
         let is_new = !path.exists();
 
         let backend = Arc::new(OsFileBackend::open(&path, config.read_only)?);
 
-        let header = if is_new {
+        let (header, segment_dir) = if is_new {
             let mut header = FileHeader::new(config.page_size);
             header.set_wal_active(true);
             let header_bytes = header.to_bytes();
             backend.write_page(0, config.page_size, &header_bytes)?;
 
-            let seg_page = Page::new(PageType::SegmentDirectory, 1, config.page_size);
-            backend.write_page(1, config.page_size, &seg_page.to_bytes())?;
+            // Write initial Segment Directory to Page 1
+            let seg_dir = SegmentDirectory::with_defaults(2);
+            let seg_bytes = seg_dir.to_bytes(config.page_size as usize)?;
+            backend.write_page(1, config.page_size, &seg_bytes)?;
 
             backend.sync()?;
-            header
+            (header, seg_dir)
         } else {
             let header_bytes = backend.read_page(0, config.page_size)?;
             let header = FileHeader::from_bytes(&header_bytes)?;
 
-            if header.is_wal_active() {
-                log::info!("WAL active flag set -- performing crash recovery");
+            // v1 compatibility: force read-only
+            if header.is_v1_compat() {
+                log::warn!(
+                    "Opened v1 database at '{}'. \
+                     Engine is in read-only compatibility mode. \
+                     Use engine.migrate_v1_to_v2() to upgrade.",
+                    path.display()
+                );
+                config.read_only = true;
+            } else if header.is_wal_active() {
+                log::info!("WAL active flag set — performing crash recovery.");
             }
 
-            header
+            // Load segment directory from Page 1
+            let seg_dir = match backend.read_page(1, config.page_size) {
+                Ok(seg_bytes) => SegmentDirectory::from_bytes(&seg_bytes)
+                    .unwrap_or_else(|e| {
+                        log::warn!("Could not parse segment directory: {}. Using empty.", e);
+                        SegmentDirectory::new()
+                    }),
+                Err(_) => SegmentDirectory::new(),
+            };
+
+            (header, seg_dir)
         };
 
         let buffer_pool = Arc::new(BufferPool::new(config.buffer_pool_size, config.page_size));
@@ -224,7 +252,8 @@ impl OvnEngine {
             encryption_configs: Mutex::new(HashMap::new()),
             key_provider: Mutex::new(None),
             audit_log: Mutex::new(Vec::new()),
-            rate_limiter: Mutex::new(security::RateLimiter::new(1000)), // 1000 QPS default
+            rate_limiter: Mutex::new(security::RateLimiter::new(1000)),
+            segment_dir: Mutex::new(segment_dir),
         };
 
         if !is_new {
@@ -255,6 +284,14 @@ impl OvnEngine {
         self.flush_btree_to_disk()?;
 
         self.backend.sync()?;
+
+        // Write updated Segment Directory to Page 1
+        {
+            let seg_dir = self.segment_dir.lock().unwrap();
+            if let Ok(seg_bytes) = seg_dir.to_bytes(self.config.page_size as usize) {
+                let _ = self.backend.write_page(1, self.config.page_size, &seg_bytes);
+            }
+        }
 
         let mut header = self.header.write();
         header.set_wal_active(false);

@@ -192,6 +192,7 @@ export class Collection<TSchema extends Document = Document> {
    * ```
    */
   async insertMany(docs: TSchema[]): Promise<InsertManyResult> {
+    this.#assertOpen();
     const idsJson = wrapNative(() =>
       native.insertMany(this.#db._handle, this.#name, JSON.stringify(docs)),
     );
@@ -236,6 +237,7 @@ export class Collection<TSchema extends Document = Document> {
     filter: FilterQuery<TSchema> = {} as FilterQuery<TSchema>,
     options: FindOptions<TSchema> = {},
   ): Promise<TSchema[]> {
+    this.#assertOpen();
     const hasOptions =
       options.sort != null ||
       options.limit != null ||
@@ -287,6 +289,7 @@ export class Collection<TSchema extends Document = Document> {
   async findOne(
     filter: FilterQuery<TSchema> = {} as FilterQuery<TSchema>,
   ): Promise<TSchema | null> {
+    this.#assertOpen();
     const resultJson = wrapNative(() =>
       native.findOne(this.#db._handle, this.#name, JSON.stringify(filter)),
     );
@@ -311,6 +314,7 @@ export class Collection<TSchema extends Document = Document> {
   async countDocuments(
     filter: FilterQuery<TSchema> = {} as FilterQuery<TSchema>,
   ): Promise<number> {
+    this.#assertOpen();
     return wrapNative(() =>
       native.count(this.#db._handle, this.#name, JSON.stringify(filter)),
     );
@@ -450,6 +454,7 @@ export class Collection<TSchema extends Document = Document> {
     filter: FilterQuery<TSchema>,
     update: UpdateQuery<TSchema>,
   ): Promise<UpdateResult> {
+    this.#assertOpen();
     const count = wrapNative(() =>
       native.updateMany(
         this.#db._handle,
@@ -480,6 +485,7 @@ export class Collection<TSchema extends Document = Document> {
    * ```
    */
   async deleteOne(filter: FilterQuery<TSchema>): Promise<DeleteResult> {
+    this.#assertOpen();
     const count = wrapNative(() =>
       native.delete(this.#db._handle, this.#name, JSON.stringify(filter)),
     );
@@ -502,6 +508,7 @@ export class Collection<TSchema extends Document = Document> {
    * ```
    */
   async deleteMany(filter: FilterQuery<TSchema>): Promise<DeleteResult> {
+    this.#assertOpen();
     const count = wrapNative(() =>
       native.deleteMany(this.#db._handle, this.#name, JSON.stringify(filter)),
     );
@@ -565,6 +572,7 @@ export class Collection<TSchema extends Document = Document> {
    * ```
    */
   async aggregate(pipeline: PipelineStage[]): Promise<Document[]> {
+    this.#assertOpen();
     const resultJson = wrapNative(() =>
       native.aggregate(
         this.#db._handle,

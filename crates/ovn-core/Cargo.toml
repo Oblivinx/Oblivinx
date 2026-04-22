@@ -7,6 +7,7 @@ license.workspace = true
 description = "Oblivinx3x core storage engine — Hybrid B+/LSM embedded document database"
 
 [dependencies]
+crc32c.workspace = true
 crc32fast.workspace = true
 lz4_flex.workspace = true
 zstd.workspace = true
@@ -15,6 +16,7 @@ bytes.workspace = true
 crossbeam-skiplist.workspace = true
 crossbeam-epoch.workspace = true
 crossbeam-utils.workspace = true
+crossbeam-channel.workspace = true
 parking_lot.workspace = true
 thiserror.workspace = true
 log.workspace = true

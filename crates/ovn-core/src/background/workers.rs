@@ -52,7 +52,7 @@ pub struct WorkerSharedState {
 /// A TTL index entry: collection name, field name, expiration seconds.
 #[derive(Debug, Clone)]
 pub struct TtlIndexEntry {
-    pub collection: String,
+    pub collection: String, 
     pub field: String,
     pub expire_after_seconds: i64,
 }

@@ -160,6 +160,14 @@ export type {
   VersionInfo,
   VersionDiffEntry,
   VersionDiff,
+
+  // v2: Engine & Config
+  DurabilityLevel,
+  EngineInfo,
+  WalStats,
+  ArcCacheStats,
+  WriteConflictRetryOptions,
+  ConcurrentTransactionOptions,
 } from './types/index.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -172,8 +180,22 @@ export { Oblivinx3x as default } from './database.js';
 //  QUERY BUILDER
 // ═══════════════════════════════════════════════════════════════════
 
-export { QueryBuilder, Cursor } from './query/builder.js';
-export type { CursorOptions } from './query/builder.js';
+export { QueryBuilder, AggregateBuilder, Cursor, createCursor } from './query/builder.js';
+export type { CursorOptions, QueryExecutor, ComparisonOp, ProjectionSpec, SortSpec } from './query/builder.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  FILTER & UPDATE BUILDERS
+// ═══════════════════════════════════════════════════════════════════
+
+export { FilterBuilder } from './query/FilterBuilder.js';
+export { UpdateBuilder } from './query/UpdateBuilder.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  SQL-LIKE QUERY INTERFACE
+// ═══════════════════════════════════════════════════════════════════
+
+export { compileSql, sql } from './query/SqlLikeQuery.js';
+export type { CompiledSQL } from './query/SqlLikeQuery.js';
 
 // ═══════════════════════════════════════════════════════════════════
 //  RELATIONS
@@ -230,3 +252,33 @@ export {
   MetricsManager,
 } from './db/index.js';
 export type { TriggerHandler } from './db/index.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  BACKUP & RECOVERY
+// ═══════════════════════════════════════════════════════════════════
+
+export { BackupManager } from './backup/BackupManager.js';
+export type { BackupInfo, PrunePolicy, RestoreProgressCallback } from './backup/BackupManager.js';
+
+// ═══════════════════════════════════════════════════════════════════
+//  VERSIONED DOCUMENT UTILITIES
+// ═══════════════════════════════════════════════════════════════════
+
+export {
+  computeDiff,
+  applyDiff,
+  reverseDiff,
+  createVersionMeta,
+  attachVersionMeta,
+  stripVersionMeta,
+  isVersioned,
+  buildTimeline,
+  VersioningConfigBuilder,
+} from './versioning/VersionedDocument.js';
+export type {
+  VersionMetadata,
+  VersionedDoc,
+  FieldDiff,
+  DocumentDiff,
+  TimelineEntry,
+} from './versioning/VersionedDocument.js';

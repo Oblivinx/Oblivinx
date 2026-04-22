@@ -267,6 +267,11 @@ export interface FindOptions<T extends Document = Document> {
      * @default 0
      */
     skip?: number;
+    /**
+     * Index hint — force query planner to use a specific index.
+     * Pass the index name (e.g. 'age_1', 'email_1_name_-1').
+     */
+    hint?: string;
 }
 /**
  * Sebuah stage dalam aggregation pipeline.
@@ -750,6 +755,8 @@ export interface NativeAddon {
     detach(handle: number, alias: string): void;
     /** List all attached databases as JSON array */
     listAttached(handle: number): string;
+    /** Execute a SQL-like query string, return JSON doc[] */
+    executeSql(handle: number, sql: string): string;
     /** Explain a find query — return execution plan */
     explain(handle: number, collection: string, filterJson: string, optionsJson?: string): string;
     /** Explain an aggregation pipeline */

@@ -264,6 +264,76 @@ export class Transaction {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  READ OPERATIONS (Snapshot Read)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Query dokumen dalam konteks snapshot transaction ini.
+   *
+   * Reads dalam transaction melihat **snapshot konsisten** yang diambil
+   * saat `beginTransaction()` dipanggil — tidak ada dirty read dari
+   * transaction lain. Writes dari transaction ini sendiri langsung visible.
+   *
+   * @param collection - Nama collection
+   * @param filter     - MQL filter expression
+   * @returns Array dokumen yang cocok dengan filter
+   *
+   * @throws {OvnError} `ERR_INVALID_OPERATION` — jika transaction tidak aktif
+   *
+   * @example
+   * ```typescript
+   * const txn = await db.beginTransaction();
+   * // Read + write dalam satu snapshot
+   * const [account] = await txn.find('accounts', { _id: 'alice' });
+   * if (account && (account.balance as number) >= 100) {
+   *   await txn.update('accounts', { _id: 'alice' }, { $inc: { balance: -100 } });
+   *   await txn.commit();
+   * } else {
+   *   await txn.rollback();
+   * }
+   * ```
+   */
+  async find<T extends Document = Document>(
+    collection: string,
+    filter: FilterQuery<T> = {},
+  ): Promise<T[]> {
+    this.#assertActive();
+    const json = wrapNative(() =>
+      native.find(this.#db._handle, collection, JSON.stringify(filter)),
+    );
+    return JSON.parse(json) as T[];
+  }
+
+  /**
+   * Temukan satu dokumen dalam konteks snapshot transaction ini.
+   *
+   * @param collection - Nama collection
+   * @param filter     - MQL filter expression
+   * @returns Dokumen pertama yang cocok, atau `null` jika tidak ada
+   *
+   * @throws {OvnError} `ERR_INVALID_OPERATION` — jika transaction tidak aktif
+   *
+   * @example
+   * ```typescript
+   * const user = await txn.findOne('users', { email: 'alice@example.com' });
+   * if (user) {
+   *   await txn.update('users', { _id: user._id }, { $inc: { loginCount: 1 } });
+   * }
+   * ```
+   */
+  async findOne<T extends Document = Document>(
+    collection: string,
+    filter: FilterQuery<T> = {},
+  ): Promise<T | null> {
+    this.#assertActive();
+    const json = wrapNative(() =>
+      native.findOne(this.#db._handle, collection, JSON.stringify(filter)),
+    );
+    const result = JSON.parse(json) as T | null;
+    return result;
+  }
+
   /**
    * Insert banyak dokumen sekaligus dalam konteks transaction ini.
    *

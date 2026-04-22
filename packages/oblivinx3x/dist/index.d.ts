@@ -75,8 +75,12 @@ export type { TransactionState, TransactionInfo } from './transaction.js';
 export { OvnError, CollectionNotFoundError, CollectionExistsError, WriteConflictError, ValidationError, } from './errors/index.js';
 export type { OvnConfig, Document, FilterQuery, ComparisonOperators, UpdateQuery, FindOptions, PipelineStage, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult, IndexFields, IndexOptions, IndexInfo, CollationOptions, OvnMetrics, OvnVersion, ViewDefinition, MaterializedViewOptions, ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerContext, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainVerbosity, ExplainPlan, OvnMetricsExtended, VersioningConfig, VersionInfo, VersionDiffEntry, VersionDiff, } from './types/index.js';
 export { Oblivinx3x as default } from './database.js';
-export { QueryBuilder, Cursor } from './query/builder.js';
-export type { CursorOptions } from './query/builder.js';
+export { QueryBuilder, AggregateBuilder, Cursor, createCursor } from './query/builder.js';
+export type { CursorOptions, QueryExecutor, ComparisonOp, ProjectionSpec, SortSpec } from './query/builder.js';
+export { FilterBuilder } from './query/FilterBuilder.js';
+export { UpdateBuilder } from './query/UpdateBuilder.js';
+export { compileSql, sql } from './query/SqlLikeQuery.js';
+export type { CompiledSQL } from './query/SqlLikeQuery.js';
 export { RelationManager } from './relations/index.js';
 export { safeSerialize, safeDeserialize, withRetry, generateId } from './utils/index.js';
 export type { RetryOptions, IdStrategy, SnowflakeConfig } from './utils/index.js';
@@ -84,4 +88,8 @@ export { SecurityContext, createSecurityContext, checkPermission, isFieldReadabl
 export type { SecurityOptions, CollectionOperation, CollectionPermissionMap, FieldACL, AuditEvent, AuditLogBackend, InputValidationConfig, } from './security/index.js';
 export { ViewManager, TriggerManager, PragmaManager, AttachManager, BlobManager, MetricsManager, } from './db/index.js';
 export type { TriggerHandler } from './db/index.js';
+export { BackupManager } from './backup/BackupManager.js';
+export type { BackupInfo, PrunePolicy, RestoreProgressCallback } from './backup/BackupManager.js';
+export { computeDiff, applyDiff, reverseDiff, createVersionMeta, attachVersionMeta, stripVersionMeta, isVersioned, buildTimeline, VersioningConfigBuilder, } from './versioning/VersionedDocument.js';
+export type { VersionMetadata, VersionedDoc, FieldDiff, DocumentDiff, TimelineEntry, } from './versioning/VersionedDocument.js';
 //# sourceMappingURL=index.d.ts.map

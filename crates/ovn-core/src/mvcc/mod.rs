@@ -1,6 +1,6 @@
 //! MVCC (Multi-Version Concurrency Control) transaction layer.
 //!
-//! Each document write creates a new version stamped with a TxID.
+//! Each document write creates a new version stamped with an HLC TxID.
 //! Readers see consistent snapshots. A GC thread purges old versions.
 
 use parking_lot::RwLock;
@@ -9,35 +9,79 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod change_stream;
+pub mod hlc;
 pub mod session;
 
 use crate::error::{OvnError, OvnResult};
+use crate::mvcc::hlc::{HlcClock, HlcTimestamp};
 
-/// Transaction ID generator using monotonic counter.
+/// Transaction ID generator — supports both HLC and monotonic modes.
 pub struct TxIdGenerator {
+    /// Monotonic fallback (used when HLC is disabled).
     counter: AtomicU64,
+    /// HLC clock (used when HLC is enabled).
+    hlc: HlcClock,
+    /// Whether to use HLC (true) or simple monotonic counter (false).
+    use_hlc: bool,
 }
 
 impl TxIdGenerator {
+    /// Create a new generator using HLC (default for v2).
     pub fn new() -> Self {
-        // Seed with current timestamp for uniqueness across restarts
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_micros() as u64;
         Self {
             counter: AtomicU64::new(seed),
+            hlc: HlcClock::new(),
+            use_hlc: true,
         }
     }
 
-    /// Generate the next transaction ID (monotonically increasing).
+    /// Create a monotonic-only generator (for tests or embedded mode).
+    pub fn monotonic() -> Self {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros() as u64;
+        Self {
+            counter: AtomicU64::new(seed),
+            hlc: HlcClock::new(),
+            use_hlc: false,
+        }
+    }
+
+    /// Generate the next TxID.
+    /// If HLC is enabled, returns an HLC timestamp u64.
+    /// Otherwise, returns a monotonically increasing counter.
     pub fn next(&self) -> u64 {
-        self.counter.fetch_add(1, Ordering::SeqCst)
+        if self.use_hlc {
+            self.hlc.now().as_u64()
+        } else {
+            self.counter.fetch_add(1, Ordering::SeqCst)
+        }
     }
 
     /// Get the current counter value without incrementing.
     pub fn current(&self) -> u64 {
-        self.counter.load(Ordering::SeqCst)
+        if self.use_hlc {
+            self.hlc.current().as_u64()
+        } else {
+            self.counter.load(Ordering::SeqCst)
+        }
+    }
+
+    /// Advance the HLC to at least `min_ts` (called on database open with persisted state).
+    pub fn advance_to(&self, min_ts: u64) {
+        if self.use_hlc {
+            self.hlc.advance_to(HlcTimestamp::from_u64(min_ts));
+        }
+    }
+
+    /// Expose the underlying HLC clock for recv() (distributed mode).
+    pub fn hlc_clock(&self) -> &HlcClock {
+        &self.hlc
     }
 }
 

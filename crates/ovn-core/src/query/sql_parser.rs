@@ -93,7 +93,7 @@ impl SqlParser {
             else if ch.is_alphabetic() || ch == '_' {
                 let mut word = String::new();
                 while let Some(&c) = chars.peek() {
-                    if c.is_alphanumeric() || c == '_' { word.push(c); chars.next(); } else { break; }
+                    if c.is_alphanumeric() || c == '_' || c == '.' { word.push(c); chars.next(); } else { break; }
                 }
                 let upper = word.to_uppercase();
                 if matches!(upper.as_str(), "SELECT"|"FROM"|"WHERE"|"ORDER"|"BY"|"LIMIT"|"SKIP"|"INSERT"|"INTO"|"VALUES"|"UPDATE"|"SET"|"DELETE"|"GROUP"|"JOIN"|"ON"|"AND"|"OR"|"NOT"|"IN"|"IS"|"NULL"|"ASC"|"DESC"|"AS") {

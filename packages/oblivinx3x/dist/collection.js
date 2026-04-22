@@ -156,6 +156,7 @@ export class Collection {
      * ```
      */
     async insertMany(docs) {
+        this.#assertOpen();
         const idsJson = wrapNative(() => native.insertMany(this.#db._handle, this.#name, JSON.stringify(docs)));
         const ids = JSON.parse(idsJson);
         return { insertedIds: ids, insertedCount: ids.length };
@@ -193,6 +194,7 @@ export class Collection {
      * ```
      */
     async find(filter = {}, options = {}) {
+        this.#assertOpen();
         const hasOptions = options.sort != null ||
             options.limit != null ||
             options.skip != null ||
@@ -229,6 +231,7 @@ export class Collection {
      * ```
      */
     async findOne(filter = {}) {
+        this.#assertOpen();
         const resultJson = wrapNative(() => native.findOne(this.#db._handle, this.#name, JSON.stringify(filter)));
         return JSON.parse(resultJson);
     }
@@ -248,6 +251,7 @@ export class Collection {
      * ```
      */
     async countDocuments(filter = {}) {
+        this.#assertOpen();
         return wrapNative(() => native.count(this.#db._handle, this.#name, JSON.stringify(filter)));
     }
     /**
@@ -362,6 +366,7 @@ export class Collection {
      * ```
      */
     async updateMany(filter, update) {
+        this.#assertOpen();
         const count = wrapNative(() => native.updateMany(this.#db._handle, this.#name, JSON.stringify(filter), JSON.stringify(update)));
         return { matchedCount: count, modifiedCount: count };
     }
@@ -383,6 +388,7 @@ export class Collection {
      * ```
      */
     async deleteOne(filter) {
+        this.#assertOpen();
         const count = wrapNative(() => native.delete(this.#db._handle, this.#name, JSON.stringify(filter)));
         return { deletedCount: count };
     }
@@ -402,6 +408,7 @@ export class Collection {
      * ```
      */
     async deleteMany(filter) {
+        this.#assertOpen();
         const count = wrapNative(() => native.deleteMany(this.#db._handle, this.#name, JSON.stringify(filter)));
         return { deletedCount: count };
     }
@@ -461,6 +468,7 @@ export class Collection {
      * ```
      */
     async aggregate(pipeline) {
+        this.#assertOpen();
         const resultJson = wrapNative(() => native.aggregate(this.#db._handle, this.#name, JSON.stringify(pipeline)));
         return JSON.parse(resultJson);
     }

@@ -85,7 +85,16 @@ export { Oblivinx3x as default } from './database.js';
 // ═══════════════════════════════════════════════════════════════════
 //  QUERY BUILDER
 // ═══════════════════════════════════════════════════════════════════
-export { QueryBuilder, Cursor } from './query/builder.js';
+export { QueryBuilder, AggregateBuilder, Cursor, createCursor } from './query/builder.js';
+// ═══════════════════════════════════════════════════════════════════
+//  FILTER & UPDATE BUILDERS
+// ═══════════════════════════════════════════════════════════════════
+export { FilterBuilder } from './query/FilterBuilder.js';
+export { UpdateBuilder } from './query/UpdateBuilder.js';
+// ═══════════════════════════════════════════════════════════════════
+//  SQL-LIKE QUERY INTERFACE
+// ═══════════════════════════════════════════════════════════════════
+export { compileSql, sql } from './query/SqlLikeQuery.js';
 // ═══════════════════════════════════════════════════════════════════
 //  RELATIONS
 // ═══════════════════════════════════════════════════════════════════
@@ -102,4 +111,12 @@ export { SecurityContext, createSecurityContext, checkPermission, isFieldReadabl
 //  DATABASE MANAGERS
 // ═══════════════════════════════════════════════════════════════════
 export { ViewManager, TriggerManager, PragmaManager, AttachManager, BlobManager, MetricsManager, } from './db/index.js';
+// ═══════════════════════════════════════════════════════════════════
+//  BACKUP & RECOVERY
+// ═══════════════════════════════════════════════════════════════════
+export { BackupManager } from './backup/BackupManager.js';
+// ═══════════════════════════════════════════════════════════════════
+//  VERSIONED DOCUMENT UTILITIES
+// ═══════════════════════════════════════════════════════════════════
+export { computeDiff, applyDiff, reverseDiff, createVersionMeta, attachVersionMeta, stripVersionMeta, isVersioned, buildTimeline, VersioningConfigBuilder, } from './versioning/VersionedDocument.js';
 //# sourceMappingURL=index.js.map

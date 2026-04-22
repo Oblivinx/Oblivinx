@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["Natz"]
 license = "MIT"
@@ -14,7 +14,8 @@ description = "Oblivinx3x — Embedded Document Database Engine"
 
 [workspace.dependencies]
 # Serialization & encoding
-crc32fast = "1.4"
+crc32c = "0.6"                                       # hardware-accelerated CRC32C (Castagnoli)
+crc32fast = "1.4"                                    # CRC32 (kept for WAL record compat)
 lz4_flex = "0.11"
 zstd = "0.13"
 uuid = { version = "1.10", features = ["v4", "serde"] }
@@ -24,6 +25,7 @@ bytes = "1.7"
 crossbeam-skiplist = "0.1"
 crossbeam-epoch = "0.9"
 crossbeam-utils = "0.8"
+crossbeam-channel = "0.5"                            # MPMC for WAL group commit [v2]
 parking_lot = "0.12"
 
 # Error handling & logging

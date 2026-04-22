@@ -449,8 +449,7 @@ export class Oblivinx3x {
      * ```
      */
     async executeSql(sql) {
-        const native = globalThis.__ovn_native || require('../native/ovn_neon.node');
-        const json = native.executeSql(this._handle, sql);
+        const json = wrapNative(() => native.executeSql(this._handle, sql));
         return JSON.parse(json);
     }
     /**

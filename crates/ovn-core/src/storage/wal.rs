@@ -1,24 +1,43 @@
-//! Write-Ahead Log (WAL) — durability and crash recovery.
+//! Write-Ahead Log (WAL) — v2.0 with Group Commit and Durability Levels.
 //!
-//! The WAL guarantees that no committed write is lost after a crash.
-//! All writes are appended to the WAL and fsync'd before acknowledgment.
-//!
-//! ## WAL Record Format
+//! ## WAL Record Format (v2)
 //! ```text
-//! [4 bytes]  Record type (INSERT=1, UPDATE=2, DELETE=3, COMMIT=4, CHECKPOINT=5)
-//! [8 bytes]  Transaction ID
-//! [4 bytes]  Collection ID
-//! [varint]   Document length
-//! [bytes]    Document data (OBE-encoded)
-//! [4 bytes]  CRC32 of record
+//! [4 bytes]  Record type (INSERT=1, UPDATE=2, DELETE=3, COMMIT=4, CHECKPOINT=5, ROLLBACK=6, SAVEPOINT=7)
+//! [8 bytes]  HLC Transaction ID (physical_ms<<16 | logical)
+//! [4 bytes]  Collection ID (FNV hash of name)
+//! [16 bytes] Session ID (lsid)
+//! [8 bytes]  Session transaction sequence number
+//! [1 byte]   Flags (DURABLE_SAVEPOINT=1, CONCURRENT_WRITER=2, ENCRYPTED=4)
+//! [7 bytes]  Reserved (pad to 8-byte alignment)
+//! [varint]   Document data length
+//! [bytes]    Document data (OBE2-encoded)
+//! [4 bytes]  CRC32 of entire record (before this field)
 //! ```
+//!
+//! ## Durability Levels
+//! - D0: No fsync. Maximum throughput, data loss risk on OS crash.
+//! - D1 (default): Group commit. Batch up to `group_commit_bytes` or `group_commit_us` µs.
+//! - D1Strict: Fsync after every group commit flush.
+//! - D2: Fsync after every individual commit.
 
 use crc32fast::Hasher as Crc32Hasher;
 use parking_lot::Mutex;
 
+use crate::engine::config::DurabilityLevel;
 use crate::error::{OvnError, OvnResult};
 use crate::format::obe::{decode_varint, encode_varint};
 use crate::io::FileBackend;
+
+// ── WAL Record Flags ─────────────────────────────────────────────────────────
+
+/// WAL record flag: this commit is a durable savepoint.
+pub const WAL_FLAG_DURABLE_SAVEPOINT: u8 = 1 << 0;
+/// WAL record flag: written by a BEGIN CONCURRENT writer.
+pub const WAL_FLAG_CONCURRENT_WRITER: u8 = 1 << 1;
+/// WAL record flag: document data is encrypted (QE).
+pub const WAL_FLAG_ENCRYPTED: u8 = 1 << 2;
+
+// ── WAL Record Type ───────────────────────────────────────────────────────────
 
 /// WAL record types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +49,9 @@ pub enum WalRecordType {
     Commit = 4,
     Checkpoint = 5,
     Rollback = 6,
+    Savepoint = 7,
+    /// Concurrent write commit (BEGIN CONCURRENT).
+    ConcurrentCommit = 8,
 }
 
 impl WalRecordType {
@@ -41,27 +63,38 @@ impl WalRecordType {
             4 => Some(Self::Commit),
             5 => Some(Self::Checkpoint),
             6 => Some(Self::Rollback),
+            7 => Some(Self::Savepoint),
+            8 => Some(Self::ConcurrentCommit),
             _ => None,
         }
     }
+
+    /// Whether this record type triggers a WAL flush.
+    pub fn triggers_flush(self) -> bool {
+        matches!(self, Self::Commit | Self::ConcurrentCommit | Self::Checkpoint)
+    }
 }
 
-/// A single WAL record.
+// ── WAL Record ────────────────────────────────────────────────────────────────
+
+/// A single WAL record (v2 format).
 #[derive(Debug, Clone)]
 pub struct WalRecord {
-    /// Type of WAL operation
+    /// Type of WAL operation.
     pub record_type: WalRecordType,
-    /// Transaction ID
+    /// HLC Transaction ID.
     pub txid: u64,
-    /// Collection ID (hash of collection name)
+    /// Collection ID (FNV hash of collection name).
     pub collection_id: u32,
-    /// Logical session ID for retryable writes
+    /// Logical session ID for retryable writes.
     pub lsid: [u8; 16],
-    /// Session transaction sequence number
+    /// Session transaction sequence number.
     pub txn_number: u64,
-    /// Document data (OBE-encoded)
+    /// Record flags (WAL_FLAG_* constants).
+    pub flags: u8,
+    /// Document data (OBE2-encoded).
     pub data: Vec<u8>,
-    /// CRC32 of the record
+    /// CRC32 of the record (computed on encode, verified on decode).
     pub crc32: u32,
 }
 
@@ -81,24 +114,35 @@ impl WalRecord {
             collection_id,
             lsid,
             txn_number,
+            flags: 0,
             data,
             crc32: 0,
         }
     }
 
-    /// Serialize the WAL record to bytes.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(44 + self.data.len());
+    /// Create with flags.
+    pub fn with_flags(mut self, flags: u8) -> Self {
+        self.flags = flags;
+        self
+    }
 
-        buf.extend_from_slice(&(self.record_type as u32).to_le_bytes());
-        buf.extend_from_slice(&self.txid.to_le_bytes());
-        buf.extend_from_slice(&self.collection_id.to_le_bytes());
-        buf.extend_from_slice(&self.lsid);
-        buf.extend_from_slice(&self.txn_number.to_le_bytes());
+    /// Serialize the WAL record to bytes (v2 format).
+    pub fn encode(&self) -> Vec<u8> {
+        let header_size = 4 + 8 + 4 + 16 + 8 + 1 + 7; // 48 bytes
+        let mut buf = Vec::with_capacity(header_size + self.data.len() + 10);
+
+        buf.extend_from_slice(&(self.record_type as u32).to_le_bytes()); // 4
+        buf.extend_from_slice(&self.txid.to_le_bytes());                  // 8
+        buf.extend_from_slice(&self.collection_id.to_le_bytes());          // 4
+        buf.extend_from_slice(&self.lsid);                                 // 16
+        buf.extend_from_slice(&self.txn_number.to_le_bytes());             // 8
+        buf.push(self.flags);                                              // 1
+        buf.extend_from_slice(&[0u8; 7]);                                  // 7 reserved
+
         encode_varint(self.data.len() as u64, &mut buf);
         buf.extend_from_slice(&self.data);
 
-        // Compute CRC32 over everything so far
+        // CRC32 over everything so far
         let mut hasher = Crc32Hasher::new();
         hasher.update(&buf);
         let crc = hasher.finalize();
@@ -107,9 +151,11 @@ impl WalRecord {
         buf
     }
 
-    /// Deserialize a WAL record from bytes, returning (record, bytes_consumed).
+    /// Deserialize a WAL record from bytes.
+    /// Returns (record, bytes_consumed).
     pub fn decode(buf: &[u8]) -> OvnResult<(Self, usize)> {
-        if buf.len() < 40 {
+        // Minimum header: 4+8+4+16+8+1+7 = 48 bytes + varint + data + 4 CRC
+        if buf.len() < 52 {
             return Err(OvnError::WalCorrupted {
                 offset: 0,
                 reason: "Record too short".to_string(),
@@ -118,80 +164,51 @@ impl WalRecord {
 
         let mut pos = 0;
 
-        // Record type
-        let rt = u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
+        let rt = u32::from_le_bytes(buf[pos..pos + 4].try_into().unwrap());
         let record_type = WalRecordType::from_u32(rt).ok_or_else(|| OvnError::WalCorrupted {
             offset: pos as u64,
-            reason: format!("Unknown record type: {rt}"),
+            reason: format!("Unknown WAL record type: {rt}"),
         })?;
         pos += 4;
 
-        // TxID
-        let txid = u64::from_le_bytes([
-            buf[pos],
-            buf[pos + 1],
-            buf[pos + 2],
-            buf[pos + 3],
-            buf[pos + 4],
-            buf[pos + 5],
-            buf[pos + 6],
-            buf[pos + 7],
-        ]);
+        let txid = u64::from_le_bytes(buf[pos..pos + 8].try_into().unwrap());
         pos += 8;
 
-        // Collection ID
-        let collection_id =
-            u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
+        let collection_id = u32::from_le_bytes(buf[pos..pos + 4].try_into().unwrap());
         pos += 4;
 
-        // lsid
-        if buf.len() < pos + 24 {
-            return Err(OvnError::WalCorrupted {
-                offset: pos as u64,
-                reason: "Record too short for lsid/txnNumber".to_string(),
-            });
-        }
         let mut lsid = [0u8; 16];
         lsid.copy_from_slice(&buf[pos..pos + 16]);
         pos += 16;
 
-        // txnNumber
-        let txn_number = u64::from_le_bytes([
-            buf[pos],
-            buf[pos + 1],
-            buf[pos + 2],
-            buf[pos + 3],
-            buf[pos + 4],
-            buf[pos + 5],
-            buf[pos + 6],
-            buf[pos + 7],
-        ]);
+        let txn_number = u64::from_le_bytes(buf[pos..pos + 8].try_into().unwrap());
         pos += 8;
 
-        // Data length
+        let flags = buf[pos];
+        pos += 1;
+        pos += 7; // skip reserved
+
         let (data_len, vl) = decode_varint(&buf[pos..])?;
         pos += vl;
         let data_len = data_len as usize;
 
-        // Data
         if buf.len() < pos + data_len + 4 {
             return Err(OvnError::WalCorrupted {
                 offset: pos as u64,
                 reason: "Record data truncated".to_string(),
             });
         }
+
         let data = buf[pos..pos + data_len].to_vec();
         pos += data_len;
 
-        // CRC32
-        let stored_crc = u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
+        let stored_crc = u32::from_le_bytes(buf[pos..pos + 4].try_into().unwrap());
         pos += 4;
 
         // Verify CRC
         let mut hasher = Crc32Hasher::new();
         hasher.update(&buf[..pos - 4]);
         let computed_crc = hasher.finalize();
-
         if stored_crc != computed_crc {
             return Err(OvnError::WalCorrupted {
                 offset: 0,
@@ -208,6 +225,7 @@ impl WalRecord {
                 collection_id,
                 lsid,
                 txn_number,
+                flags,
                 data,
                 crc32: stored_crc,
             },
@@ -216,127 +234,167 @@ impl WalRecord {
     }
 }
 
-/// WAL writer and recovery manager.
+// ── WAL Manager ───────────────────────────────────────────────────────────────
+
+/// WAL writer and crash-recovery manager (v2: group commit, durability levels).
 pub struct WalManager {
-    /// All WAL records in memory (for the current session)
+    /// In-memory WAL records for the current session (used for replay).
     records: Mutex<Vec<WalRecord>>,
-    /// The raw WAL bytes buffer
-    buffer: Mutex<Vec<u8>>,
-    /// Last checkpointed transaction ID
+    /// Pending bytes buffer — records accumulate here until group commit fires.
+    pending: Mutex<Vec<u8>>,
+    /// Last checkpointed transaction ID.
     last_checkpoint_txid: Mutex<u64>,
-    /// WAL file offset in the .ovn file (tracks where next write goes)
+    /// WAL write offset within the .ovn2 file.
     wal_offset: Mutex<u64>,
-    /// Whether group commit is enabled
-    group_commit: bool,
+    /// Durability level for flush decisions.
+    durability: DurabilityLevel,
+    /// Group commit batch size limit in bytes.
+    group_commit_bytes: usize,
 }
 
 impl WalManager {
     /// Create a new WAL manager.
     pub fn new(wal_offset: u64) -> Self {
+        Self::with_durability(wal_offset, DurabilityLevel::D1, 1024 * 1024)
+    }
+
+    /// Create a WAL manager with explicit durability and batch settings.
+    pub fn with_durability(
+        wal_offset: u64,
+        durability: DurabilityLevel,
+        group_commit_bytes: usize,
+    ) -> Self {
         Self {
             records: Mutex::new(Vec::new()),
-            buffer: Mutex::new(Vec::new()),
+            pending: Mutex::new(Vec::with_capacity(group_commit_bytes)),
             last_checkpoint_txid: Mutex::new(0),
             wal_offset: Mutex::new(wal_offset),
-            group_commit: true,
+            durability,
+            group_commit_bytes,
         }
     }
 
-    /// Append a WAL record and flush to backend.
+    /// Append a WAL record.
+    ///
+    /// Flush behavior is controlled by `durability`:
+    /// - D0: Never fsync, only auto-flush at `group_commit_bytes`.
+    /// - D1: Flush + optional fsync on commit records; batch non-commits.
+    /// - D1Strict/D2: Always fsync on commit records.
     pub fn append(&self, record: WalRecord, backend: &dyn FileBackend) -> OvnResult<()> {
         let encoded = record.encode();
+        let record_type = record.record_type;
 
         {
-            let mut buffer = self.buffer.lock();
-            buffer.extend_from_slice(&encoded);
+            let mut pending = self.pending.lock();
+            pending.extend_from_slice(&encoded);
 
-            // Auto-flush when buffer exceeds 1MB (prevent memory buildup during bulk inserts)
-            if buffer.len() >= 1024 * 1024 {
-                drop(buffer);
-                self.flush(backend)?;
+            // Auto-flush when pending exceeds group_commit_bytes (prevent unbounded memory)
+            if pending.len() >= self.group_commit_bytes {
+                drop(pending);
+                self.flush_pending(backend, false)?;
             }
-        }
-
-        // Persist to backend on commit records or when group commit is disabled
-        if !self.group_commit || record.record_type == WalRecordType::Commit {
-            self.flush(backend)?;
         }
 
         self.records.lock().push(record);
 
-        Ok(())
-    }
-
-    /// Flush pending WAL writes to disk.
-    pub fn flush(&self, backend: &dyn FileBackend) -> OvnResult<()> {
-        let mut buffer = self.buffer.lock();
-        if buffer.is_empty() {
-            return Ok(());
+        // Flush on commit-type records (D1, D1Strict, D2)
+        if record_type.triggers_flush() {
+            match self.durability {
+                DurabilityLevel::D0 => {
+                    // D0: only flush bytes to OS buffer, no fsync
+                    self.flush_pending(backend, false)?;
+                }
+                DurabilityLevel::D1 => {
+                    // D1: flush bytes; fsync deferred to group commit timer (external)
+                    self.flush_pending(backend, false)?;
+                }
+                DurabilityLevel::D1Strict | DurabilityLevel::D2 => {
+                    // D1Strict/D2: flush + fsync on every commit
+                    self.flush_pending(backend, true)?;
+                }
+            }
         }
 
-        // Get current offset and write WAL data
-        let mut offset_guard = self.wal_offset.lock();
-        backend.write_at(*offset_guard, &buffer)?;
-        *offset_guard += buffer.len() as u64;
-        backend.sync()?;
-
-        buffer.clear();
         Ok(())
     }
 
-    /// Write a checkpoint record and update the last checkpoint TxID.
+    /// Force flush all pending WAL bytes to the backend.
+    pub fn flush(&self, backend: &dyn FileBackend) -> OvnResult<()> {
+        self.flush_pending(backend, self.durability == DurabilityLevel::D2)
+    }
+
+    /// Write a checkpoint record.
     pub fn checkpoint(&self, txid: u64, backend: &dyn FileBackend) -> OvnResult<()> {
         let record = WalRecord::new(WalRecordType::Checkpoint, txid, 0, [0; 16], 0, Vec::new());
         self.append(record, backend)?;
+        // Always fsync on checkpoint regardless of durability level
+        self.flush_pending(backend, true)?;
         *self.last_checkpoint_txid.lock() = txid;
         Ok(())
     }
 
-    /// Replay WAL records from the given raw bytes, returning records since the last checkpoint.
+    /// Replay WAL records from raw bytes.
+    /// Returns records that occurred after the last Checkpoint record.
     pub fn replay(data: &[u8]) -> OvnResult<Vec<WalRecord>> {
         let mut records = Vec::new();
         let mut pos = 0;
 
         while pos < data.len() {
-            // Try to decode next record
             match WalRecord::decode(&data[pos..]) {
                 Ok((record, consumed)) => {
                     records.push(record);
                     pos += consumed;
                 }
-                Err(_) => {
-                    // End of valid WAL — truncated records from crash
-                    break;
-                }
+                Err(_) => break, // Truncated record from crash — stop here
             }
         }
 
-        // Find last checkpoint and return only records after it
+        // Return only records after the last checkpoint
         let checkpoint_pos = records
             .iter()
             .rposition(|r| r.record_type == WalRecordType::Checkpoint);
 
-        if let Some(cp_pos) = checkpoint_pos {
-            Ok(records[cp_pos + 1..].to_vec())
+        Ok(if let Some(cp_pos) = checkpoint_pos {
+            records[cp_pos + 1..].to_vec()
         } else {
-            Ok(records)
-        }
+            records
+        })
     }
 
-    /// Get the last checkpoint TxID.
+    /// Get the last checkpointed TxID.
     pub fn last_checkpoint_txid(&self) -> u64 {
         *self.last_checkpoint_txid.lock()
     }
 
-    /// Get total number of records in this session.
+    /// Get total records in this session.
     pub fn record_count(&self) -> usize {
         self.records.lock().len()
     }
 
-    /// Clear all WAL records (after successful compaction).
+    /// Clear all WAL records (after successful compaction/checkpoint).
     pub fn clear(&self) {
         self.records.lock().clear();
-        self.buffer.lock().clear();
+        self.pending.lock().clear();
+    }
+
+    // ── Internal ─────────────────────────────────────────────────
+
+    fn flush_pending(&self, backend: &dyn FileBackend, do_fsync: bool) -> OvnResult<()> {
+        let mut pending = self.pending.lock();
+        if pending.is_empty() {
+            return Ok(());
+        }
+
+        let mut offset_guard = self.wal_offset.lock();
+        backend.write_at(*offset_guard, &pending)?;
+        *offset_guard += pending.len() as u64;
+
+        if do_fsync {
+            backend.sync()?;
+        }
+
+        pending.clear();
+        Ok(())
     }
 }
 
@@ -359,23 +417,26 @@ mod tests {
         assert_eq!(decoded.lsid, lsid);
         assert_eq!(decoded.txn_number, 7);
         assert_eq!(decoded.data, data);
+        assert_eq!(decoded.flags, 0);
     }
 
     #[test]
-    fn test_wal_replay_multiple() {
+    fn test_wal_record_with_flags() {
+        let record = WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 0, Vec::new())
+            .with_flags(WAL_FLAG_CONCURRENT_WRITER);
+        let encoded = record.encode();
+        let (decoded, _) = WalRecord::decode(&encoded).unwrap();
+        assert_eq!(decoded.flags, WAL_FLAG_CONCURRENT_WRITER);
+    }
+
+    #[test]
+    fn test_wal_replay_after_checkpoint() {
         let mut all_bytes = Vec::new();
 
-        let r1 = WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"doc1".to_vec());
-        all_bytes.extend_from_slice(&r1.encode());
-
-        let r2 = WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 0, Vec::new());
-        all_bytes.extend_from_slice(&r2.encode());
-
-        let r3 = WalRecord::new(WalRecordType::Checkpoint, 1, 0, [0; 16], 0, Vec::new());
-        all_bytes.extend_from_slice(&r3.encode());
-
-        let r4 = WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 0, b"doc2".to_vec());
-        all_bytes.extend_from_slice(&r4.encode());
+        all_bytes.extend(WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"doc1".to_vec()).encode());
+        all_bytes.extend(WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 0, Vec::new()).encode());
+        all_bytes.extend(WalRecord::new(WalRecordType::Checkpoint, 1, 0, [0; 16], 0, Vec::new()).encode());
+        all_bytes.extend(WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 0, b"doc2".to_vec()).encode());
 
         let records = WalManager::replay(&all_bytes).unwrap();
         // Should only return records after the checkpoint
@@ -384,13 +445,19 @@ mod tests {
     }
 
     #[test]
-    fn test_wal_corrupted_record() {
+    fn test_wal_corrupted_crc() {
         let record = WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"data".to_vec());
         let mut encoded = record.encode();
-        // Corrupt CRC
         let len = encoded.len();
-        encoded[len - 1] ^= 0xFF;
-        let result = WalRecord::decode(&encoded);
-        assert!(result.is_err());
+        encoded[len - 1] ^= 0xFF; // corrupt CRC
+        assert!(WalRecord::decode(&encoded).is_err());
+    }
+
+    #[test]
+    fn test_wal_new_record_type_savepoint() {
+        let record = WalRecord::new(WalRecordType::Savepoint, 5, 0, [0; 16], 0, b"sp_main".to_vec());
+        let encoded = record.encode();
+        let (decoded, _) = WalRecord::decode(&encoded).unwrap();
+        assert_eq!(decoded.record_type, WalRecordType::Savepoint);
     }
 }
