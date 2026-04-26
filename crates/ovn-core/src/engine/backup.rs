@@ -206,7 +206,6 @@ impl OvnEngine {
         // Extract backup data (skip manifest header, exclude trailing checksum)
         let data_start = 4 + manifest_len;
         let data_end = backup_data.len() - 4;
-        let mut restored_data = backup_data[data_start..data_end].to_vec();
 
         // Decrypt if needed
         if manifest.encryption != "none" && options.decrypt {

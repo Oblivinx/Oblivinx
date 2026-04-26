@@ -22,6 +22,7 @@
 
 use crc32fast::Hasher as Crc32Hasher;
 use parking_lot::Mutex;
+use std::collections::{HashMap, HashSet};
 
 use crate::engine::config::DurabilityLevel;
 use crate::error::{OvnError, OvnResult};
@@ -52,6 +53,8 @@ pub enum WalRecordType {
     Savepoint = 7,
     /// Concurrent write commit (BEGIN CONCURRENT).
     ConcurrentCommit = 8,
+    /// Compaction manifest — records the new root page offset after CoW compaction.
+    CompactionManifest = 9,
 }
 
 impl WalRecordType {
@@ -65,13 +68,17 @@ impl WalRecordType {
             6 => Some(Self::Rollback),
             7 => Some(Self::Savepoint),
             8 => Some(Self::ConcurrentCommit),
+            9 => Some(Self::CompactionManifest),
             _ => None,
         }
     }
 
     /// Whether this record type triggers a WAL flush.
     pub fn triggers_flush(self) -> bool {
-        matches!(self, Self::Commit | Self::ConcurrentCommit | Self::Checkpoint)
+        matches!(
+            self,
+            Self::Commit | Self::ConcurrentCommit | Self::Checkpoint | Self::CompactionManifest
+        )
     }
 }
 
@@ -96,6 +103,9 @@ pub struct WalRecord {
     pub data: Vec<u8>,
     /// CRC32 of the record (computed on encode, verified on decode).
     pub crc32: u32,
+    /// Chained HMAC-SHA256 for tamper detection (Section 20.4).
+    /// `None` when no encryption key is configured.
+    pub chained_hmac: Option<[u8; 32]>,
 }
 
 impl WalRecord {
@@ -117,6 +127,7 @@ impl WalRecord {
             flags: 0,
             data,
             crc32: 0,
+            chained_hmac: None,
         }
     }
 
@@ -228,6 +239,7 @@ impl WalRecord {
                 flags,
                 data,
                 crc32: stored_crc,
+                chained_hmac: None, // Populated during verified replay
             },
             pos,
         ))
@@ -250,6 +262,9 @@ pub struct WalManager {
     durability: DurabilityLevel,
     /// Group commit batch size limit in bytes.
     group_commit_bytes: usize,
+    /// Optional chained HMAC verifier for tamper detection (Section 20.4).
+    /// Present only when an EncryptionKey is configured.
+    hmac_verifier: Mutex<Option<crate::security::ChainedHmacVerifier>>,
 }
 
 impl WalManager {
@@ -271,7 +286,15 @@ impl WalManager {
             wal_offset: Mutex::new(wal_offset),
             durability,
             group_commit_bytes,
+            hmac_verifier: Mutex::new(None),
         }
+    }
+
+    /// Enable chained HMAC verification with the given encryption key.
+    /// Once enabled, every appended record will carry a chained HMAC, and
+    /// `replay_verified()` will validate the chain during recovery.
+    pub fn enable_hmac(&self, key: &crate::security::EncryptionKey) {
+        *self.hmac_verifier.lock() = Some(crate::security::ChainedHmacVerifier::new(key));
     }
 
     /// Append a WAL record.
@@ -280,7 +303,17 @@ impl WalManager {
     /// - D0: Never fsync, only auto-flush at `group_commit_bytes`.
     /// - D1: Flush + optional fsync on commit records; batch non-commits.
     /// - D1Strict/D2: Always fsync on commit records.
-    pub fn append(&self, record: WalRecord, backend: &dyn FileBackend) -> OvnResult<()> {
+    pub fn append(&self, mut record: WalRecord, backend: &dyn FileBackend) -> OvnResult<()> {
+        // Compute chained HMAC if an encryption key is configured
+        {
+            let mut verifier = self.hmac_verifier.lock();
+            if let Some(ref mut v) = *verifier {
+                let encoded_for_hmac = record.encode();
+                let hmac = v.advance(&encoded_for_hmac);
+                record.chained_hmac = Some(hmac);
+            }
+        }
+
         let encoded = record.encode();
         let record_type = record.record_type;
 
@@ -334,36 +367,109 @@ impl WalManager {
     }
 
     /// Replay WAL records from raw bytes.
-    /// Returns records that occurred after the last Checkpoint record.
+    /// Scans for the last Checkpoint record in the WAL and uses its txid as
+    /// the effective checkpoint boundary — records at or below that txid are
+    /// skipped.  Only committed transactions are returned.
     pub fn replay(data: &[u8]) -> OvnResult<Vec<WalRecord>> {
-        let mut records = Vec::new();
+        // Phase 0 — find the last in-WAL Checkpoint record's txid.
+        let mut last_ckpt_txid = 0u64;
         let mut pos = 0;
-
         while pos < data.len() {
             match WalRecord::decode(&data[pos..]) {
                 Ok((record, consumed)) => {
-                    records.push(record);
+                    if record.record_type == WalRecordType::Checkpoint {
+                        last_ckpt_txid = record.txid;
+                    }
                     pos += consumed;
                 }
-                Err(_) => break, // Truncated record from crash — stop here
+                Err(_) => break,
+            }
+        }
+        Self::replay_from_checkpoint(data, last_ckpt_txid)
+    }
+
+    /// Replay WAL records from raw bytes, starting after `last_checkpoint_txid`.
+    ///
+    /// Implements the Bug-1 fix:
+    /// - Skips any record whose `txid <= last_checkpoint_txid` (already durable).
+    /// - Deduplicates by txid via `seen_txids` (prevents double-apply on re-open).
+    /// - Only applies records from fully-committed transactions (Commit /
+    ///   ConcurrentCommit record present for that txid).
+    /// - Stops replay at the first CRC error (torn write from crash).
+    pub fn replay_from_checkpoint(data: &[u8], last_checkpoint_txid: u64) -> OvnResult<Vec<WalRecord>> {
+        let mut raw: Vec<WalRecord> = Vec::new();
+        let mut pos = 0;
+
+        // Phase 1 — decode all intact records; stop at first CRC error.
+        while pos < data.len() {
+            match WalRecord::decode(&data[pos..]) {
+                Ok((record, consumed)) => {
+                    raw.push(record);
+                    pos += consumed;
+                }
+                Err(_) => break,
             }
         }
 
-        // Return only records after the last checkpoint
-        let checkpoint_pos = records
+        // Phase 2 — identify which txids have a COMMIT record.
+        let committed_txids: HashSet<u64> = raw
             .iter()
-            .rposition(|r| r.record_type == WalRecordType::Checkpoint);
+            .filter(|r| {
+                r.txid > last_checkpoint_txid
+                    && matches!(
+                        r.record_type,
+                        WalRecordType::Commit | WalRecordType::ConcurrentCommit
+                    )
+            })
+            .map(|r| r.txid)
+            .collect();
 
-        Ok(if let Some(cp_pos) = checkpoint_pos {
-            records[cp_pos + 1..].to_vec()
-        } else {
-            records
-        })
+        // Phase 3 — collect records from committed txids, deduplicated.
+        // `seen_txids` ensures each txid is applied exactly once even if
+        // the WAL was written multiple times before a checkpoint (e.g., after
+        // a failed checkpoint that left the WAL untruncated).
+        let mut seen_txids: HashSet<u64> = HashSet::new();
+        // Bucket committed records by txid so we can apply them in txid order.
+        let mut by_txid: HashMap<u64, Vec<WalRecord>> = HashMap::new();
+
+        for record in raw {
+            if record.txid <= last_checkpoint_txid {
+                continue;
+            }
+            if !committed_txids.contains(&record.txid) {
+                // Uncommitted / rolled-back — discard.
+                continue;
+            }
+            by_txid.entry(record.txid).or_default().push(record);
+        }
+
+        // Emit records in ascending txid order; deduplicate txids.
+        let mut result: Vec<WalRecord> = Vec::new();
+        let mut sorted_txids: Vec<u64> = by_txid.keys().copied().collect();
+        sorted_txids.sort_unstable();
+
+        for txid in sorted_txids {
+            if seen_txids.contains(&txid) {
+                continue;
+            }
+            seen_txids.insert(txid);
+            if let Some(records) = by_txid.remove(&txid) {
+                result.extend(records);
+            }
+        }
+
+        Ok(result)
     }
 
     /// Get the last checkpointed TxID.
     pub fn last_checkpoint_txid(&self) -> u64 {
         *self.last_checkpoint_txid.lock()
+    }
+
+    /// Update the in-memory last checkpoint TxID after a successful atomic checkpoint write.
+    /// Called by `flush_memtable_to_l0` after both shadow page and Page 0 are fsynced.
+    pub fn set_last_checkpoint_txid(&self, txid: u64) {
+        *self.last_checkpoint_txid.lock() = txid;
     }
 
     /// Get total records in this session.
@@ -431,17 +537,25 @@ mod tests {
 
     #[test]
     fn test_wal_replay_after_checkpoint() {
+        use std::collections::HashSet;
+
         let mut all_bytes = Vec::new();
 
+        // TxID 1: Insert + Commit (before checkpoint)
         all_bytes.extend(WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"doc1".to_vec()).encode());
         all_bytes.extend(WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 0, Vec::new()).encode());
+        // Checkpoint at txid=1 — everything at or below txid 1 is durable
         all_bytes.extend(WalRecord::new(WalRecordType::Checkpoint, 1, 0, [0; 16], 0, Vec::new()).encode());
+        // TxID 2: Insert + Commit (after checkpoint — should be replayed)
         all_bytes.extend(WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 0, b"doc2".to_vec()).encode());
+        all_bytes.extend(WalRecord::new(WalRecordType::Commit, 2, 0, [0; 16], 0, Vec::new()).encode());
 
         let records = WalManager::replay(&all_bytes).unwrap();
-        // Should only return records after the checkpoint
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].txid, 2);
+        let txids: HashSet<u64> = records.iter().map(|r| r.txid).collect();
+
+        // Only txid=2 should be replayed (txid=1 is at/below checkpoint)
+        assert!(!txids.contains(&1), "TxID 1 should be skipped (at/below checkpoint)");
+        assert!(txids.contains(&2), "TxID 2 should be replayed (after checkpoint)");
     }
 
     #[test]

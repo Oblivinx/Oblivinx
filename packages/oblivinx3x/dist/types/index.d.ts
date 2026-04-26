@@ -24,7 +24,7 @@ export interface CollectionOptions {
     timeseries?: TimeSeriesOptions;
 }
 /**
- * Konfigurasi untuk membuka database Oblivinx3x.
+ * Konfigurasi untuk membuka database Oblivinx3x v2.
  *
  * Semua property optional — jika tidak di-set, akan menggunakan default values.
  *
@@ -34,23 +34,26 @@ export interface CollectionOptions {
  *   pageSize: 4096,
  *   bufferPool: '256MB',
  *   compression: 'lz4',
+ *   durability: 'd1',         // v2: group commit (default)
+ *   concurrentWrites: false,  // v2: single-writer (safe default)
  * };
  * ```
  */
 export interface OvnConfig {
     /**
-     * Ukuran page dalam bytes.
-     * Harus power of 2 antara 512 dan 65536.
+     * Ukuran page dalam bytes. Harus power of 2 antara 512 dan 65536.
      * @default 4096
      */
     pageSize?: number;
     /**
-     * Ukuran buffer pool. Menerima format string seperti '64MB', '256MB', '1GB'.
+     * Ukuran buffer pool (ARC algorithm in v2).
+     * Menerima format string seperti '64MB', '256MB', '1GB'.
      * @default '256MB'
      */
     bufferPool?: string;
     /**
      * Buka database dalam mode read-only. Tidak bisa melakukan write operations.
+     * Otomatis diset `true` saat membuka file v1 (.ovn).
      * @default false
      */
     readOnly?: boolean;
@@ -63,11 +66,53 @@ export interface OvnConfig {
      */
     compression?: 'none' | 'lz4' | 'zstd';
     /**
-     * Aktifkan Write-Ahead Log untuk durabilitas data.
-     * Di versi saat ini, WAL selalu aktif.
+     * @deprecated Use `durability` instead. Kept for backward compat.
      * @default true
      */
     walMode?: boolean;
+    /**
+     * Jaminan durabilitas WAL (v2).
+     * - `'d0'`       — Tanpa fsync. Throughput tertinggi, risiko data loss.
+     * - `'d1'`       — Group commit: batch beberapa commit ke satu fsync (default).
+     * - `'d1strict'` — Fsync setelah setiap group commit.
+     * - `'d2'`       — Fsync setelah setiap commit. Paling lambat, paling aman.
+     * @default 'd1'
+     */
+    durability?: 'd0' | 'd1' | 'd1strict' | 'd2';
+    /**
+     * Ukuran maksimum batch group commit dalam bytes.
+     * @default 1048576 (1 MiB)
+     */
+    groupCommitBytes?: number;
+    /**
+     * Waktu tunggu maksimum sebelum flush group commit (microseconds).
+     * @default 200
+     */
+    groupCommitUs?: number;
+    /**
+     * Aktifkan BEGIN CONCURRENT multi-writer MVCC (v2).
+     * Memungkinkan beberapa writer berjalan bersamaan tanpa blocking.
+     * @default false
+     */
+    concurrentWrites?: boolean;
+    /**
+     * Jumlah maksimum retry saat terjadi WRITE_CONFLICT (v2).
+     * @default 8
+     */
+    maxRetries?: number;
+    /**
+     * Gunakan Hybrid Logical Clock (HLC) untuk TxID generation (v2).
+     * HLC menghasilkan TxID yang causally ordered dan bounded dari wall clock.
+     * @default true
+     */
+    hlc?: boolean;
+    /**
+     * Backend I/O yang digunakan (v2).
+     * - `'auto'` — Platform optimal (io_uring di Linux, IOCP di Windows)
+     * - `'sync'` — std::fs synchronous (portable, lower throughput)
+     * @default 'auto'
+     */
+    ioEngine?: 'auto' | 'sync';
 }
 /**
  * Tipe dasar dokumen. Semua dokumen dalam Oblivinx3x memiliki field `_id`.
@@ -451,6 +496,121 @@ export interface OvnVersion {
     neon: string;
     features: string[];
 }
+/**
+ * Durability level aktif saat database dibuka.
+ * Sesuai dengan DurabilityLevel di engine/config.rs.
+ */
+export type DurabilityLevel = 'd0' | 'd1' | 'd1strict' | 'd2';
+/**
+ * Statistik WAL group commit (v2).
+ * Menunjukkan performa WAL engine saat ini.
+ */
+export interface WalStats {
+    /** Total record yang sudah ditulis ke WAL */
+    totalRecords: number;
+    /** Jumlah group commit yang sudah dilakukan */
+    groupCommits: number;
+    /** Bytes yang pending untuk di-flush */
+    pendingBytes: number;
+    /** Durability level aktif */
+    durability: DurabilityLevel;
+}
+/**
+ * Statistik ARC buffer pool cache (v2).
+ * Sesuai dengan ArcCache stats: (hits, misses, evictions).
+ */
+export interface ArcCacheStats {
+    /** Total cache hits (T1 + T2) */
+    hits: number;
+    /** Total cache misses */
+    misses: number;
+    /** Total pages yang di-evict */
+    evictions: number;
+    /** Hit rate (0.0–1.0) */
+    hitRate: number;
+    /** Adaptive split parameter p saat ini (0..capacity) */
+    pValue: number;
+    /** Jumlah entries di T1 (recency list) */
+    t1Size: number;
+    /** Jumlah entries di T2 (frequency list) */
+    t2Size: number;
+}
+/**
+ * Info lengkap engine Oblivinx3x v2.
+ * Menggabungkan version info + konfigurasi aktif + HLC state.
+ */
+export interface EngineInfo {
+    /** Versi engine (e.g., "2.0.0") */
+    version: string;
+    /** Format file aktif ("OVN2/2.0" atau "OVN/1.0" compat) */
+    format: string;
+    /** Fitur-fitur yang aktif */
+    features: string[];
+    /** Konfigurasi aktif */
+    config: {
+        pageSize: number;
+        bufferPoolSize: number;
+        compression: 'none' | 'lz4' | 'zstd';
+        durability: DurabilityLevel;
+        concurrentWrites: boolean;
+        hlcEnabled: boolean;
+        readOnly: boolean;
+    };
+    /** Statistik WAL saat ini */
+    wal?: WalStats;
+    /** Statistik ARC cache saat ini */
+    arcCache?: ArcCacheStats;
+    /** HLC timestamp terakhir (packed u64 as string) */
+    hlcTimestamp?: string;
+}
+/**
+ * Options untuk `withTransaction()` — auto-retry on write conflict (v2).
+ */
+export interface WriteConflictRetryOptions {
+    /**
+     * Jumlah maksimum retry saat terjadi WriteConflict.
+     * @default 8
+     */
+    maxRetries?: number;
+    /**
+     * Initial delay antara retry dalam milliseconds (exponential backoff).
+     * @default 5
+     */
+    initialDelayMs?: number;
+    /**
+     * Multiplier untuk exponential backoff.
+     * @default 2
+     */
+    backoffMultiplier?: number;
+    /**
+     * Maximum delay cap dalam milliseconds.
+     * @default 500
+     */
+    maxDelayMs?: number;
+    /**
+     * Jitter (0.0–1.0) ditambahkan ke delay untuk menghindari thundering herd.
+     * @default 0.1
+     */
+    jitter?: number;
+    /** Callback yang dipanggil setiap retry attempt */
+    onRetry?: (attempt: number, error: Error) => void;
+}
+/**
+ * Options untuk `beginConcurrent()` — BEGIN CONCURRENT transaction (v2).
+ * Membutuhkan `concurrentWrites: true` di OvnConfig.
+ */
+export interface ConcurrentTransactionOptions {
+    /**
+     * Label untuk tracing/debugging
+     */
+    label?: string;
+    /**
+     * Jika true, transaction akan otomatis retry saat WriteConflict.
+     * Gunakan bersama `withTransaction()` untuk full retry semantics.
+     * @default false
+     */
+    autoRetry?: boolean;
+}
 /** View definition */
 export interface ViewDefinition {
     /** Nama view */
@@ -782,5 +942,31 @@ export interface NativeAddon {
     /** Restore a document from a named tag — returns JSON restored doc */
     restoreFromTag(handle: number, collection: string, docId: string, tag: string, author?: string): string;
 }
+/**
+ * A collection name validated at the API boundary.
+ * Use `asCollectionName(s)` to create; validates format at runtime.
+ */
+export type CollectionName = string & {
+    readonly __brand: 'CollectionName';
+};
+/**
+ * A document ID validated at the API boundary.
+ * Accepts UUIDv4, UUIDv7, or a custom alphanumeric ID (max 128 chars).
+ */
+export type DocumentId = string & {
+    readonly __brand: 'DocumentId';
+};
+/**
+ * Cast a raw string to `CollectionName` after validating it is non-empty,
+ * starts with a letter, and contains only alphanumeric/underscore chars.
+ * Throws `TypeError` if invalid.
+ */
+export declare function asCollectionName(name: string): CollectionName;
+/**
+ * Cast a raw string to `DocumentId` after validating it is a UUIDv4, UUIDv7,
+ * or a custom alphanumeric ID up to 128 chars.
+ * Throws `TypeError` if invalid. Error messages do NOT expose internal paths.
+ */
+export declare function asDocumentId(id: string): DocumentId;
 export {};
 //# sourceMappingURL=index.d.ts.map

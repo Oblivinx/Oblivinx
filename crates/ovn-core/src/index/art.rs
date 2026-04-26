@@ -33,6 +33,7 @@ impl ArtNode {
         Box::new(Self::Leaf { key, value, txid })
     }
 
+    #[allow(dead_code)]
     fn new_inner(prefix: Vec<u8>) -> Box<Self> {
         Box::new(Self::Inner {
             prefix,
@@ -154,6 +155,7 @@ impl ArtNode {
         }
     }
 
+    #[allow(dead_code)]
     fn count(&self) -> usize {
         match self {
             Self::Leaf { .. } => 1,

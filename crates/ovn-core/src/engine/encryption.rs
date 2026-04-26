@@ -27,11 +27,13 @@ pub trait KeyProvider: Send + Sync {
 }
 
 /// File-based key provider (key stored in external file).
+#[allow(dead_code)]
 pub struct FileKeyProvider {
     key_path: String,
 }
 
 impl FileKeyProvider {
+    #[allow(dead_code)]
     pub fn new(key_path: &str) -> Self {
         Self {
             key_path: key_path.to_string(),

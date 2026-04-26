@@ -10,6 +10,9 @@ use std::sync::Mutex;
 
 use crate::error::{OvnError, OvnResult};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::fs::OpenOptionsExt;
+
 /// Trait abstracting file I/O for the storage engine.
 ///
 /// This allows swapping the file backend for testing, WASM environments,
@@ -24,8 +27,14 @@ pub trait FileBackend: Send + Sync {
     /// Append data to the end of the file, returning the offset written to.
     fn append(&self, data: &[u8]) -> OvnResult<u64>;
 
-    /// Sync all buffered writes to disk (fsync).
+    /// Sync all buffered writes to disk (fsync — flushes metadata too).
     fn sync(&self) -> OvnResult<()>;
+
+    /// Sync only data to disk (fdatasync — no metadata flush).
+    /// Falls back to `sync()` on platforms that don't have fdatasync.
+    fn sync_data(&self) -> OvnResult<()> {
+        self.sync()
+    }
 
     /// Get the current file size in bytes.
     fn file_size(&self) -> OvnResult<u64>;
@@ -49,16 +58,36 @@ pub struct OsFileBackend {
 
 impl OsFileBackend {
     /// Open or create a file at the given path.
+    ///
+    /// On Windows, write-through mode (`FILE_FLAG_WRITE_THROUGH`) is enabled for
+    /// the WAL data path to satisfy Bug-2 durability ordering requirements.
     pub fn open(path: &Path, read_only: bool) -> OvnResult<Self> {
         let file = if read_only {
             OpenOptions::new().read(true).open(path)?
         } else {
-            OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(false)
-                .open(path)?
+            #[cfg(target_os = "windows")]
+            {
+                // FILE_FLAG_WRITE_THROUGH (0x8000_0000) ensures writes bypass the
+                // system cache and go directly to the hardware buffer, satisfying
+                // the WAL-before-MemTable ordering requirement on Windows.
+                const FILE_FLAG_WRITE_THROUGH: u32 = 0x8000_0000;
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(false)
+                    .custom_flags(FILE_FLAG_WRITE_THROUGH)
+                    .open(path)?
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .truncate(false)
+                    .open(path)?
+            }
         };
 
         Ok(Self {
@@ -101,6 +130,12 @@ impl FileBackend for OsFileBackend {
     fn sync(&self) -> OvnResult<()> {
         let file = self.file.lock().unwrap();
         file.sync_all()?;
+        Ok(())
+    }
+
+    fn sync_data(&self) -> OvnResult<()> {
+        let file = self.file.lock().unwrap();
+        file.sync_data()?;
         Ok(())
     }
 
@@ -191,6 +226,10 @@ impl FileBackend for MemoryBackend {
     }
 
     fn sync(&self) -> OvnResult<()> {
+        Ok(())
+    }
+
+    fn sync_data(&self) -> OvnResult<()> {
         Ok(())
     }
 

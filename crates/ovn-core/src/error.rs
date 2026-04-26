@@ -175,4 +175,33 @@ pub enum OvnError {
     /// JSON serialization/deserialization error
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    // ── Crash Recovery / Durability Errors ─────────────────────
+    /// SSTable file is incomplete or has invalid CRC footer (from crash).
+    #[error("SSTable incomplete at '{path}': CRC32C footer mismatch or file truncated")]
+    SstableIncomplete { path: String },
+
+    /// File header (Page 0) and shadow page are both corrupt; cannot open safely.
+    #[error("File header corrupt: Page 0 and shadow page both invalid — run explicit repair")]
+    HeaderCorrupt,
+
+    /// Crash recovery failed and the database cannot be opened.
+    #[error("Recovery failed: {reason}")]
+    RecoveryFailed { reason: String },
+
+    /// A background worker panicked; its in-progress work was discarded safely.
+    #[error("Background worker '{worker}' panicked: {reason}")]
+    WorkerPanicked { worker: String, reason: String },
+
+    /// Another process has the database locked (WAL_ACTIVE set on open).
+    #[error("Database is locked by another process at '{path}'")]
+    DatabaseLocked { path: String },
+
+    /// Rate limit exceeded for this connection.
+    #[error("Rate limit exceeded: {0}")]
+    RateLimitExceeded(String),
+
+    /// Input validation failed (injection guard, depth limit, oversized field).
+    #[error("Input validation error: {0}")]
+    InputValidation(String),
 }

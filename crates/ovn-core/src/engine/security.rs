@@ -53,6 +53,7 @@ impl RateLimiter {
     }
 
     /// Reset the rate limiter.
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.query_count = 0;
         self.window_start = Instant::now();

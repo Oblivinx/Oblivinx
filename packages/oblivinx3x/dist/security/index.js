@@ -9,6 +9,7 @@ import { checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL,
 import { AuditLogger, InMemoryAuditLogBackend } from './audit-log.js';
 import { sanitizeInput, validateDepth, validateSize, validateAllowedFields } from './validator.js';
 import { RateLimiter } from './rate-limiter.js';
+import { QueryValidator, defaultQueryValidator, QueryError } from './validation.js';
 /**
  * SecurityContext — central coordinator for all security concerns.
  */
@@ -51,5 +52,5 @@ export function createSecurityContext(options = {}) {
     return new SecurityContext(options);
 }
 // Re-export all for external use
-export { checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, validateAllowedFields, RateLimiter, };
+export { checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, validateAllowedFields, RateLimiter, QueryValidator, defaultQueryValidator, QueryError, };
 //# sourceMappingURL=index.js.map

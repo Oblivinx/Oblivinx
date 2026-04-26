@@ -42,7 +42,12 @@ pub mod index;
 pub mod io;
 pub mod mvcc;
 pub mod query;
+pub mod recovery;
+pub mod security;
 pub mod storage;
+
+#[cfg(test)]
+pub mod tests;
 
 // Re-export primary public types
 pub use engine::config::OvnConfig;

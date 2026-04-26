@@ -51,6 +51,11 @@ tempfile = "3.12"
 rand = "0.8"
 criterion = "0.5"
 
+# Security
+zeroize = { version = "1.8", features = ["derive", "zeroize_derive"] }
+hmac = "0.12"
+sha2 = "0.10"
+
 # ── Release profile: optimized for size + speed ─────────────
 [profile.release]
 opt-level = 3

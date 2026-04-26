@@ -31,9 +31,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::error::{OvnError, OvnResult};
-use crate::format::header::{FileHeader, FileVersion};
+use crate::format::header::FileHeader;
 use crate::format::obe::{ObeDocument, ObeValue};
-use crate::format::page::{Page, PageType};
 use crate::format::segment::SegmentDirectory;
 use crate::io::{FileBackend, OsFileBackend};
 use crate::mvcc::change_stream::ChangeStreamEmitter;

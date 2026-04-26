@@ -48,6 +48,7 @@ pub struct DocumentVersion {
     /// Version number (1-based, sequential)
     pub version: u64,
     /// Transaction ID that created this version
+    #[allow(dead_code)]
     pub txid: u64,
     /// Timestamp (Unix epoch milliseconds)
     pub created_at: u64,

@@ -213,7 +213,7 @@ impl OvnEngine {
             let collections = self.collections.read();
             if let Some(coll) = collections.get(collection) {
                 // Try point lookup for equality filters
-                if let Filter::Comparison(ref field, ref op, ref value) = filter {
+                if let Filter::Comparison(ref _field, ref op, ref value) = filter {
                     if *op == FilterOp::Eq {
                         let doc_ids = coll.index_manager.lookup_in_index(index_name, value);
                         if !doc_ids.is_empty() {

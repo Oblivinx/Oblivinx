@@ -106,7 +106,8 @@ export { safeSerialize, safeDeserialize, withRetry, generateId } from './utils/i
 // ═══════════════════════════════════════════════════════════════════
 //  SECURITY
 // ═══════════════════════════════════════════════════════════════════
-export { SecurityContext, createSecurityContext, checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, RateLimiter, } from './security/index.js';
+export { SecurityContext, createSecurityContext, checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, RateLimiter, QueryValidator, defaultQueryValidator, QueryError, } from './security/index.js';
+export { asCollectionName, asDocumentId } from './types/index.js';
 // ═══════════════════════════════════════════════════════════════════
 //  DATABASE MANAGERS
 // ═══════════════════════════════════════════════════════════════════

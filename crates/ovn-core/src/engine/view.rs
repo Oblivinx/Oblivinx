@@ -32,6 +32,7 @@ pub struct MaterializedViewCache {
     /// Cached result documents
     pub results: Vec<ObeDocument>,
     /// TxID at which this cache was computed
+    #[allow(dead_code)]
     pub computed_at_txid: u64,
 }
 

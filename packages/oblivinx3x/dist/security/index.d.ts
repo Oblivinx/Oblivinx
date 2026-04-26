@@ -9,6 +9,7 @@ import { checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL,
 import { AuditLogger, InMemoryAuditLogBackend, type AuditEvent, type AuditLogBackend } from './audit-log.js';
 import { sanitizeInput, validateDepth, validateSize, validateAllowedFields, type InputValidationConfig } from './validator.js';
 import { RateLimiter } from './rate-limiter.js';
+import { QueryValidator, defaultQueryValidator, QueryError } from './validation.js';
 /**
  * Security options for database initialization.
  */
@@ -47,6 +48,6 @@ export declare class SecurityContext {
  * Create a SecurityContext from options.
  */
 export declare function createSecurityContext(options?: SecurityOptions): SecurityContext;
-export { checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, validateAllowedFields, RateLimiter, };
+export { checkPermission, isFieldReadable, isFieldWritable, filterDocumentByACL, sanitizeDocumentByACL, AuditLogger, InMemoryAuditLogBackend, sanitizeInput, validateDepth, validateSize, validateAllowedFields, RateLimiter, QueryValidator, defaultQueryValidator, QueryError, };
 export type { CollectionOperation, CollectionPermissionMap, FieldACL, AuditEvent, AuditLogBackend, InputValidationConfig, };
 //# sourceMappingURL=index.d.ts.map

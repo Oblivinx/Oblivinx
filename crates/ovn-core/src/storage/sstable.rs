@@ -230,7 +230,46 @@ impl SSTable {
         &self.entries
     }
 
-    /// Serialize the SSTable to bytes.
+    /// Serialize the SSTable to bytes with an 8-byte CRC32C footer.
+    ///
+    /// Format: `encode()` payload + 4-byte CRC32C + 4-byte reserved (0x00).
+    /// `from_bytes_verified()` checks this footer before decoding.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = self.encode();
+        let crc = crc32c::crc32c(&buf);
+        buf.extend_from_slice(&crc.to_le_bytes()); // 4 bytes CRC32C
+        buf.extend_from_slice(&[0u8; 4]);          // 4 bytes reserved
+        buf
+    }
+
+    /// Decode an SSTable from bytes that were written by `to_bytes()`.
+    ///
+    /// Verifies the 8-byte CRC32C footer before decoding.  Returns
+    /// `Err(SstableIncomplete)` on any mismatch (truncated write or
+    /// on-disk corruption), so the caller can delete the file and
+    /// regenerate from WAL.
+    pub fn from_bytes_verified(id: u64, data: &[u8], path: &str) -> OvnResult<Self> {
+        const FOOTER: usize = 8;
+        if data.len() < FOOTER {
+            return Err(OvnError::SstableIncomplete { path: path.to_string() });
+        }
+        let payload = &data[..data.len() - FOOTER];
+        let stored_crc = u32::from_le_bytes(
+            data[data.len() - FOOTER..data.len() - FOOTER + 4]
+                .try_into()
+                .unwrap(),
+        );
+        let computed_crc = crc32c::crc32c(payload);
+        if stored_crc != computed_crc {
+            log::warn!(
+                "SSTable incomplete: {path} CRC32C mismatch (stored=0x{stored_crc:08X}, computed=0x{computed_crc:08X})"
+            );
+            return Err(OvnError::SstableIncomplete { path: path.to_string() });
+        }
+        Self::decode(id, payload)
+    }
+
+    /// Serialize the SSTable to bytes (no footer).
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::new();
 

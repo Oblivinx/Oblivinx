@@ -9,7 +9,7 @@
 
 use crc32fast::Hasher as Crc32Hasher;
 use std::collections::hash_map::DefaultHasher;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -187,7 +187,7 @@ impl DiskSSTable {
         }
 
         // Write data block
-        let data_start = file.stream_position().unwrap_or(0);
+        let _data_start = file.stream_position().unwrap_or(0);
         let mut hasher = Crc32Hasher::new();
 
         for entry in entries {

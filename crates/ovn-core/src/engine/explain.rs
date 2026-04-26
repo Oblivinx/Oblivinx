@@ -37,7 +37,7 @@ impl OvnEngine {
             .unwrap_or("queryPlanner");
 
         let filter_parsed = parse_filter(filter)?;
-        let filter_fields = extract_filter_fields(&filter_parsed);
+        let _filter_fields = extract_filter_fields(&filter_parsed);
 
         // Get available indexes
         let collections = self.collections.read();

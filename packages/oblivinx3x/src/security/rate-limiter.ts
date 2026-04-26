@@ -8,17 +8,32 @@
 
 import { RateLimitedError } from '../errors/index.js';
 
-/** Token bucket for rate limiting */
+/** Default sustained rate: 10,000 ops/sec per connection. */
+const DEFAULT_RATE = 10_000;
+
+/** Burst factor: allow 1.5× normal rate for up to BURST_WINDOW_MS. */
+const BURST_FACTOR = 1.5;
+
+/** Burst window duration in milliseconds. */
+const BURST_WINDOW_MS = 100;
+
+/**
+ * Token bucket with burst support.
+ *
+ * Capacity equals `rate * BURST_FACTOR` so the bucket allows a 1.5× spike
+ * for up to BURST_WINDOW_MS before throttling.
+ */
 class TokenBucket {
   readonly capacity: number;
   readonly refillRate: number; // tokens per second
   #tokens: number;
   #lastRefill: number; // timestamp in ms
 
-  constructor(capacity: number, refillRate: number) {
-    this.capacity = capacity;
-    this.refillRate = refillRate;
-    this.#tokens = capacity;
+  constructor(rate: number) {
+    this.refillRate = rate;
+    // Burst capacity allows 1.5× rate for BURST_WINDOW_MS before steady-state
+    this.capacity = rate + Math.ceil(rate * (BURST_FACTOR - 1) * (BURST_WINDOW_MS / 1000));
+    this.#tokens = rate; // start at steady-state, not full burst
     this.#lastRefill = Date.now();
   }
 
@@ -49,8 +64,8 @@ class TokenBucket {
  */
 export class RateLimiter {
   readonly #buckets = new Map<string, { reads: TokenBucket; writes: TokenBucket }>();
-  #defaultReadRate = Infinity;
-  #defaultWriteRate = Infinity;
+  #defaultReadRate = DEFAULT_RATE;
+  #defaultWriteRate = DEFAULT_RATE;
 
   /**
    * Configure rate limits.
@@ -66,8 +81,8 @@ export class RateLimiter {
   #getBuckets(collection: string): { reads: TokenBucket; writes: TokenBucket } {
     if (!this.#buckets.has(collection)) {
       this.#buckets.set(collection, {
-        reads: new TokenBucket(this.#defaultReadRate, this.#defaultReadRate),
-        writes: new TokenBucket(this.#defaultWriteRate, this.#defaultWriteRate),
+        reads: new TokenBucket(this.#defaultReadRate),
+        writes: new TokenBucket(this.#defaultWriteRate),
       });
     }
     return this.#buckets.get(collection)!;

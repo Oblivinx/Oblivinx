@@ -38,7 +38,7 @@ import { EventEmitter } from 'node:events';
 import { Collection } from './collection.js';
 import { Transaction } from './transaction.js';
 import type { OvnConfig, OvnMetrics, OvnVersion, Document } from './types/index.js';
-import type { ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainPlan, ExplainVerbosity, PipelineStage, FilterQuery } from './types/index.js';
+import type { ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainPlan, ExplainVerbosity, PipelineStage, FilterQuery, EngineInfo, WriteConflictRetryOptions, ConcurrentTransactionOptions } from './types/index.js';
 /**
  * Class utama Oblivinx3x Database.
  *
@@ -105,15 +105,21 @@ export declare class Oblivinx3x {
      *
      * @example
      * ```typescript
-     * // Dengan default config
-     * const db = new Oblivinx3x('data.ovn');
+     * // Dengan default config (v2)
+     * const db = new Oblivinx3x('data.ovn2');
      *
-     * // Dengan custom config
-     * const db = new Oblivinx3x('data.ovn', {
+     * // Dengan custom config v2
+     * const db = new Oblivinx3x('data.ovn2', {
      *   compression: 'lz4',
-     *   bufferPool: '128MB',
-     *   readOnly: false,
+     *   bufferPool: '512MB',
+     *   durability: 'd1',          // Group commit (default)
+     *   concurrentWrites: false,   // Single-writer mode (safe default)
+     *   hlc: true,                 // HLC TxIDs
      * });
+     *
+     * // Open v1 file (read-only compat mode)
+     * const db = new Oblivinx3x('legacy.ovn');
+     * // db.closed === false, but all writes will throw OvnReadOnlyError
      * ```
      */
     constructor(path: string, options?: OvnConfig);
@@ -248,6 +254,63 @@ export declare class Oblivinx3x {
      */
     beginTransaction(): Promise<Transaction>;
     /**
+     * BEGIN CONCURRENT — mulai MVCC transaction dengan optimistic concurrency (v2).
+     *
+     * Sama seperti `beginTransaction()` namun menandai transaction sebagai
+     * "concurrent writer" — engine akan mencoba resolve write conflicts
+     * secara optimistic menggunakan HLC snapshot ordering.
+     *
+     * ⚠️ Membutuhkan `concurrentWrites: true` di OvnConfig saat buka database.
+     *    Jika tidak diaktifkan, akan fallback ke beginTransaction() biasa.
+     *
+     * @param options - Optional: label dan autoRetry settings
+     * @returns Instance Transaction
+     *
+     * @example
+     * ```typescript
+     * // Buka dengan concurrentWrites diaktifkan
+     * const db = new Oblivinx3x('data.ovn2', { concurrentWrites: true });
+     *
+     * // Dua writer berjalan bersamaan
+     * const [txn1, txn2] = await Promise.all([
+     *   db.beginConcurrent({ label: 'writer-1' }),
+     *   db.beginConcurrent({ label: 'writer-2' }),
+     * ]);
+     * ```
+     */
+    beginConcurrent(_options?: ConcurrentTransactionOptions): Promise<Transaction>;
+    /**
+     * Execute operasi dalam satu ACID transaction dengan auto-retry on WriteConflict.
+     *
+     * Pattern yang direkomendasikan untuk operasi transaksional yang mungkin
+     * mengalami write conflict (terutama saat `concurrentWrites: true`).
+     *
+     * ## Retry Behavior
+     * - Jika `fn` melempar `WriteConflictError`, transaction di-rollback dan dicoba ulang
+     * - Retry dengan exponential backoff + jitter untuk mencegah thundering herd
+     * - Maksimum retry default: 8 (sesuai `max_retries` di OvnConfig)
+     *
+     * @param fn - Async function yang menerima Transaction dan menjalankan operasi
+     * @param options - Retry options (maxRetries, backoff, dll)
+     * @returns Return value dari `fn`
+     *
+     * @throws {WriteConflictError} Jika masih conflict setelah maxRetries
+     * @throws Jika `fn` melempar error selain WriteConflict
+     *
+     * @example
+     * ```typescript
+     * // Transfer atomik dengan auto-retry
+     * await db.withTransaction(async (txn) => {
+     *   const [from] = await txn.find('accounts', { _id: 'alice' });
+     *   const [to] = await txn.find('accounts', { _id: 'bob' });
+     *   if ((from.balance as number) < 100) throw new Error('Insufficient funds');
+     *   await txn.update('accounts', { _id: 'alice' }, { $inc: { balance: -100 } });
+     *   await txn.update('accounts', { _id: 'bob' },   { $inc: { balance: +100 } });
+     * });
+     * ```
+     */
+    withTransaction<T = void>(fn: (txn: Transaction) => Promise<T>, options?: WriteConflictRetryOptions): Promise<T>;
+    /**
      * Force checkpoint — flush semua dirty MemTable pages ke disk dan clear WAL.
      *
      * Dipanggil otomatis saat `close()`. Berguna untuk long-running applications
@@ -297,6 +360,29 @@ export declare class Oblivinx3x {
      * ```
      */
     getVersion(): Promise<OvnVersion>;
+    /**
+     * Dapatkan info lengkap engine v2 — versi + konfigurasi aktif + statistik.
+     *
+     * Berbeda dengan `getVersion()` yang hanya mengembalikan versi dasar,
+     * method ini mengembalikan informasi komprehensif tentang:
+     * - Versi dan format file aktif
+     * - Konfigurasi yang digunakan (durability, concurrentWrites, HLC, dll)
+     * - Statistik WAL group commit
+     * - Statistik ARC buffer pool cache
+     * - HLC timestamp terakhir
+     *
+     * @returns EngineInfo — informasi lengkap engine v2
+     *
+     * @example
+     * ```typescript
+     * const info = await db.getEngineInfo();
+     * console.log(`Engine: ${info.version} (${info.format})`);
+     * console.log(`Durability: ${info.config.durability}`);
+     * console.log(`ARC hit rate: ${(info.arcCache?.hitRate ?? 0) * 100}%`);
+     * console.log(`WAL group commits: ${info.wal?.groupCommits ?? 0}`);
+     * ```
+     */
+    getEngineInfo(): Promise<EngineInfo>;
     /**
      * Export seluruh database sebagai JSON object.
      *

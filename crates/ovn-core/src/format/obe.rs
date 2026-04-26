@@ -573,10 +573,10 @@ impl ObeDocument {
         let (field_count, varint_len) = decode_varint(&buf[pos..])?;
         pos += varint_len;
 
-        // Decode fields
+        // Decode fields (depth starts at 0 for top-level document fields)
         let mut fields = BTreeMap::new();
         for _ in 0..field_count {
-            let (name, value, consumed) = decode_field(&buf[pos..])?;
+            let (name, value, consumed) = decode_field(&buf[pos..], 0)?;
             fields.insert(name, value);
             pos += consumed;
         }
@@ -677,14 +677,41 @@ fn encode_value(value: &ObeValue, buf: &mut Vec<u8>) -> OvnResult<()> {
     Ok(())
 }
 
+// ── OBE2 Decoder Security Limits ─────────────────────────────────────────────
+
+/// Maximum nesting depth for OBE2 documents and arrays (Section 20.3 spec).
+pub const OBE2_MAX_NESTING_DEPTH: u32 = 128;
+
+/// Maximum number of elements in a single array.
+pub const OBE2_MAX_ARRAY_LEN: u64 = 100_000;
+
+/// Maximum byte length of a single field name.
+pub const OBE2_MAX_FIELD_NAME_BYTES: usize = 255;
+
 /// Decode a single field from the buffer, returning (name, value, bytes_consumed).
-fn decode_field(buf: &[u8]) -> OvnResult<(String, ObeValue, usize)> {
+/// `depth` tracks nesting level; returns `InputValidation` error if limits are exceeded.
+fn decode_field(buf: &[u8], depth: u32) -> OvnResult<(String, ObeValue, usize)> {
+    if depth > OBE2_MAX_NESTING_DEPTH {
+        return Err(OvnError::InputValidation(format!(
+            "OBE2 nesting depth {} exceeds maximum {}",
+            depth, OBE2_MAX_NESTING_DEPTH
+        )));
+    }
+
     let mut pos = 0;
 
     // Field name length
     let (name_len, vl) = decode_varint(&buf[pos..])?;
     pos += vl;
     let name_len = name_len as usize;
+
+    // Bounds check field name length before allocation
+    if name_len > OBE2_MAX_FIELD_NAME_BYTES {
+        return Err(OvnError::InputValidation(format!(
+            "Field name length {} exceeds maximum {} bytes",
+            name_len, OBE2_MAX_FIELD_NAME_BYTES
+        )));
+    }
 
     // Field name
     if buf.len() < pos + name_len {
@@ -702,14 +729,15 @@ fn decode_field(buf: &[u8]) -> OvnResult<(String, ObeValue, usize)> {
     pos += 1;
 
     // Value
-    let (value, consumed) = decode_value(tag, &buf[pos..])?;
+    let (value, consumed) = decode_value(tag, &buf[pos..], depth)?;
     pos += consumed;
 
     Ok((name, value, pos))
 }
 
 /// Decode a value based on its type tag, returning (value, bytes_consumed).
-fn decode_value(tag: TypeTag, buf: &[u8]) -> OvnResult<(ObeValue, usize)> {
+/// `depth` is incremented for nested Document and Array values.
+fn decode_value(tag: TypeTag, buf: &[u8], depth: u32) -> OvnResult<(ObeValue, usize)> {
     match tag {
         TypeTag::Null => Ok((ObeValue::Null, 0)),
         TypeTag::BoolTrue => Ok((ObeValue::Bool(true), 0)),
@@ -764,7 +792,7 @@ fn decode_value(tag: TypeTag, buf: &[u8]) -> OvnResult<(ObeValue, usize)> {
             let (field_count, mut pos) = decode_varint(buf)?;
             let mut map = BTreeMap::new();
             for _ in 0..field_count {
-                let (name, value, consumed) = decode_field(&buf[pos..])?;
+                let (name, value, consumed) = decode_field(&buf[pos..], depth + 1)?;
                 map.insert(name, value);
                 pos += consumed;
             }
@@ -772,6 +800,12 @@ fn decode_value(tag: TypeTag, buf: &[u8]) -> OvnResult<(ObeValue, usize)> {
         }
         TypeTag::Array => {
             let (count, mut pos) = decode_varint(buf)?;
+            if count > OBE2_MAX_ARRAY_LEN {
+                return Err(OvnError::InputValidation(format!(
+                    "Array length {} exceeds maximum {}",
+                    count, OBE2_MAX_ARRAY_LEN
+                )));
+            }
             let mut arr = Vec::with_capacity(count as usize);
             for _ in 0..count {
                 if pos >= buf.len() {
@@ -779,7 +813,7 @@ fn decode_value(tag: TypeTag, buf: &[u8]) -> OvnResult<(ObeValue, usize)> {
                 }
                 let elem_tag = TypeTag::from_byte(buf[pos])?;
                 pos += 1;
-                let (val, consumed) = decode_value(elem_tag, &buf[pos..])?;
+                let (val, consumed) = decode_value(elem_tag, &buf[pos..], depth + 1)?;
                 arr.push(val);
                 pos += consumed;
             }

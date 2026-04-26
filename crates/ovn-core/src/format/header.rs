@@ -36,10 +36,11 @@
 //! | 0x0FF0 | 16   | Shadow copy (corruption det)    |
 
 use crc32c::crc32c;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read};
 use uuid::Uuid;
 
 use crate::error::{OvnError, OvnResult};
+use crate::io::FileBackend;
 use crate::{
     DEFAULT_PAGE_SIZE, FORMAT_VERSION_MAJOR, FORMAT_VERSION_MAJOR_V1, FORMAT_VERSION_MINOR,
     OVN2_MAGIC, OVN_MAGIC_V1,
@@ -230,12 +231,14 @@ impl FileHeader {
         buf[0x0104..0x0114].copy_from_slice(&self.key_derivation_salt);
         buf[0x0114..0x0134].copy_from_slice(&self.header_hmac);
 
-        // ── Shadow copy at 0x0FF0 (magic + version + page_size + flags_lo) ──
-        buf[SHADOW_OFFSET..SHADOW_OFFSET + 4].copy_from_slice(&self.magic.to_le_bytes());
-        buf[SHADOW_OFFSET + 4..SHADOW_OFFSET + 6].copy_from_slice(&self.version_major.to_le_bytes());
-        buf[SHADOW_OFFSET + 6..SHADOW_OFFSET + 8].copy_from_slice(&self.version_minor.to_le_bytes());
-        buf[SHADOW_OFFSET + 8..SHADOW_OFFSET + 12].copy_from_slice(&self.page_size.to_le_bytes());
-        buf[SHADOW_OFFSET + 12..SHADOW_OFFSET + 16].copy_from_slice(&self.flags.to_le_bytes()[..4]);
+        // ── Shadow copy at 0x0FF0 (checkpoint txid + CRC32C + reserved) ──
+        // Layout: txid(8) + crc32c(4) + reserved(4) = 16 bytes.
+        // This must match the format written by write_checkpoint_atomic() so that
+        // the shadow page survives a torn Page 0 write.
+        buf[SHADOW_OFFSET..SHADOW_OFFSET + 8].copy_from_slice(&self.hlc_state.to_le_bytes());
+        let shadow_crc = crc32c(&buf[SHADOW_OFFSET..SHADOW_OFFSET + 8]);
+        buf[SHADOW_OFFSET + 8..SHADOW_OFFSET + 12].copy_from_slice(&shadow_crc.to_le_bytes());
+        // buf[SHADOW_OFFSET + 12..SHADOW_OFFSET + 16] remains zero (reserved)
 
         buf
     }
@@ -470,6 +473,49 @@ impl Default for FileHeader {
     }
 }
 
+/// Read Page 0 safely, falling back to the shadow copy at offset 0x0FF0.
+///
+/// Implements the Bug-2 torn-write protection:
+/// 1. Read Page 0 and attempt to parse / verify the CRC32C.
+/// 2. If Page 0 is invalid, read the 16-byte shadow record at 0x0FF0.
+/// 3. If shadow CRC32C is valid (checkpoint txid + crc), log a warning and
+///    construct a minimal header for recovery.
+/// 4. If both are invalid, return `Err(HeaderCorrupt)` — repair is required.
+pub fn read_page_0_safe(backend: &dyn FileBackend, page_size: u32) -> OvnResult<FileHeader> {
+    let page0 = backend.read_page(0, page_size)?;
+
+    match FileHeader::from_bytes(&page0) {
+        Ok(header) => Ok(header),
+        Err(primary_err) => {
+            log::warn!("Page 0 primary read failed ({primary_err}), checking shadow page at 0x0FF0");
+
+            // Shadow record layout (16 bytes): txid(8) + crc32c(4) + reserved(4)
+            let shadow = backend.read_at(SHADOW_OFFSET as u64, 16)?;
+            let shadow_txid = u64::from_le_bytes(shadow[0..8].try_into().unwrap());
+            let shadow_crc_stored = u32::from_le_bytes(shadow[8..12].try_into().unwrap());
+            let shadow_crc_computed = crc32c(&shadow[0..8]);
+
+            if shadow_crc_stored == shadow_crc_computed && shadow_txid != 0 {
+                log::warn!(
+                    "Using shadow page 0 (checkpoint txid={shadow_txid}) — \
+                     WAL recovery required to restore full header"
+                );
+                // Construct a minimal recovery header from known-good defaults.
+                let mut header = FileHeader::new(page_size);
+                header.hlc_state = shadow_txid;
+                header.set_wal_active(true); // force recovery
+                Ok(header)
+            } else {
+                log::error!(
+                    "Both Page 0 and shadow page are invalid \
+                     (shadow_crc stored=0x{shadow_crc_stored:08X} computed=0x{shadow_crc_computed:08X})"
+                );
+                Err(OvnError::HeaderCorrupt)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -523,13 +569,17 @@ mod tests {
     fn test_shadow_copy_present() {
         let header = FileHeader::new(4096);
         let bytes = header.to_bytes();
-        let shadow_magic = u32::from_le_bytes([
-            bytes[SHADOW_OFFSET],
-            bytes[SHADOW_OFFSET + 1],
-            bytes[SHADOW_OFFSET + 2],
-            bytes[SHADOW_OFFSET + 3],
-        ]);
-        assert_eq!(shadow_magic, OVN2_MAGIC);
+        // Shadow now stores checkpoint txid (hlc_state) + CRC32C
+        let shadow_txid = u64::from_le_bytes(
+            bytes[SHADOW_OFFSET..SHADOW_OFFSET + 8].try_into().unwrap(),
+        );
+        assert_eq!(shadow_txid, header.hlc_state, "Shadow must contain hlc_state");
+
+        let shadow_crc = u32::from_le_bytes(
+            bytes[SHADOW_OFFSET + 8..SHADOW_OFFSET + 12].try_into().unwrap(),
+        );
+        let expected_crc = crc32c(&bytes[SHADOW_OFFSET..SHADOW_OFFSET + 8]);
+        assert_eq!(shadow_crc, expected_crc, "Shadow CRC32C must be valid");
     }
 
     #[test]

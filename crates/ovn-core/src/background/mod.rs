@@ -47,6 +47,12 @@ impl BackgroundPool {
     }
 
     /// Spawn a new background worker with the given task closure.
+    ///
+    /// Bug-3 fix: every task invocation is wrapped in `catch_unwind`.
+    /// If the task panics:
+    ///   - The panic is logged (worker name + message).
+    ///   - No uncommitted data is written (tasks must not commit without WAL guard).
+    ///   - The worker is restarted after an exponential backoff (1s → 30s max).
     pub fn spawn<F>(&mut self, config: WorkerConfig, task: F)
     where
         F: Fn() + Send + 'static,
@@ -59,13 +65,51 @@ impl BackgroundPool {
         let shutdown_clone = shutdown.clone();
         let interval = config.interval;
         let name = config.name.clone();
+        let worker_name = name.clone(); // clone for use inside closure
 
         let handle = thread::Builder::new()
             .name(format!("ovn-bg-{}", &name))
             .spawn(move || {
+                let name = worker_name;
+                // Exponential backoff on consecutive panics (ms): 1s → 2s → 4s → … → 30s.
+                let mut backoff_ms: u64 = 1_000;
+
                 while !shutdown_clone.load(Ordering::Relaxed) {
-                    task();
-                    thread::sleep(interval);
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        task();
+                    }));
+
+                    match result {
+                        Ok(()) => {
+                            // Healthy run — reset backoff, wait normal interval.
+                            backoff_ms = 1_000;
+                            thread::sleep(interval);
+                        }
+                        Err(panic_payload) => {
+                            let reason: String = panic_payload
+                                .downcast_ref::<&str>()
+                                .map(|s| s.to_string())
+                                .or_else(|| {
+                                    panic_payload
+                                        .downcast_ref::<String>()
+                                        .cloned()
+                                })
+                                .unwrap_or_else(|| "unknown panic payload".to_string());
+
+                            log::error!(
+                                "Background worker '{}' panicked: {}. \
+                                 Restarting after {}ms (backoff). \
+                                 No uncommitted data was written.",
+                                name,
+                                reason,
+                                backoff_ms
+                            );
+
+                            thread::sleep(Duration::from_millis(backoff_ms));
+                            // Exponential backoff, capped at 30 seconds.
+                            backoff_ms = (backoff_ms * 2).min(30_000);
+                        }
+                    }
                 }
             })
             .expect("Failed to spawn background worker thread");

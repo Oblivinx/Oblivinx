@@ -18,6 +18,7 @@ pub mod blob;
 pub mod btree;
 pub mod buffer_pool;
 pub mod cdc_log;
+pub mod checkpoint;
 pub mod columnar;
 pub mod disk_btree;
 pub mod disk_sstable;

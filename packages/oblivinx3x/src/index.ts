@@ -228,6 +228,9 @@ export {
   validateDepth,
   validateSize,
   RateLimiter,
+  QueryValidator,
+  defaultQueryValidator,
+  QueryError,
 } from './security/index.js';
 export type {
   SecurityOptions,
@@ -238,6 +241,9 @@ export type {
   AuditLogBackend,
   InputValidationConfig,
 } from './security/index.js';
+
+export { asCollectionName, asDocumentId } from './types/index.js';
+export type { CollectionName, DocumentId } from './types/index.js';
 
 // ═══════════════════════════════════════════════════════════════════
 //  DATABASE MANAGERS
