@@ -113,22 +113,32 @@ impl CdcRecord {
 
         let name_len = u16::from_le_bytes(buf[pos..pos + 2].try_into().ok()?) as usize;
         pos += 2;
-        if buf.len() < pos + name_len { return None; }
+        if buf.len() < pos + name_len {
+            return None;
+        }
         let collection_name = String::from_utf8(buf[pos..pos + name_len].to_vec()).ok()?;
         pos += name_len;
 
         let doc_id_len = u32::from_le_bytes(buf[pos..pos + 4].try_into().ok()?) as usize;
         pos += 4;
-        if buf.len() < pos + doc_id_len { return None; }
+        if buf.len() < pos + doc_id_len {
+            return None;
+        }
         let doc_id = buf[pos..pos + doc_id_len].to_vec();
         pos += doc_id_len;
 
         let read_optional = |buf: &[u8], pos: &mut usize| -> Option<Option<Vec<u8>>> {
-            if buf.len() < *pos + 4 { return None; }
+            if buf.len() < *pos + 4 {
+                return None;
+            }
             let len = u32::from_le_bytes(buf[*pos..*pos + 4].try_into().ok()?) as usize;
             *pos += 4;
-            if len == 0 { return Some(None); }
-            if buf.len() < *pos + len { return None; }
+            if len == 0 {
+                return Some(None);
+            }
+            if buf.len() < *pos + len {
+                return None;
+            }
             let v = buf[*pos..*pos + len].to_vec();
             *pos += len;
             Some(Some(v))
@@ -195,6 +205,10 @@ impl CdcLog {
     }
 
     /// Append a CDC record. If `collection_id` is not CDC-enabled, does nothing.
+    ///
+    /// Argument list mirrors the WAL record schema; introducing a struct
+    /// wrapper would force every call-site (hot path) to allocate.
+    #[allow(clippy::too_many_arguments)]
     pub fn append(
         &self,
         txid: u64,
@@ -305,11 +319,27 @@ mod tests {
         assert!(log.is_enabled(1));
         assert!(!log.is_enabled(2));
 
-        let seq = log.append(1, 1, "users", b"doc1".to_vec(), CdcOperation::Insert, None, Some(b"data".to_vec()));
+        let seq = log.append(
+            1,
+            1,
+            "users",
+            b"doc1".to_vec(),
+            CdcOperation::Insert,
+            None,
+            Some(b"data".to_vec()),
+        );
         assert!(seq.is_some());
 
         // Not enabled — should return None
-        let seq2 = log.append(1, 2, "orders", b"doc1".to_vec(), CdcOperation::Insert, None, None);
+        let seq2 = log.append(
+            1,
+            2,
+            "orders",
+            b"doc1".to_vec(),
+            CdcOperation::Insert,
+            None,
+            None,
+        );
         assert!(seq2.is_none());
 
         log.disable(1);
@@ -321,7 +351,15 @@ mod tests {
         let log = CdcLog::new(100);
         log.enable(1);
         for i in 0..5 {
-            log.append(i, 1, "items", b"doc".to_vec(), CdcOperation::Update, None, Some(b"v".to_vec()));
+            log.append(
+                i,
+                1,
+                "items",
+                b"doc".to_vec(),
+                CdcOperation::Update,
+                None,
+                Some(b"v".to_vec()),
+            );
         }
         let recent = log.read_since(3);
         assert_eq!(recent.len(), 3); // seq 3, 4, 5

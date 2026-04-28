@@ -1,0 +1,70 @@
+{
+    "name": "ovnqueue",
+    "version": "1.2.0",
+    "description": "Enterprise-grade, framework-agnostic Job Queue for Node.js — No Redis required",
+    "main": "dist/cjs/index.cjs",
+    "module": "dist/esm/index.js",
+    "types": "dist/types/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/esm/index.js",
+            "require": "./dist/cjs/index.js",
+            "types": "./dist/types/index.d.ts"
+        }
+    },
+    "scripts": {
+        "build": "npm run clean && npm run build:esm && npm run build:cjs && npm run build:types && npm run build:rename-cjs",
+        "clean": "node -e \"const fs=require('fs'); fs.rmSync('dist', {recursive:true, force:true})\"",
+        "build:esm": "tsc -p tsconfig.build.json --module ESNext --outDir dist/esm",
+        "build:cjs": "tsc -p tsconfig.build.json --module CommonJS --outDir dist/cjs",
+        "build:types": "tsc -p tsconfig.build.json --declaration --emitDeclarationOnly --outDir dist/types",
+        "build:rename-cjs": "node scripts/fix-cjs.mjs",
+        "dev": "tsc -p tsconfig.build.json --module ESNext --outDir dist/esm --watch",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run --coverage",
+        "test:unit": "vitest run --coverage tests/unit",
+        "test:integration": "vitest run tests/integration",
+        "test:watch": "vitest",
+        "test:crash": "vitest run tests/integration/crash-recovery.test.ts",
+        "example": "npx tsx example/example.ts",
+        "lint": "eslint src/**/*.ts",
+        "format:check": "prettier --check src/**/*.ts tests/**/*.ts",
+        "prepublishOnly": "npm run build"
+    },
+    "peerDependencies": {
+        "oblivinx3x": ">=0.0.8 <0.1.0"
+    },
+    "peerDependenciesMeta": {
+        "oblivinx3x": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "@types/node": "^20.19.35",
+        "@vitest/coverage-v8": "^2.1.8",
+        "oblivinx3x": ">=0.0.8 <0.1.0",
+        "typescript": "^5.6.3",
+        "vitest": "^2.1.8"
+    },
+    "dependencies": {
+        "ulid": "^2.3.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "CHANGELOG.md"
+    ],
+    "keywords": [
+        "job-queue",
+        "task-queue",
+        "worker",
+        "whatsapp",
+        "node",
+        "no-redis",
+        "priority-queue",
+        "typescript"
+    ]
+}

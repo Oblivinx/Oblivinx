@@ -5,7 +5,7 @@
 
 use crate::error::{OvnError, OvnResult};
 use crate::format::obe::{ObeDocument, ObeValue};
-use crate::query::aggregation::{parse_pipeline, execute_stage_single, AggregateStage};
+use crate::query::aggregation::{execute_stage_single, parse_pipeline, AggregateStage};
 
 use super::OvnEngine;
 
@@ -48,27 +48,30 @@ impl OvnEngine {
     pub fn create_view(&self, name: &str, definition: &serde_json::Value) -> OvnResult<()> {
         self.check_closed()?;
 
-        let obj = definition.as_object().ok_or_else(|| OvnError::ValidationError(
-            "View definition must be an object".to_string()
-        ))?;
+        let obj = definition.as_object().ok_or_else(|| {
+            OvnError::ValidationError("View definition must be an object".to_string())
+        })?;
 
-        let source = obj.get("source")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| OvnError::ValidationError(
-                "View definition must have a 'source' field".to_string()
-            ))?;
+        let source = obj.get("source").and_then(|v| v.as_str()).ok_or_else(|| {
+            OvnError::ValidationError("View definition must have a 'source' field".to_string())
+        })?;
 
-        let pipeline = obj.get("pipeline")
+        let pipeline = obj
+            .get("pipeline")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| OvnError::ValidationError(
-                "View definition must have a 'pipeline' field".to_string()
-            ))?;
+            .ok_or_else(|| {
+                OvnError::ValidationError(
+                    "View definition must have a 'pipeline' field".to_string(),
+                )
+            })?;
 
-        let view_type = obj.get("type")
+        let view_type = obj
+            .get("type")
             .and_then(|v| v.as_str())
             .unwrap_or("logical");
 
-        let refresh_policy = obj.get("refreshPolicy")
+        let refresh_policy = obj
+            .get("refreshPolicy")
             .and_then(|v| v.as_str())
             .unwrap_or("manual");
 
@@ -81,14 +84,22 @@ impl OvnEngine {
             last_refresh: None,
         };
 
-        self.views.lock().unwrap().insert(name.to_string(), view_def);
+        self.views
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), view_def);
 
         // For materialized views, precompute the cache
         if view_type == "materialized" {
             self.refresh_materialized_view(name)?;
         }
 
-        log::info!("View '{}' created (type={}, source={})", name, view_type, source);
+        log::info!(
+            "View '{}' created (type={}, source={})",
+            name,
+            view_type,
+            source
+        );
         Ok(())
     }
 
@@ -97,7 +108,10 @@ impl OvnEngine {
         self.check_closed()?;
 
         if self.views.lock().unwrap().remove(name).is_none() {
-            return Err(OvnError::ValidationError(format!("View '{}' not found", name)));
+            return Err(OvnError::ValidationError(format!(
+                "View '{}' not found",
+                name
+            )));
         }
 
         // Also clear materialized cache if present
@@ -112,15 +126,18 @@ impl OvnEngine {
         self.check_closed()?;
 
         let views = self.views.lock().unwrap();
-        Ok(views.values().map(|v| {
-            serde_json::json!({
-                "name": v.name,
-                "source": v.source_collection,
-                "type": v.view_type,
-                "refreshPolicy": v.refresh_policy,
-                "lastRefresh": v.last_refresh,
+        Ok(views
+            .values()
+            .map(|v| {
+                serde_json::json!({
+                    "name": v.name,
+                    "source": v.source_collection,
+                    "type": v.view_type,
+                    "refreshPolicy": v.refresh_policy,
+                    "lastRefresh": v.last_refresh,
+                })
             })
-        }).collect())
+            .collect())
     }
 
     /// Refresh a materialized view.
@@ -128,15 +145,17 @@ impl OvnEngine {
         self.check_closed()?;
 
         let views = self.views.lock().unwrap();
-        let view = views.get(name).ok_or_else(|| OvnError::ValidationError(
-            format!("View '{}' not found", name)
-        ))?.clone();
+        let view = views
+            .get(name)
+            .ok_or_else(|| OvnError::ValidationError(format!("View '{}' not found", name)))?
+            .clone();
         drop(views);
 
         if view.view_type != "materialized" {
-            return Err(OvnError::ValidationError(
-                format!("View '{}' is not materialized", name)
-            ));
+            return Err(OvnError::ValidationError(format!(
+                "View '{}' is not materialized",
+                name
+            )));
         }
 
         // Execute the pipeline on the source collection
@@ -156,7 +175,10 @@ impl OvnEngine {
             results: docs,
             computed_at_txid: self.mvcc.next_txid(),
         };
-        self.materialized_caches.lock().unwrap().insert(name.to_string(), cache);
+        self.materialized_caches
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), cache);
 
         // Update last refresh timestamp
         let mut views = self.views.lock().unwrap();
@@ -165,11 +187,15 @@ impl OvnEngine {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs() as i64
+                    .as_secs() as i64,
             );
         }
 
-        log::info!("Materialized view '{}' refreshed ({} docs)", name, docs_count);
+        log::info!(
+            "Materialized view '{}' refreshed ({} docs)",
+            name,
+            docs_count
+        );
         Ok(())
     }
 
@@ -185,9 +211,10 @@ impl OvnEngine {
         self.check_closed()?;
 
         let views = self.views.lock().unwrap();
-        let view = views.get(name).ok_or_else(|| OvnError::ValidationError(
-            format!("View '{}' not found", name)
-        ))?.clone();
+        let view = views
+            .get(name)
+            .ok_or_else(|| OvnError::ValidationError(format!("View '{}' not found", name)))?
+            .clone();
         drop(views);
 
         match view.view_type.as_str() {
@@ -199,15 +226,19 @@ impl OvnEngine {
             "materialized" => {
                 // Return cached results
                 let caches = self.materialized_caches.lock().unwrap();
-                let cache = caches.get(name).ok_or_else(|| OvnError::ValidationError(
-                    format!("Materialized view '{}' cache not found", name)
-                ))?;
+                let cache = caches.get(name).ok_or_else(|| {
+                    OvnError::ValidationError(format!(
+                        "Materialized view '{}' cache not found",
+                        name
+                    ))
+                })?;
 
                 Ok(cache.results.iter().map(|d| d.to_json()).collect())
             }
-            _ => Err(OvnError::ValidationError(
-                format!("Unknown view type: {}", view.view_type)
-            ))
+            _ => Err(OvnError::ValidationError(format!(
+                "Unknown view type: {}",
+                view.view_type
+            ))),
         }
     }
 
@@ -285,10 +316,13 @@ impl OvnEngine {
     /// Called after write operations.
     pub fn refresh_views_for_collection(&self, collection: &str) {
         let views = self.views.lock().unwrap();
-        let views_to_refresh: Vec<String> = views.values()
-            .filter(|v| v.view_type == "materialized" 
-                && v.source_collection == collection 
-                && v.refresh_policy == "on_write")
+        let views_to_refresh: Vec<String> = views
+            .values()
+            .filter(|v| {
+                v.view_type == "materialized"
+                    && v.source_collection == collection
+                    && v.refresh_policy == "on_write"
+            })
             .map(|v| v.name.clone())
             .collect();
         drop(views);

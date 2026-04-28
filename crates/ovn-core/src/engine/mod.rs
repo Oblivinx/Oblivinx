@@ -9,21 +9,21 @@ pub mod timeseries;
 
 // Submodules containing split impl blocks for OvnEngine
 mod attach;
+mod audit;
+mod backup;
 mod blob_ops;
 mod crud;
+mod encryption;
 mod explain;
 mod index_ops;
 mod metrics;
 mod pragma;
-mod txn_ops;
-mod view;
 mod relation;
-mod trigger;
-mod versioning;
-mod backup;
-mod encryption;
-mod audit;
 mod security;
+mod trigger;
+mod txn_ops;
+mod versioning;
+mod view;
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -179,11 +179,10 @@ impl OvnEngine {
 
             // Load segment directory from Page 1
             let seg_dir = match backend.read_page(1, config.page_size) {
-                Ok(seg_bytes) => SegmentDirectory::from_bytes(&seg_bytes)
-                    .unwrap_or_else(|e| {
-                        log::warn!("Could not parse segment directory: {}. Using empty.", e);
-                        SegmentDirectory::new()
-                    }),
+                Ok(seg_bytes) => SegmentDirectory::from_bytes(&seg_bytes).unwrap_or_else(|e| {
+                    log::warn!("Could not parse segment directory: {}. Using empty.", e);
+                    SegmentDirectory::new()
+                }),
                 Err(_) => SegmentDirectory::new(),
             };
 
@@ -288,7 +287,9 @@ impl OvnEngine {
         {
             let seg_dir = self.segment_dir.lock().unwrap();
             if let Ok(seg_bytes) = seg_dir.to_bytes(self.config.page_size as usize) {
-                let _ = self.backend.write_page(1, self.config.page_size, &seg_bytes);
+                let _ = self
+                    .backend
+                    .write_page(1, self.config.page_size, &seg_bytes);
             }
         }
 

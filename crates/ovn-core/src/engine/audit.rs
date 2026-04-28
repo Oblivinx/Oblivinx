@@ -59,7 +59,11 @@ impl Default for AuditConfig {
         Self {
             enabled: true,
             level: "write".to_string(),
-            redact_fields: vec!["password".to_string(), "token".to_string(), "secret".to_string()],
+            redact_fields: vec![
+                "password".to_string(),
+                "token".to_string(),
+                "secret".to_string(),
+            ],
             max_memory_entries: 10000,
             log_file: None,
         }
@@ -125,11 +129,7 @@ impl OvnEngine {
         // Write to file if configured
         if let Some(ref path) = config.log_file {
             if let Ok(json) = serde_json::to_string(&entry) {
-                if let Ok(mut file) = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(path)
-                {
+                if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
                     let _ = writeln!(file, "{}", json);
                 }
             }
@@ -155,10 +155,7 @@ impl OvnEngine {
 
         let log = self.audit_log.lock().unwrap();
         let mut entries: Vec<AuditEntry> = if let Some(op) = operation_filter {
-            log.iter()
-                .filter(|e| e.operation == op)
-                .cloned()
-                .collect()
+            log.iter().filter(|e| e.operation == op).cloned().collect()
         } else {
             log.clone()
         };
@@ -177,12 +174,20 @@ impl OvnEngine {
     /// Configure audit logging.
     pub fn configure_audit(&self, config: AuditConfig) {
         if config.enabled {
-            log::info!("Audit logging configured (level={}, redact_fields={:?})",
-                config.level, config.redact_fields);
+            log::info!(
+                "Audit logging configured (level={}, redact_fields={:?})",
+                config.level,
+                config.redact_fields
+            );
         }
     }
 
     /// Helper: record a write operation audit entry.
+    ///
+    /// Audit signatures intentionally take individual fields so callers
+    /// can spread structured arguments inline. Wrapping in a struct would
+    /// hurt readability at every call site.
+    #[allow(clippy::too_many_arguments)]
     pub fn audit_write(
         &self,
         operation: &str,

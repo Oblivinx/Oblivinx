@@ -1,0 +1,655 @@
+# PROMPT: oblivinx3x Deep Research & Planning Documentation Generator
+### Target model: claude-opus-4-6 | Mode: agentic file generation
+
+---
+
+## SYSTEM PROMPT
+
+```
+You are the chief architect and lead researcher for oblivinx3x — a next-generation embedded 
+database engine built from scratch that merges the best of SQLite (local, single-file, ACID), 
+MongoDB (document/NoSQL, flexible schema), and JSON (native document model) while introducing 
+entirely new paradigms: vector search, reactive queries, WASM plugins, CRDT sync, 
+field-level encryption, and a hybrid columnar-document storage model.
+
+You have deep expertise in:
+- Database internals (B-tree, LSM-tree, LMDB, page layout, WAL, MVCC)
+- Systems programming (C++, Rust, memory layout, lock-free data structures)
+- Security engineering (AES-256-GCM, PBKDF2, Argon2, TLS 1.3, RBAC, audit systems)
+- Search engine design (FTS, BM25, HNSW vector index, inverted index, tokenization)
+- Distributed systems (CRDT, Raft consensus, oplog, 2PC, snapshot isolation)
+- Query engine design (AST, query planner, cost estimator, execution engine)
+- Storage engine internals (page manager, buffer pool, compaction, vacuum)
+
+Your job is to produce EXHAUSTIVE, DEEPLY TECHNICAL planning documentation 
+for the entire oblivinx3x database engine. No hand-waving. No "TODO: figure this out later." 
+Every design decision must be justified with concrete tradeoffs.
+```
+
+---
+
+## USER PROMPT
+
+```
+Lakukan riset mendalam dan buat dokumentasi perencanaan lengkap untuk database engine 
+oblivinx3x. Ikuti semua instruksi di bawah ini dengan sangat ketat.
+
+═══════════════════════════════════════════════════════════════
+FASE 0 — PRE-RESEARCH (WAJIB, sebelum menulis file apapun)
+═══════════════════════════════════════════════════════════════
+
+Sebelum membuat file apapun, lakukan analisis mendalam tentang:
+
+1. Bandingkan arsitektur internal SQLite (btree.c, pager.c, vdbe.c), RocksDB (LSM), 
+   dan LMDB (copy-on-write B-tree) — identifikasi apa yang terbaik dari masing-masing 
+   untuk dijadikan fondasi oblivinx3x.
+
+2. Analisis bagaimana MongoDB WiredTiger engine mengelola document storage, MVCC, 
+   dan checkpoint — apa yang bisa diadopsi dan apa yang harus dibuang.
+
+3. Riset state-of-the-art dalam:
+   - Vector index: HNSW vs IVF vs PQ (Product Quantization) — mana yang optimal untuk 
+     embedded local DB dengan <10M vectors?
+   - Full-text search: BM25 vs TF-IDF vs learned sparse retrieval
+   - Encryption: AES-256-GCM vs ChaCha20-Poly1305 untuk file encryption di embedded DB
+   - Compression: LZ4 vs Zstd vs Snappy untuk page-level compression
+   - Lock-free structures: MVCC implementation strategies untuk high-concurrency reads
+
+4. Identifikasi 10 critical design decisions yang akan menentukan keberhasilan oblivinx3x 
+   dan dokumentasikan tradeoff setiap keputusan.
+
+Tuliskan ringkasan riset ini di awal sebelum generate file (boleh panjang).
+
+═══════════════════════════════════════════════════════════════
+FASE 1 — GENERATE FILE STRUKTUR
+═══════════════════════════════════════════════════════════════
+
+Buat folder ovnplanning/ dan isi dengan file-file berikut.
+Setiap file HARUS sangat panjang, sangat teknis, dan lengkap.
+Tidak boleh ada placeholder, tidak boleh ada "TBD", tidak boleh ada bagian kosong.
+
+---
+
+### FILE 01: ovnplanning/00-MASTER-SPEC.md
+Dokumen induk. Isi:
+- Executive summary oblivinx3x (visi, misi, differentiation dari SQLite/MongoDB/DuckDB)
+- Full feature matrix (90+ fitur, status: CORE / EXTENDED / FUTURE)
+- Architecture overview diagram (ASCII art)
+- Dependency graph antar komponen
+- Target platform matrix: Linux x64, Linux ARM64, Windows x64, macOS ARM64, WASM
+- Performance targets (angka konkret: QPS, latency P50/P95/P99, storage overhead)
+- Non-goals (apa yang sengaja TIDAK akan dilakukan dan kenapa)
+- Versioning roadmap: v0.1 alpha → v0.5 beta → v1.0 stable (fitur apa di setiap versi)
+
+---
+
+### FILE 02: ovnplanning/01-STORAGE-ENGINE.md
+Isi SANGAT detail:
+- Page format: magic bytes, header layout, checksum, page types (leaf/internal/overflow/freelist)
+- Page size analysis: kenapa 4096 atau 8192 atau 16384 bytes? Benchmark tradeoff.
+- Buffer pool manager: LRU-K eviction, dirty page tracking, pin/unpin API
+- B-tree implementation: node split/merge algorithm, fill factor, right-most insert optimization
+- Free page management: freelist vs bitmap approach, fragmentation analysis
+- Overflow handling: ketika value > 1 page, chain page mechanism
+- File format header: version, page count, root page, schema version, flags
+- Struct layout semua tipe page dalam C++ (byte-level, with offset table)
+- Storage tiering: HOT (mmap), WARM (buffered), COLD (direct I/O)
+- Hybrid columnar mode: kapan field dipromote ke columnar section
+- Compression pipeline: per-page LZ4/Zstd dengan magic byte detection
+- Endianness handling dan cross-platform considerations
+
+---
+
+### FILE 03: ovnplanning/02-WAL-AND-JOURNALING.md
+Isi:
+- WAL record format: header, type, transaction ID, page number, before/after image
+- WAL writer: group commit optimization, fsync strategy (O_DSYNC vs explicit fsync)
+- WAL reader: recovery algorithm, checkpoint trigger, WAL size management
+- Checkpoint modes: PASSIVE, FULL, RESTART, TRUNCATE — kapan masing-masing dipakai
+- Crash recovery algorithm: step-by-step dengan pseudocode
+- WAL untuk MVCC: snapshot menggunakan WAL position sebagai version marker
+- Concurrent WAL readers vs writer: locking strategy
+- WAL compaction: bagaimana menggabungkan WAL ke main database file
+- Comparison: WAL vs ROLLBACK journal vs shadow paging — kenapa WAL dipilih
+- Edge cases: torn write, partial fsync, power loss di tengah checkpoint
+
+---
+
+### FILE 04: ovnplanning/03-DOCUMENT-MODEL.md
+Isi:
+- BSON-inspired binary format untuk document serialization (tapi lebih compact)
+  - Type tags: 1 byte type + variable length encoding
+  - Integer: variable-length encoding (LEB128)
+  - String: length-prefixed UTF-8
+  - Array: count-prefixed list
+  - Object: sorted key-value pairs dengan binary search support
+- Document layout di page: slot array (offset table) di awal, data tumbuh dari belakang
+- Nested document max depth: 32 level, stack-based traversal
+- Type system lengkap: Null, Bool, Int32, Int64, Float64, Decimal128, String, Binary, 
+  Date, Timestamp, ObjectID, Array, Object, Regex, Code
+- ObjectID format: 4-byte timestamp + 5-byte random + 3-byte counter (12 bytes total)
+- Document size limits: max 16MB per document, kenapa, dan workaround untuk dokumen besar
+- Schema inference: bagaimana engine mendeteksi schema dari sampling dokumen
+- Projection mask: bitmask untuk efficient field projection tanpa full deserialization
+- Document diff: algoritma menghitung delta antara dua versi dokumen untuk oplog
+- Zero-copy deserialization strategy menggunakan pointer arithmetic
+
+---
+
+### FILE 05: ovnplanning/04-INDEX-ENGINE.md
+Isi:
+- B-tree index format: key encoding, duplicate key handling, clustered vs non-clustered
+- Composite index: key encoding strategy untuk multi-field index, sort order encoding
+- Index-organized table (IOT): primary key sebagai clustered B-tree
+- Sparse index: presence bitmap untuk optional fields
+- Partial index: filter expression disimpan bersama index metadata
+- TTL index: background thread, scan interval, clock source, drift handling
+- JSON path index: path normalization, nested array fanout problem dan solusinya
+- Covering index: bagaimana detect bahwa query bisa dipenuhi dari index saja
+- Hash index: open-addressing vs chaining, load factor, rehashing
+- Full-text index (FTS):
+  - Tokenizer pipeline: normalize → lowercase → stop-word → stem → token
+  - Inverted index format: term → posting list (doc_id + position + frequency)
+  - Posting list compression: delta encoding + VByte
+  - BM25 scoring formula dengan parameter tuning k1=1.2, b=0.75
+  - Phrase query: position index untuk exact phrase match
+- Vector index (HNSW):
+  - Layer structure: M connections per node, efConstruction, ef search parameter
+  - Distance functions: cosine, euclidean, dot product — pilih berdasarkan embedding type
+  - Serialization format HNSW graph ke disk
+  - Incremental update tanpa full rebuild
+- Geospatial index (R-tree):
+  - MBR (Minimum Bounding Rectangle) packing
+  - Query types: point-in-polygon, radius search, bounding box intersect
+- Index maintenance: deferred vs immediate update, index consistency check
+
+---
+
+### FILE 06: ovnplanning/05-QUERY-ENGINE.md
+Isi:
+- Query language design: OQL (oblivinx Query Language) — syntax EBNF grammar lengkap
+- Lexer: token types, keyword set, operator precedence table
+- Parser: recursive descent, AST node types semua (dengan C++ struct definition)
+- Semantic analysis: type checking, field existence validation, index availability check
+- Query planner:
+  - Statistics: histogram per field, n-distinct, null fraction, correlation
+  - Cost model: CPU cost, I/O cost, memory cost formula
+  - Join strategies: nested loop, hash join, merge join — kapan masing-masing dipilih
+  - Index selection algorithm: multi-index merge, index intersection
+  - Query rewriting rules: predicate pushdown, constant folding, dead code elimination
+- Execution engine:
+  - Volcano/iterator model vs vectorized execution — tradeoff untuk embedded DB
+  - Operator implementations: Scan, Filter, Project, Sort, Limit, HashAgg, MergeJoin
+  - Memory management: sort buffer spill to disk, hash table size limit
+- Aggregation pipeline stages (semua): 
+  $match, $group, $sort, $limit, $skip, $project, $unwind, $lookup, 
+  $facet, $bucket, $count, $addFields, $replaceRoot, $out, $merge
+- Window functions: PARTITION BY, ORDER BY, frame specification (ROWS vs RANGE)
+- Explain output format: JSON tree dengan cost, rows, index_used per node
+- Reactive query: event-driven re-execution, dependency tracking, differential computation
+
+---
+
+### FILE 07: ovnplanning/06-TRANSACTION-MVCC.md
+Isi:
+- Transaction ID (TxID): 64-bit monotonic counter, wraparound handling
+- MVCC version chain: per-document version linked list, GC policy
+- Isolation levels: READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE
+  - Anomalies yang dicegah setiap level: dirty read, non-repeatable read, phantom read
+- Snapshot acquisition: current TxID sebagai read horizon
+- Visibility rules: tuple visible jika xmin <= snapshot TxID <= xmax
+- Write conflict detection: first-writer-wins vs last-writer-wins
+- Deadlock detection: waits-for graph, cycle detection algorithm (DFS), timeout fallback
+- Savepoint implementation: nested transaction dengan partial rollback
+- Two-phase commit protocol untuk multi-collection transaction
+- Garbage collection: vacuum worker, safe horizon calculation, dead version cleanup
+- Lock manager: lock table, lock modes (S/X/IS/IX/SIX), lock escalation
+- Optimistic concurrency control (OCC): validate phase, version number comparison
+
+---
+
+### FILE 08: ovnplanning/07-SECURITY-LAYER.md
+Isi SANGAT detail untuk setiap fitur security:
+
+**Encryption at Rest:**
+- Key derivation: Argon2id(password, salt, m=65536, t=3, p=4) → 32-byte master key
+- File encryption: AES-256-GCM per-page, 12-byte IV = random(4) + page_no(4) + counter(4)
+- Authentication tag: 16 bytes per page untuk tamper detection
+- Key rotation protocol: re-encrypt semua page dengan key baru dalam satu transaction
+- Key storage: never in plaintext, support external KMS (HashiCorp Vault, AWS KMS)
+
+**Encryption in Transit:**
+- TLS 1.3 only, disable older versions
+- Cipher suites: TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256
+- Certificate pinning untuk embedded mode
+- Mutual TLS (mTLS) untuk server-to-server
+
+**Field-Level Encryption (FLE):**
+- Per-field encryption key derived dari master key + field_path
+- Deterministic vs randomized encryption: tradeoff untuk searchability
+- Encrypted field metadata: type, key_id, algorithm, iv disimpan di field header
+
+**RBAC:**
+- User model: user_id, password_hash(Argon2), roles[], created_at, last_login
+- Role model: role_id, permissions[], collection_patterns (glob)
+- Permission types: read, write, delete, admin, backup, schema
+- Attribute-based access control (ABAC) extension untuk fine-grained policy
+- Session token: JWT RS256, exp: 1h, refresh token: opaque 32-byte, exp: 30d
+
+**Row-Level Security:**
+- Policy expression: AST expression evaluated per-document
+- Example: `{owner_id: {$eq: "$current_user.id"}}`
+- Performance impact: policy expression di-push ke query planner sebagai filter
+
+**Audit Log:**
+- Append-only log file, separate dari main DB
+- Record format: timestamp, user, operation, collection, document_id, old_value_hash, new_value_hash, ip, duration_ms
+- Tamper evidence: setiap record chain dengan HMAC-SHA256 dari record sebelumnya
+- Retention policy: configurable, default 90 hari, auto-archive ke compressed file
+
+**Query Injection Protection:**
+- No string interpolation dalam query — parameterized only
+- Input sanitization: null byte, control character stripping
+- Depth limit: max 32 level nested object dalam query
+
+**Rate Limiting:**
+- Token bucket per API key: capacity, refill rate, burst limit
+- Per-IP fallback untuk unauthenticated connections
+- Penalty box: temporary ban setelah N failed auth attempts
+
+**Secure Delete:**
+- DOD 5220.22-M: 3-pass overwrite (0x00, 0xFF, random) sebelum free
+- SSD-aware: TRIM + crypto-erase (hapus key, bukan data)
+
+**Integrity Verification:**
+- Per-page SHA-256 checksum di header page
+- Merkle tree atas seluruh database untuk full integrity verification
+- PRAGMA integrity_check analogue
+
+---
+
+### FILE 09: ovnplanning/08-SEARCH-ENGINE.md
+Isi:
+- Architecture search pipeline: Query → Tokenize → Lookup → Score → Rank → Return
+- Tokenizer detail: whitespace, unicode word boundary, CJK bigram, Indonesian stemmer
+- Stop words: daftar lengkap Bahasa Indonesia + English, configurable
+- Stemmer: Porter Stemmer untuk English, PySastrawi-inspired untuk Indonesia
+- Inverted index structure detail (lihat FILE 05 tapi lebih dalam di sini tentang search)
+- Query types: simple term, phrase, prefix, wildcard, boolean, proximity, fuzzy
+- Fuzzy matching: BK-tree untuk Levenshtein lookup, edit distance threshold adaptive
+- Scoring formula lengkap dengan pseudocode:
+  ```
+  score(d, q) = sum_t[ idf(t) * tf(t,d) * fieldBoost(f) * freshnessBoost(d) ]
+  idf(t) = log(1 + (N - df(t) + 0.5) / (df(t) + 0.5))
+  tf(t,d) = (freq(t,d) * (k1+1)) / (freq(t,d) + k1 * (1-b+b*dl/avgdl))
+  ```
+- Field boosting: title^3, tags^2, body^1 — konfigurasi per collection
+- Highlight generation: extract snippet 150 char dengan term highlighted
+- Search suggestions: prefix trie dari top-K terms, typo correction via BK-tree
+- Faceted search implementation: aggregation over search results per category bucket
+- Vector + keyword hybrid search: RRF (Reciprocal Rank Fusion) untuk gabungkan hasil
+
+---
+
+### FILE 10: ovnplanning/09-REPLICATION-SYNC.md
+Isi:
+- Oplog format: LSN (Log Sequence Number), operation type, namespace, before, after, timestamp
+- Master-replica protocol: initial sync (full snapshot), oplog tailing, lag monitoring
+- CRDT types yang diimplementasi: 
+  - LWW-Register (Last Write Wins) untuk scalar fields
+  - OR-Set (Observed-Remove Set) untuk array fields
+  - PN-Counter untuk numeric increment/decrement
+  - LWW-Map untuk nested objects
+- Conflict resolution policy: configurable per collection (LWW / custom merge function)
+- Offline-first sync: local writes buffered, sync saat koneksi tersedia, conflict detection
+- Replica lag measurement: heartbeat interval, lag threshold alert
+- Point-in-time recovery: oplog replay algorithm, target timestamp binary search
+- Incremental backup format: changed pages bitmap + page data, manifest file
+
+---
+
+### FILE 11: ovnplanning/10-CONCURRENCY.md
+Isi:
+- Threading model: main thread, WAL writer thread, checkpoint thread, vacuum thread, 
+  background index thread, TTL cleanup thread — diagram interaksi
+- Lock-free read path: setelah acquire snapshot, reads tidak perlu lock apapun
+- Write serialization: single writer lock (WAL mutex) untuk ordering
+- Reader-writer lock implementation: menggunakan atomic + futex
+- Multi-reader WAL: shared lock pada WAL reader saat checkpoint tidak boleh truncate
+- B-tree latch coupling (crabbing): top-down latch acquire dan release untuk concurrent access
+- Async I/O integration: io_uring submission queue, completion queue, batch processing
+- Thread pool: work-stealing deque, adaptive sizing berdasarkan core count
+- Memory ordering: acquire/release semantics untuk semua shared state
+
+---
+
+### FILE 12: ovnplanning/11-COMPRESSION.md
+Isi:
+- Page-level compression: LZ4 default (fast), Zstd level 3 (balanced), Zstd level 19 (max)
+- Compression decision: hanya compress jika ratio > 1.1x (hindari expand incompressible data)
+- Dictionary compression: Zstd shared dictionary dilatih dari 100 sample page per collection
+- Column-level compression (untuk columnar mode):
+  - Integer: delta encoding + SIMD bitpacking (FOR — Frame of Reference)
+  - String: dictionary encoding untuk low-cardinality, LZ4 untuk high-cardinality
+  - Float: Gorilla XOR encoding untuk time-series float
+- Transparent decompression: dekompresi saat page load ke buffer pool
+- Compression stats: ratio per collection, CPU overhead monitoring
+
+---
+
+### FILE 13: ovnplanning/12-OBSERVABILITY.md
+Isi:
+- Metrics registry: pull model (Prometheus /metrics) + push model (StatsD)
+- Metric categories dan semua metric name:
+  - Storage: obx_pages_total, obx_file_size_bytes, obx_free_pages, obx_compression_ratio
+  - Query: obx_queries_total{op,collection}, obx_query_duration_seconds{quantile}
+  - Cache: obx_buffer_pool_hits_total, obx_buffer_pool_misses_total, obx_cache_evictions
+  - Transaction: obx_txn_active, obx_txn_committed_total, obx_txn_aborted_total
+  - Replication: obx_replication_lag_seconds, obx_oplog_entries_total
+  - Security: obx_auth_failures_total, obx_rate_limit_hits_total
+- Slow query log format: JSON, threshold configurable (default 100ms)
+- Query profiler output: per-stage timing, rows_examined, index_used, memory_used
+- OpenTelemetry trace: span per operation, baggage propagation
+- Health check response schema: status, version, uptime, connections, disk_usage
+
+---
+
+### FILE 14: ovnplanning/13-API-DESIGN.md
+Isi:
+- C API (low-level, untuk embedding):
+  ```c
+  // Semua function signature lengkap dengan parameter dan return type
+  obx_db* obx_open(const char* path, obx_options* opts);
+  obx_err  obx_close(obx_db* db);
+  obx_txn* obx_txn_begin(obx_db* db, obx_txn_mode mode);
+  obx_err  obx_txn_commit(obx_txn* txn);
+  obx_err  obx_txn_abort(obx_txn* txn);
+  obx_cursor* obx_cursor_open(obx_txn* txn, const char* collection);
+  obx_err  obx_insert(obx_cursor* cur, const uint8_t* doc, size_t len, obx_id* out_id);
+  obx_err  obx_find(obx_cursor* cur, const char* filter_json, obx_result** out);
+  // ... 40+ function signatures lengkap
+  ```
+- C++ API (RAII wrappers):
+  ```cpp
+  // Class definitions lengkap dengan method signatures
+  class Database { ... };
+  class Transaction { ... };
+  class Collection { ... };
+  class Query { ... };
+  class Cursor { ... };
+  ```
+- REST API endpoints (server mode):
+  - POST   /v1/{collection}              — insert document
+  - GET    /v1/{collection}/{id}         — get by ID
+  - PUT    /v1/{collection}/{id}         — replace document
+  - PATCH  /v1/{collection}/{id}         — partial update
+  - DELETE /v1/{collection}/{id}         — delete
+  - POST   /v1/{collection}/find        — query documents
+  - POST   /v1/{collection}/aggregate   — aggregation pipeline
+  - POST   /v1/{collection}/bulk        — bulk operations
+  - GET    /v1/{collection}/count       — count documents
+  - GET    /v1/admin/stats              — database statistics
+  - POST   /v1/admin/backup            — trigger backup
+  - WebSocket /v1/{collection}/watch   — change stream
+- Request/Response schema lengkap (JSON Schema) untuk setiap endpoint
+- Error codes: semua error code dengan kode numerik, name, dan description
+
+---
+
+### FILE 15: ovnplanning/14-PLUGIN-WASM.md
+Isi:
+- Plugin interface (ABI): function exports yang harus diimplementasi plugin
+- WASM sandbox: memory limits, import whitelist, execution timeout
+- Plugin types: storage_backend, index_provider, tokenizer, udf, trigger_handler
+- Plugin manifest: JSON metadata (name, version, type, entry_point, permissions)
+- Hot-reload mechanism: load plugin baru tanpa restart
+- C API untuk plugin development:
+  ```c
+  // Plugin harus export functions ini:
+  obx_plugin_info* obx_plugin_register(void);
+  obx_err obx_plugin_init(obx_plugin_ctx* ctx);
+  obx_err obx_plugin_shutdown(obx_plugin_ctx* ctx);
+  ```
+- WASM vs .so tradeoff: performance vs security isolation
+- Example plugin skeleton (storage backend)
+
+---
+
+### FILE 16: ovnplanning/15-QUERY-LANGUAGE-OQL.md
+Isi:
+- Full EBNF grammar OQL (Oblivinx Query Language):
+  ```ebnf
+  query       ::= select_stmt | insert_stmt | update_stmt | delete_stmt | aggregate_stmt
+  select_stmt ::= 'FIND' projection? 'IN' collection_name filter? sort? limit? skip?
+  filter      ::= 'WHERE' expression
+  expression  ::= comparison | logical | exists | array_op | ...
+  // ... grammar lengkap 100+ rules
+  ```
+- Operator reference lengkap:
+  - Comparison: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin
+  - Logical: $and, $or, $not, $nor
+  - Element: $exists, $type
+  - Array: $all, $elemMatch, $size
+  - Text: $text, $regex
+  - Geospatial: $near, $geoWithin, $geoIntersects
+  - Bitwise: $bitsAllSet, $bitsAnySet
+- Update operators: $set, $unset, $inc, $mul, $rename, $min, $max, 
+  $push, $pop, $pull, $addToSet, $pullAll, $currentDate
+- Pipeline operators: semua $match, $group, $project, $sort, $limit, $skip, 
+  $unwind, $lookup, $facet, $bucket, $count, $addFields, $replaceRoot
+- Examples lengkap untuk setiap operator
+
+---
+
+### FILE 17: ovnplanning/16-PLATFORM-BUILD.md
+Isi:
+- CMake build system structure: CMakeLists.txt hierarchy, compile flags per platform
+- Dependencies: semua third-party library dengan versi, license, vendored vs system
+  - LZ4 (BSD-2), Zstd (BSD/GPL2), xxHash (BSD-2), utf8proc (MIT), 
+    hnswlib (Apache-2), re2 (BSD-3), Argon2 (CC0/Apache-2), 
+    OpenSSL 3.x (Apache-2), mbedTLS (Apache-2)
+- Cross-compilation: toolchain files untuk ARM64 Linux, WASM (Emscripten)
+- WASM target: API subset yang tersedia, JS bindings, OPFS untuk persistence di browser
+- Sanitizer builds: ASan, TSan, UBSan — integration ke CI
+- Fuzzing: AFL++ + libFuzzer targets untuk parser, serialization, WAL recovery
+- CI/CD pipeline: GitHub Actions matrix (OS × compiler × sanitizer)
+- Release checklist: semua langkah sebelum tag v1.0
+
+---
+
+### FILE 18: ovnplanning/17-TESTING-STRATEGY.md
+Isi:
+- Test pyramid: unit (70%), integration (20%), system (10%)
+- Unit test coverage targets: storage engine 95%, query engine 90%, security 100%
+- Crash recovery tests: kill process di setiap tahap operasi, verify recovery benar
+- Concurrency tests: 100 thread concurrent read/write, verify ACID properties
+- Fuzz testing: random query input, random document, random WAL truncation
+- Performance benchmarks: YCSB workload A-F, custom POS workload
+- Security tests: pen test checklist, injection attempts, auth bypass attempts
+- Cross-platform tests: byte-order test, file portability across OS
+- Chaos testing: simulate disk full, corrupt page, clock skew, OOM
+
+---
+
+### FILE 19: ovnplanning/18-ROADMAP-MILESTONES.md
+Isi (SANGAT DETAIL):
+
+**v0.1.0 — Foundation (Target: 3 bulan)**
+- [ ] Storage engine: page manager, buffer pool, B-tree
+- [ ] WAL dan crash recovery
+- [ ] Basic document CRUD (insert, get, update, delete)
+- [ ] Primary key index
+- [ ] Basic transaction (BEGIN/COMMIT/ROLLBACK)
+- [ ] C API minimal
+- [ ] Unit tests storage layer
+
+**v0.2.0 — Query (Target: +2 bulan)**
+- [ ] OQL parser dan lexer
+- [ ] Query planner basic (full scan)
+- [ ] Secondary index (B-tree)
+- [ ] Compound index
+- [ ] Filter operators ($eq, $gt, $lt, $in, $and, $or)
+- [ ] Aggregation: $match, $group, $sort, $limit, $project
+- [ ] EXPLAIN output
+
+**v0.3.0 — Search (Target: +2 bulan)**
+- [ ] Full-text search (FTS) dengan BM25
+- [ ] Inverted index
+- [ ] Fuzzy search
+- [ ] JSON path index
+- [ ] TTL index
+- [ ] Partial index
+
+**v0.4.0 — Security (Target: +2 bulan)**
+- [ ] AES-256-GCM encryption at rest
+- [ ] RBAC user/role system
+- [ ] Audit log
+- [ ] Rate limiting
+- [ ] JWT authentication
+- [ ] Query injection protection
+
+**v0.5.0 — Advanced (Target: +3 bulan)**
+- [ ] Vector search (HNSW index)
+- [ ] Geospatial index (R-tree)
+- [ ] CRDT-based sync
+- [ ] Reactive query
+- [ ] Plugin system (WASM + .so)
+- [ ] REST API server mode
+- [ ] Change stream / watcher
+
+**v0.6.0 — Performance (Target: +2 bulan)**
+- [ ] MVCC snapshot isolation
+- [ ] Async I/O (io_uring)
+- [ ] Columnar storage mode
+- [ ] Dictionary compression
+- [ ] Connection pooling
+- [ ] Prepared statement cache
+
+**v0.7.0 — Observability (Target: +1 bulan)**
+- [ ] Prometheus metrics
+- [ ] OpenTelemetry tracing
+- [ ] Slow query log
+- [ ] Query profiler
+- [ ] Health check endpoint
+
+**v0.8.0 — Replication (Target: +2 bulan)**
+- [ ] Oplog
+- [ ] Master-replica sync
+- [ ] Point-in-time recovery
+- [ ] Incremental backup
+
+**v0.9.0 — SDK & DX (Target: +2 bulan)**
+- [ ] C++ RAII wrapper
+- [ ] Python bindings (pybind11)
+- [ ] Rust FFI bindings
+- [ ] CLI REPL dengan autocomplete
+- [ ] Schema migration CLI
+- [ ] Data seeder
+
+**v1.0.0 — Stable (Target: +2 bulan)**
+- [ ] Full audit & security review
+- [ ] Performance benchmarks publish
+- [ ] Documentation lengkap
+- [ ] Cross-platform validation
+
+---
+
+### FILE 20: ovnplanning/19-GLOSSARY.md
+Isi:
+- Glossary 80+ term teknis yang digunakan dalam dokumentasi oblivinx3x
+- Setiap term: definisi teknis + konteks penggunaan dalam oblivinx3x + reference ke file relevan
+
+---
+
+### FILE 21: ovnplanning/20-ADR (Architecture Decision Records)/
+Buat subfolder dan 10 ADR file:
+- ADR-001-storage-engine-choice.md (B-tree vs LSM vs LMDB)
+- ADR-002-wal-vs-shadow-paging.md  
+- ADR-003-encryption-algorithm.md (AES-GCM vs ChaCha20)
+- ADR-004-query-language-design.md (SQL subset vs MQL vs custom)
+- ADR-005-mvcc-strategy.md
+- ADR-006-vector-index-algorithm.md (HNSW vs IVF)
+- ADR-007-plugin-sandbox.md (WASM vs .so)
+- ADR-008-compression-algorithm.md (LZ4 vs Zstd)
+- ADR-009-sync-protocol.md (CRDT vs OT)
+- ADR-010-api-design.md (C vs C++ vs both)
+
+Setiap ADR format:
+```
+# ADR-XXX: [Title]
+## Status: [Proposed/Accepted/Deprecated/Superseded]
+## Context: (latar belakang masalah)
+## Decision Drivers: (kriteria pengambilan keputusan)
+## Options Considered: (semua opsi yang dievaluasi dengan pro/con)
+## Decision: (pilihan final)
+## Rationale: (alasan teknis mendalam)
+## Consequences: (dampak positif dan negatif)
+## Implementation Notes: (catatan implementasi spesifik)
+```
+
+═══════════════════════════════════════════════════════════════
+FASE 2 — UPDATE oblivinx3x.txt
+═══════════════════════════════════════════════════════════════
+
+Setelah semua file MD selesai dibuat, update file oblivinx3x.txt dengan:
+
+1. Master feature registry — semua 90+ fitur dengan:
+   - Feature ID (OBX-FEAT-001 dst)
+   - Nama fitur
+   - Kategori
+   - Status (CORE/EXTENDED/FUTURE)
+   - Target version
+   - Dependency (fitur lain yang harus ada dulu)
+   - Complexity estimate (1-10)
+   - File referensi di ovnplanning/
+
+2. Critical path — urutan implementasi optimal berdasarkan dependency graph
+
+3. Risk register — top 15 technical risks dengan mitigation plan
+
+4. Resource estimate — estimasi waktu per komponen (jam/hari developer tunggal)
+
+═══════════════════════════════════════════════════════════════
+ATURAN WAJIB
+═══════════════════════════════════════════════════════════════
+
+- Setiap file MINIMUM 500 baris, file teknis utama (01-10) MINIMUM 800 baris
+- Tidak ada placeholder, tidak ada "lihat dokumentasi lain", tidak ada TBD
+- Semua struct C/C++ harus byte-complete (tidak hanya nama field, tapi tipe dan offset)
+- Semua algorithm harus disertai pseudocode atau actual C++ code
+- Semua design decision harus disertai quantitative tradeoff (angka, bukan opini)
+- Gunakan ASCII diagram untuk visualisasi struktur data dan arsitektur
+- Cross-reference antar file menggunakan format [[FILE-XX]] 
+- Semua angka performa harus realistic dan bisa diverifikasi
+```
+
+---
+
+## CATATAN PENGGUNAAN
+
+- **Model**: `claude-opus-4-6` (gunakan model ini, bukan Sonnet)
+- **Max tokens**: set ke 8192 atau lebih tinggi per response
+- **Temperature**: 0.3 (untuk konsistensi teknis)
+- **Jalankan secara agentic**: Claude harus bisa membuat file satu per satu, 
+  boleh multi-turn jika satu response tidak cukup
+- **Tool yang dibutuhkan**: `bash` (mkdir, touch, write file), `create_file`, `str_replace`
+- Jika pakai Claude Code: paste prompt ini langsung ke terminal sebagai task
+
+---
+
+*Generated for oblivinx3x database engine planning — version 1.0*
+
+
+
+
+.claude/
+├── /          # Skills database ovn
+├── skills/          # Skills database ovn          # Skills database ovn
+|    └── ovn-skills/ # Berisi context project database ovn
+|       ├── Context/ # Berisi context project database ovn
+|       ├── reference/
+|       └── SKILL.md/ # berisi instruksi skill ovn
+├── CLAUDE.md
+├── config.json
+├── settings.json
+└── settings.local.json

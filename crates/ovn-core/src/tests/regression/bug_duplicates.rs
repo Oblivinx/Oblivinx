@@ -6,12 +6,8 @@
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use std::sync::Arc;
 
-    use crate::io::backend::MemoryBackend;
-    use crate::format::header::FileHeader;
-    use crate::storage::memtable::{MemTable, MemTableEntry};
-    use crate::storage::sstable::SSTableManager;
+    use crate::storage::memtable::MemTableEntry;
     use crate::storage::wal::{WalManager, WalRecord, WalRecordType};
 
     /// Build a set of distinct MemTable entries (simulating 1000 insertions).
@@ -61,7 +57,7 @@ mod tests {
         // ── Step 1: Insert docs and record their txids ─────────────────
         let entries = make_entries(DOC_COUNT);
         let original_keys: Vec<Vec<u8>> = entries.iter().map(|e| e.key.clone()).collect();
-        let max_txid = entries.iter().map(|e| e.txid).max().unwrap();
+        let _max_txid = entries.iter().map(|e| e.txid).max().unwrap();
 
         // ── Step 2: Build WAL as if we flushed MemTable (checkpoint at max_txid)
         let wal_data = build_wal(&entries);
@@ -74,7 +70,7 @@ mod tests {
         let replayed = WalManager::replay_from_checkpoint(&wal_data, last_checkpoint_txid).unwrap();
 
         // Collect all keys from replayed Insert records
-        let mut replayed_keys: Vec<Vec<u8>> = replayed
+        let replayed_keys: Vec<Vec<u8>> = replayed
             .iter()
             .filter(|r| r.record_type == WalRecordType::Insert)
             .map(|r| r.data.clone())
@@ -136,16 +132,23 @@ mod tests {
         let mut buf = Vec::new();
 
         // TxID 1: Insert + Commit (should be replayed)
-        buf.extend(WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 1, b"key1".to_vec()).encode());
+        buf.extend(
+            WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 1, b"key1".to_vec()).encode(),
+        );
         buf.extend(WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 1, Vec::new()).encode());
 
         // TxID 2: Insert only, no Commit (uncommitted — should be discarded)
-        buf.extend(WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 2, b"key2".to_vec()).encode());
+        buf.extend(
+            WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 2, b"key2".to_vec()).encode(),
+        );
 
         let replayed = WalManager::replay_from_checkpoint(&buf, 0).unwrap();
         let txids: HashSet<u64> = replayed.iter().map(|r| r.txid).collect();
 
         assert!(txids.contains(&1), "Committed TxID 1 should be replayed");
-        assert!(!txids.contains(&2), "Uncommitted TxID 2 must NOT be replayed");
+        assert!(
+            !txids.contains(&2),
+            "Uncommitted TxID 2 must NOT be replayed"
+        );
     }
 }

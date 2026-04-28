@@ -44,16 +44,23 @@ impl SavepointState {
         }
     }
 
-    pub fn record_write(&mut self, key: Vec<u8>, original: SavepointOriginalValue, collection_id: u32) {
-        if !self.write_log.contains_key(&key) {
-            self.write_log.insert(key, (original, collection_id));
-        }
+    pub fn record_write(
+        &mut self,
+        key: Vec<u8>,
+        original: SavepointOriginalValue,
+        collection_id: u32,
+    ) {
+        self.write_log
+            .entry(key)
+            .or_insert((original, collection_id));
     }
 
     pub fn create_savepoint(&mut self, name: &str) -> OvnResult<()> {
         const MAX_DEPTH: usize = 16;
         if self.savepoints.len() >= MAX_DEPTH {
-            return Err(OvnError::SavepointDepthError { max_depth: MAX_DEPTH });
+            return Err(OvnError::SavepointDepthError {
+                max_depth: MAX_DEPTH,
+            });
         }
         if self.savepoints.iter().any(|sp| sp.name == name) {
             return Err(OvnError::SavepointError {
@@ -68,8 +75,14 @@ impl SavepointState {
         Ok(())
     }
 
-    pub fn rollback_to_savepoint(&mut self, name: &str) -> OvnResult<Vec<(Vec<u8>, SavepointOriginalValue, u32)>> {
-        let idx = self.savepoints.iter().rposition(|sp| sp.name == name)
+    pub fn rollback_to_savepoint(
+        &mut self,
+        name: &str,
+    ) -> OvnResult<Vec<(Vec<u8>, SavepointOriginalValue, u32)>> {
+        let idx = self
+            .savepoints
+            .iter()
+            .rposition(|sp| sp.name == name)
             .ok_or_else(|| OvnError::SavepointError {
                 name: name.to_string(),
                 reason: "Savepoint not found".to_string(),
@@ -77,11 +90,15 @@ impl SavepointState {
 
         let snapshot = &self.savepoints[idx].state_snapshot;
 
-        let undo: Vec<(Vec<u8>, SavepointOriginalValue, u32)> = self.write_log.iter()
+        let undo: Vec<(Vec<u8>, SavepointOriginalValue, u32)> = self
+            .write_log
+            .iter()
             .filter_map(|(k, (v, c))| {
                 if !snapshot.contains_key(k) {
                     Some((k.clone(), v.clone(), *c))
-                } else { None }
+                } else {
+                    None
+                }
             })
             .collect();
 
@@ -92,7 +109,10 @@ impl SavepointState {
     }
 
     pub fn release_savepoint(&mut self, name: &str) -> OvnResult<()> {
-        let idx = self.savepoints.iter().rposition(|sp| sp.name == name)
+        let idx = self
+            .savepoints
+            .iter()
+            .rposition(|sp| sp.name == name)
             .ok_or_else(|| OvnError::SavepointError {
                 name: name.to_string(),
                 reason: "Savepoint not found".to_string(),
@@ -134,7 +154,13 @@ impl OvnEngine {
     }
 
     /// Record a write for savepoint tracking.
-    pub fn record_savepoint_write(&self, txid: u64, key: Vec<u8>, original: SavepointOriginalValue, collection_id: u32) {
+    pub fn record_savepoint_write(
+        &self,
+        txid: u64,
+        key: Vec<u8>,
+        original: SavepointOriginalValue,
+        collection_id: u32,
+    ) {
         if let Ok(mut map) = self.savepoint_states.try_lock() {
             if let Some(state) = map.get_mut(&txid) {
                 state.record_write(key, original, collection_id);
@@ -161,10 +187,12 @@ impl OvnEngine {
         self.check_closed()?;
 
         let mut map = self.savepoint_states.lock().unwrap();
-        let state = map.get_mut(&txid).ok_or_else(|| OvnError::TransactionAborted {
-            txid,
-            reason: "Transaction not found".to_string(),
-        })?;
+        let state = map
+            .get_mut(&txid)
+            .ok_or_else(|| OvnError::TransactionAborted {
+                txid,
+                reason: "Transaction not found".to_string(),
+            })?;
 
         let undo = state.rollback_to_savepoint(name)?;
 
@@ -174,22 +202,38 @@ impl OvnEngine {
             match original {
                 SavepointOriginalValue::Existing(value) => {
                     let _ = self.btree.insert(BTreeEntry {
-                        key: key.clone(), value: value.clone(),
-                        txid: new_txid, tombstone: false,
+                        key: key.clone(),
+                        value: value.clone(),
+                        txid: new_txid,
+                        tombstone: false,
                     });
-                    let _ = self.memtable.insert(crate::storage::memtable::MemTableEntry {
-                        key, value, txid: new_txid, tombstone: false, collection_id: coll_id,
-                    });
+                    let _ = self
+                        .memtable
+                        .insert(crate::storage::memtable::MemTableEntry {
+                            key,
+                            value,
+                            txid: new_txid,
+                            tombstone: false,
+                            collection_id: coll_id,
+                        });
                 }
                 SavepointOriginalValue::New => {
                     // Tombstone the newly inserted key
                     let _ = self.btree.insert(BTreeEntry {
-                        key: key.clone(), value: Vec::new(),
-                        txid: new_txid, tombstone: true,
+                        key: key.clone(),
+                        value: Vec::new(),
+                        txid: new_txid,
+                        tombstone: true,
                     });
-                    let _ = self.memtable.insert(crate::storage::memtable::MemTableEntry {
-                        key, value: Vec::new(), txid: new_txid, tombstone: true, collection_id: coll_id,
-                    });
+                    let _ = self
+                        .memtable
+                        .insert(crate::storage::memtable::MemTableEntry {
+                            key,
+                            value: Vec::new(),
+                            txid: new_txid,
+                            tombstone: true,
+                            collection_id: coll_id,
+                        });
                 }
             }
         }
@@ -202,10 +246,12 @@ impl OvnEngine {
     pub fn release_savepoint(&self, txid: u64, name: &str) -> OvnResult<()> {
         self.check_closed()?;
         let mut map = self.savepoint_states.lock().unwrap();
-        let state = map.get_mut(&txid).ok_or_else(|| OvnError::TransactionAborted {
-            txid,
-            reason: "Transaction not found".to_string(),
-        })?;
+        let state = map
+            .get_mut(&txid)
+            .ok_or_else(|| OvnError::TransactionAborted {
+                txid,
+                reason: "Transaction not found".to_string(),
+            })?;
         state.release_savepoint(name)?;
         log::info!("Released savepoint '{}' for txid {}", name, txid);
         Ok(())

@@ -70,14 +70,17 @@ impl OvnEngine {
     pub fn create_trigger(&self, collection: &str, event: &str) -> OvnResult<()> {
         self.check_closed()?;
 
-        let trigger_event: TriggerEvent = event.parse()
-            .map_err(|e| OvnError::ValidationError(e))?;
+        let trigger_event: TriggerEvent = event.parse().map_err(OvnError::ValidationError)?;
 
         let trigger = TriggerDefinition {
             collection: collection.to_string(),
             event: trigger_event.clone(),
             name: format!("{}_{}", collection, event),
-            timeout_ms: if event.starts_with("before") { 500 } else { 5000 },
+            timeout_ms: if event.starts_with("before") {
+                500
+            } else {
+                5000
+            },
         };
 
         let mut triggers = self.triggers.lock().unwrap();
@@ -95,13 +98,14 @@ impl OvnEngine {
         let mut triggers = self.triggers.lock().unwrap();
         if let Some(coll_triggers) = triggers.get_mut(collection) {
             if coll_triggers.remove(event).is_none() {
-                return Err(OvnError::ValidationError(
-                    format!("Trigger '{}' not found on '{}'", event, collection)
-                ));
+                return Err(OvnError::ValidationError(format!(
+                    "Trigger '{}' not found on '{}'",
+                    event, collection
+                )));
             }
         } else {
             return Err(OvnError::CollectionNotFound {
-                name: collection.to_string()
+                name: collection.to_string(),
             });
         }
 
@@ -115,14 +119,17 @@ impl OvnEngine {
 
         let triggers = self.triggers.lock().unwrap();
         if let Some(coll_triggers) = triggers.get(collection) {
-            Ok(coll_triggers.values().map(|t| {
-                serde_json::json!({
-                    "name": t.name,
-                    "event": t.event.to_string(),
-                    "collection": t.collection,
-                    "timeoutMs": t.timeout_ms,
+            Ok(coll_triggers
+                .values()
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "event": t.event.to_string(),
+                        "collection": t.collection,
+                        "timeoutMs": t.timeout_ms,
+                    })
                 })
-            }).collect())
+                .collect())
         } else {
             Ok(vec![])
         }
@@ -141,7 +148,9 @@ impl OvnEngine {
             if let Some(trigger) = coll_triggers.get(&event.to_string()) {
                 log::info!(
                     "Executing before trigger '{}' on '{}' (timeout={}ms)",
-                    trigger.name, collection, trigger.timeout_ms
+                    trigger.name,
+                    collection,
+                    trigger.timeout_ms
                 );
                 // In a real implementation, the trigger function would be invoked here.
                 // For now, we log the execution. The actual trigger logic would be
@@ -152,18 +161,14 @@ impl OvnEngine {
     }
 
     /// Queue after-write triggers for async execution.
-    pub fn queue_after_trigger(
-        &self,
-        event: TriggerEvent,
-        collection: &str,
-        _doc: &ObeDocument,
-    ) {
+    pub fn queue_after_trigger(&self, event: TriggerEvent, collection: &str, _doc: &ObeDocument) {
         let triggers = self.triggers.lock().unwrap();
         if let Some(coll_triggers) = triggers.get(collection) {
             if let Some(trigger) = coll_triggers.get(&event.to_string()) {
                 log::info!(
                     "Queuing after trigger '{}' on '{}' (async)",
-                    trigger.name, collection
+                    trigger.name,
+                    collection
                 );
                 // In a real implementation, this would spawn a background task
                 // to execute the trigger asynchronously.

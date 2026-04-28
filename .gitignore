@@ -5,7 +5,7 @@ Cargo.lock
 
 # Node
 node_modules/
-# *.node
+*.node
 # packages/oblivinx3x/native/*.node
 package-lock.json
 # IDE

@@ -18,7 +18,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{HLC_LOGICAL_MASK, HLC_LOGICAL_BITS};
+use crate::{HLC_LOGICAL_BITS, HLC_LOGICAL_MASK};
 
 /// Maximum allowed clock drift (in milliseconds).
 /// If the wall clock is more than this far behind the last observed timestamp,
@@ -119,11 +119,9 @@ impl HlcClock {
                 (wall_ms, 0u16)
             } else {
                 // Wall clock same or behind — increment logical
-                let new_logical = old_ts.logical().checked_add(1).unwrap_or_else(|| {
-                    // Logical overflow — advance physical by 1ms
-                    // (rare: would require >65535 txns in 1ms)
-                    0
-                });
+                // Logical overflow advances physical by 1ms; rare in practice
+                // (would require >65535 txns within the same millisecond).
+                let new_logical = old_ts.logical().checked_add(1).unwrap_or(0);
                 let new_physical = if new_logical == 0 {
                     old_ts.physical_ms() + 1
                 } else {
@@ -135,7 +133,12 @@ impl HlcClock {
             let new = HlcTimestamp::new(new_physical, new_logical);
 
             // CAS to update: retry if another thread raced ahead
-            match self.state.compare_exchange(old, new.as_u64(), Ordering::AcqRel, Ordering::Acquire) {
+            match self.state.compare_exchange(
+                old,
+                new.as_u64(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
                 Ok(_) => return new,
                 Err(_) => continue, // retry
             }
@@ -159,21 +162,25 @@ impl HlcClock {
             }
 
             let max_physical = old_ts.physical_ms().max(remote.physical_ms()).max(wall_ms);
-            let new_logical = if max_physical == old_ts.physical_ms()
-                && max_physical == remote.physical_ms()
-            {
-                old_ts.logical().max(remote.logical()) + 1
-            } else if max_physical == old_ts.physical_ms() {
-                old_ts.logical() + 1
-            } else if max_physical == remote.physical_ms() {
-                remote.logical() + 1
-            } else {
-                0
-            };
+            let new_logical =
+                if max_physical == old_ts.physical_ms() && max_physical == remote.physical_ms() {
+                    old_ts.logical().max(remote.logical()) + 1
+                } else if max_physical == old_ts.physical_ms() {
+                    old_ts.logical() + 1
+                } else if max_physical == remote.physical_ms() {
+                    remote.logical() + 1
+                } else {
+                    0
+                };
 
             let new = HlcTimestamp::new(max_physical, new_logical);
 
-            match self.state.compare_exchange(old, new.as_u64(), Ordering::AcqRel, Ordering::Acquire) {
+            match self.state.compare_exchange(
+                old,
+                new.as_u64(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
                 Ok(_) => return new,
                 Err(_) => continue,
             }
@@ -192,7 +199,11 @@ impl HlcClock {
             if old >= min_ts.as_u64() {
                 break;
             }
-            if self.state.compare_exchange(old, min_ts.as_u64(), Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            if self
+                .state
+                .compare_exchange(old, min_ts.as_u64(), Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
                 break;
             }
         }

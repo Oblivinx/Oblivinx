@@ -74,6 +74,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 export { Oblivinx3x, Database, open } from './database.js';
+export type { RecoveryCheckpoint } from './database.js';
 export { Collection } from './collection.js';
 export { Transaction } from './transaction.js';
 export type { TransactionState, TransactionInfo } from './transaction.js';
@@ -113,6 +114,7 @@ export type {
   // Result types
   InsertOneResult,
   InsertManyResult,
+  BulkInsertOptions,
   UpdateResult,
   DeleteResult,
 

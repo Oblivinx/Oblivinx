@@ -37,7 +37,7 @@
  * @packageDocumentation
  */
 import { EventEmitter } from 'node:events';
-import type { Document, FilterQuery, UpdateQuery, FindOptions, PipelineStage, IndexFields, IndexOptions, IndexInfo, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult, VersioningConfig, VersionInfo, VersionDiff } from './types/index.js';
+import type { Document, FilterQuery, UpdateQuery, FindOptions, PipelineStage, IndexFields, IndexOptions, IndexInfo, InsertOneResult, InsertManyResult, BulkInsertOptions, UpdateResult, DeleteResult, VersioningConfig, VersionInfo, VersionDiff } from './types/index.js';
 import type { Oblivinx3x } from './database.js';
 import type { Cursor } from './query/builder.js';
 /**
@@ -128,7 +128,7 @@ export declare class Collection<TSchema extends Document = Document> {
      * console.log(`Inserted ${insertedCount} documents`);
      * ```
      */
-    insertMany(docs: TSchema[]): Promise<InsertManyResult>;
+    insertMany(docs: TSchema[], options?: BulkInsertOptions): Promise<InsertManyResult>;
     /**
      * Find dokumen yang cocok dengan filter.
      *

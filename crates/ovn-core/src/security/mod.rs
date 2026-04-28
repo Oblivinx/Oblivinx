@@ -110,7 +110,11 @@ impl ChainedHmacVerifier {
 
     /// Verify a record's stored HMAC against the expected chained value.
     /// Returns `Ok(())` and advances the chain on success.
-    pub fn verify_and_advance(&mut self, record_payload: &[u8], stored_hmac: &[u8; 32]) -> OvnResult<()> {
+    pub fn verify_and_advance(
+        &mut self,
+        record_payload: &[u8],
+        stored_hmac: &[u8; 32],
+    ) -> OvnResult<()> {
         let expected = self.compute(record_payload);
         if expected != *stored_hmac {
             return Err(OvnError::EncodingError(
@@ -147,9 +151,8 @@ impl ChainedHmacVerifier {
 pub fn apply_seccomp_profile() -> OvnResult<()> {
     #[cfg(all(target_os = "linux", feature = "seccomp"))]
     {
-        linux_seccomp::apply().map_err(|e| {
-            OvnError::InvalidConfig(format!("seccomp profile apply failed: {e}"))
-        })?;
+        linux_seccomp::apply()
+            .map_err(|e| OvnError::InvalidConfig(format!("seccomp profile apply failed: {e}")))?;
     }
     Ok(())
 }
@@ -206,13 +209,23 @@ mod linux_seccomp {
 
     macro_rules! bpf_stmt {
         ($code:expr, $k:expr) => {
-            SockFilter { code: $code, jt: 0, jf: 0, k: $k }
+            SockFilter {
+                code: $code,
+                jt: 0,
+                jf: 0,
+                k: $k,
+            }
         };
     }
 
     macro_rules! bpf_jump {
         ($code:expr, $k:expr, $jt:expr, $jf:expr) => {
-            SockFilter { code: $code, jt: $jt, jf: $jf, k: $k }
+            SockFilter {
+                code: $code,
+                jt: $jt,
+                jf: $jf,
+                k: $k,
+            }
         };
     }
 
@@ -243,7 +256,10 @@ mod linux_seccomp {
             let mut prog: Vec<SockFilter> = Vec::new();
 
             // Check architecture — kill if not x86_64
-            prog.push(bpf_stmt!(BPF_LD | BPF_W | BPF_ABS, SECCOMP_DATA_ARCH_OFFSET));
+            prog.push(bpf_stmt!(
+                BPF_LD | BPF_W | BPF_ABS,
+                SECCOMP_DATA_ARCH_OFFSET
+            ));
             prog.push(bpf_jump!(
                 BPF_JMP | BPF_JEQ | BPF_K,
                 AUDIT_ARCH_X86_64,
@@ -341,8 +357,12 @@ mod tests {
 
         // Fresh verifier to replay
         let mut replay = ChainedHmacVerifier::new(&key);
-        replay.verify_and_advance(payload_a, &hmac_a).expect("a should verify");
-        replay.verify_and_advance(payload_b, &hmac_b).expect("b should verify");
+        replay
+            .verify_and_advance(payload_a, &hmac_a)
+            .expect("a should verify");
+        replay
+            .verify_and_advance(payload_b, &hmac_b)
+            .expect("b should verify");
 
         // Tampered: skip record_a and verify record_b directly
         let mut tampered = ChainedHmacVerifier::new(&key);

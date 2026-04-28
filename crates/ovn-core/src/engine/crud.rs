@@ -221,7 +221,10 @@ impl OvnEngine {
                         }
                     }
                     // Try range scan for inequality filters
-                    else if matches!(op, FilterOp::Gt | FilterOp::Gte | FilterOp::Lt | FilterOp::Lte) {
+                    else if matches!(
+                        op,
+                        FilterOp::Gt | FilterOp::Gte | FilterOp::Lt | FilterOp::Lte
+                    ) {
                         // Build range bounds
                         let from = match op {
                             FilterOp::Gt | FilterOp::Gte => value.clone(),

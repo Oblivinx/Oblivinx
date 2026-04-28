@@ -70,7 +70,10 @@ mod tests {
         bytes[mid] ^= 0xFF;
 
         let result = SSTable::from_bytes_verified(1, &bytes, "/tmp/corrupt.sst");
-        assert!(result.is_err(), "Corrupted SSTable must fail CRC verification");
+        assert!(
+            result.is_err(),
+            "Corrupted SSTable must fail CRC verification"
+        );
     }
 
     // ── Background worker panic recovery tests ────────────────────────────────

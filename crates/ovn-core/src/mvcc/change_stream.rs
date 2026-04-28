@@ -62,14 +62,17 @@ impl ChangeStreamEmitter {
     /// Returns the number of removed channels.
     pub fn gc_closed_subscribers(&mut self) -> usize {
         let before = self.subscribers.len();
-        self.subscribers.retain(|tx| tx.send(ChangeStreamEvent {
-            op_type: OperationType::Invalidate,
-            cluster_time: 0,
-            document_key: [0; 16],
-            full_document: None,
-            namespace: String::new(),
-            resume_token: Vec::new(),
-        }).is_ok());
+        self.subscribers.retain(|tx| {
+            tx.send(ChangeStreamEvent {
+                op_type: OperationType::Invalidate,
+                cluster_time: 0,
+                document_key: [0; 16],
+                full_document: None,
+                namespace: String::new(),
+                resume_token: Vec::new(),
+            })
+            .is_ok()
+        });
         before - self.subscribers.len()
     }
 }

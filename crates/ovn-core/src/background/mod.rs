@@ -89,11 +89,7 @@ impl BackgroundPool {
                             let reason: String = panic_payload
                                 .downcast_ref::<&str>()
                                 .map(|s| s.to_string())
-                                .or_else(|| {
-                                    panic_payload
-                                        .downcast_ref::<String>()
-                                        .cloned()
-                                })
+                                .or_else(|| panic_payload.downcast_ref::<String>().cloned())
                                 .unwrap_or_else(|| "unknown panic payload".to_string());
 
                             log::error!(

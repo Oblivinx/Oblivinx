@@ -238,7 +238,7 @@ impl SSTable {
         let mut buf = self.encode();
         let crc = crc32c::crc32c(&buf);
         buf.extend_from_slice(&crc.to_le_bytes()); // 4 bytes CRC32C
-        buf.extend_from_slice(&[0u8; 4]);          // 4 bytes reserved
+        buf.extend_from_slice(&[0u8; 4]); // 4 bytes reserved
         buf
     }
 
@@ -251,7 +251,9 @@ impl SSTable {
     pub fn from_bytes_verified(id: u64, data: &[u8], path: &str) -> OvnResult<Self> {
         const FOOTER: usize = 8;
         if data.len() < FOOTER {
-            return Err(OvnError::SstableIncomplete { path: path.to_string() });
+            return Err(OvnError::SstableIncomplete {
+                path: path.to_string(),
+            });
         }
         let payload = &data[..data.len() - FOOTER];
         let stored_crc = u32::from_le_bytes(
@@ -264,7 +266,9 @@ impl SSTable {
             log::warn!(
                 "SSTable incomplete: {path} CRC32C mismatch (stored=0x{stored_crc:08X}, computed=0x{computed_crc:08X})"
             );
-            return Err(OvnError::SstableIncomplete { path: path.to_string() });
+            return Err(OvnError::SstableIncomplete {
+                path: path.to_string(),
+            });
         }
         Self::decode(id, payload)
     }

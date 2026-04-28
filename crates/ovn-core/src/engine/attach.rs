@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use super::OvnEngine;
 
-use crate::error::{OvnError, OvnResult};
 use crate::engine::config::OvnConfig;
+use crate::error::{OvnError, OvnResult};
 
 impl OvnEngine {
     // ═══════════════════════════════════════════════════════════════
@@ -21,9 +21,10 @@ impl OvnEngine {
         // Check if alias is already in use
         let attached = self.attached_databases.lock().unwrap();
         if attached.contains_key(alias) {
-            return Err(OvnError::InvalidConfig(
-                format!("Alias '{}' is already in use", alias)
-            ));
+            return Err(OvnError::InvalidConfig(format!(
+                "Alias '{}' is already in use",
+                alias
+            )));
         }
         drop(attached);
 
@@ -32,7 +33,9 @@ impl OvnEngine {
         let external_engine = OvnEngine::open(path, config)?;
 
         // Store the attached database
-        self.attached_databases.lock().unwrap()
+        self.attached_databases
+            .lock()
+            .unwrap()
             .insert(alias.to_string(), Arc::new(external_engine));
 
         log::info!("Attached database '{}' from '{}'", alias, path);
@@ -47,9 +50,10 @@ impl OvnEngine {
         let removed = attached.remove(alias);
 
         if removed.is_none() {
-            return Err(OvnError::InvalidConfig(
-                format!("Alias '{}' is not attached", alias)
-            ));
+            return Err(OvnError::InvalidConfig(format!(
+                "Alias '{}' is not attached",
+                alias
+            )));
         }
 
         // Close the detached database
@@ -68,20 +72,24 @@ impl OvnEngine {
         self.check_closed()?;
 
         let attached = self.attached_databases.lock().unwrap();
-        Ok(attached.keys().map(|alias| {
-            serde_json::json!({
-                "alias": alias,
-                "type": "attached"
+        Ok(attached
+            .keys()
+            .map(|alias| {
+                serde_json::json!({
+                    "alias": alias,
+                    "type": "attached"
+                })
             })
-        }).collect())
+            .collect())
     }
 
     /// Get an attached database engine by alias.
     pub fn get_attached(&self, alias: &str) -> OvnResult<Arc<OvnEngine>> {
         let attached = self.attached_databases.lock().unwrap();
-        attached.get(alias).cloned().ok_or_else(|| OvnError::InvalidConfig(
-            format!("Alias '{}' is not attached", alias)
-        ))
+        attached
+            .get(alias)
+            .cloned()
+            .ok_or_else(|| OvnError::InvalidConfig(format!("Alias '{}' is not attached", alias)))
     }
 
     /// Query a collection in an attached database.

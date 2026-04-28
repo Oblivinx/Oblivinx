@@ -69,11 +69,12 @@
  * @packageDocumentation
  */
 export { Oblivinx3x, Database, open } from './database.js';
+export type { RecoveryCheckpoint } from './database.js';
 export { Collection } from './collection.js';
 export { Transaction } from './transaction.js';
 export type { TransactionState, TransactionInfo } from './transaction.js';
 export { OvnError, CollectionNotFoundError, CollectionExistsError, WriteConflictError, ValidationError, } from './errors/index.js';
-export type { OvnConfig, Document, FilterQuery, ComparisonOperators, UpdateQuery, FindOptions, PipelineStage, InsertOneResult, InsertManyResult, UpdateResult, DeleteResult, IndexFields, IndexOptions, IndexInfo, CollationOptions, OvnMetrics, OvnVersion, ViewDefinition, MaterializedViewOptions, ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerContext, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainVerbosity, ExplainPlan, OvnMetricsExtended, VersioningConfig, VersionInfo, VersionDiffEntry, VersionDiff, DurabilityLevel, EngineInfo, WalStats, ArcCacheStats, WriteConflictRetryOptions, ConcurrentTransactionOptions, } from './types/index.js';
+export type { OvnConfig, Document, FilterQuery, ComparisonOperators, UpdateQuery, FindOptions, PipelineStage, InsertOneResult, InsertManyResult, BulkInsertOptions, UpdateResult, DeleteResult, IndexFields, IndexOptions, IndexInfo, CollationOptions, OvnMetrics, OvnVersion, ViewDefinition, MaterializedViewOptions, ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerContext, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainVerbosity, ExplainPlan, OvnMetricsExtended, VersioningConfig, VersionInfo, VersionDiffEntry, VersionDiff, DurabilityLevel, EngineInfo, WalStats, ArcCacheStats, WriteConflictRetryOptions, ConcurrentTransactionOptions, } from './types/index.js';
 export { Oblivinx3x as default } from './database.js';
 export { QueryBuilder, AggregateBuilder, Cursor, createCursor } from './query/builder.js';
 export type { CursorOptions, QueryExecutor, ComparisonOp, ProjectionSpec, SortSpec } from './query/builder.js';

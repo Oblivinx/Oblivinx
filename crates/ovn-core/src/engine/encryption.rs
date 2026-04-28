@@ -95,7 +95,8 @@ impl OvnEngine {
 
         log::info!(
             "Encryption enabled for collection '{}', key source: {}",
-            collection, key_source
+            collection,
+            key_source
         );
         Ok(())
     }
@@ -199,11 +200,7 @@ impl OvnEngine {
     }
 
     /// Rotate encryption keys for a collection.
-    pub fn rotate_collection_key(
-        &self,
-        collection: &str,
-        new_key: [u8; 32],
-    ) -> OvnResult<()> {
+    pub fn rotate_collection_key(&self, collection: &str, new_key: [u8; 32]) -> OvnResult<()> {
         self.check_closed()?;
 
         // In production, this would:
@@ -230,7 +227,8 @@ impl OvnEngine {
         self.check_closed()?;
 
         let configs = self.encryption_configs.lock().unwrap();
-        let encrypted_collections: Vec<_> = configs.iter()
+        let encrypted_collections: Vec<_> = configs
+            .iter()
             .filter(|(_, c)| c.enabled)
             .map(|(name, _)| name.clone())
             .collect();

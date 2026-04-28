@@ -37,15 +37,9 @@ mod tests {
                     )
                     .encode();
 
-                    let commit = WalRecord::new(
-                        WalRecordType::Commit,
-                        txid,
-                        0,
-                        [0u8; 16],
-                        txid,
-                        Vec::new(),
-                    )
-                    .encode();
+                    let commit =
+                        WalRecord::new(WalRecordType::Commit, txid, 0, [0u8; 16], txid, Vec::new())
+                            .encode();
 
                     let mut locked = buf.lock().unwrap();
                     locked.extend(insert);
@@ -83,7 +77,11 @@ mod tests {
             .filter(|r| r.record_type == WalRecordType::Commit)
             .map(|r| r.txid)
             .collect();
-        assert_eq!(all_txids.len(), commit_txids.len(), "Duplicate TxIDs detected");
+        assert_eq!(
+            all_txids.len(),
+            commit_txids.len(),
+            "Duplicate TxIDs detected"
+        );
     }
 
     #[test]
@@ -102,15 +100,9 @@ mod tests {
                 let b = buf.clone();
                 threads.push(thread::spawn(move || {
                     let txid = (i + 1) as u64;
-                    let record = WalRecord::new(
-                        WalRecordType::Commit,
-                        txid,
-                        0,
-                        [0; 16],
-                        txid,
-                        Vec::new(),
-                    )
-                    .encode();
+                    let record =
+                        WalRecord::new(WalRecordType::Commit, txid, 0, [0; 16], txid, Vec::new())
+                            .encode();
                     b.lock().unwrap().extend(record);
                 }));
             }
@@ -123,7 +115,9 @@ mod tests {
 
         // Must complete in under 5 seconds (deadlock detection)
         let deadline = Instant::now() + Duration::from_secs(5);
-        handle.join().expect("Deadlock detected: thread did not finish");
+        handle
+            .join()
+            .expect("Deadlock detected: thread did not finish");
         assert!(
             done.load(std::sync::atomic::Ordering::Relaxed),
             "Concurrent stress test did not complete"

@@ -16,7 +16,10 @@ impl OvnEngine {
     /// Set a pragma value.
     pub fn set_pragma(&self, name: &str, value: &serde_json::Value) -> OvnResult<()> {
         self.check_closed()?;
-        self.pragmas.lock().unwrap().insert(name.to_string(), value.clone());
+        self.pragmas
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), value.clone());
         log::debug!("Pragma '{}' = {:?}", name, value);
         Ok(())
     }
@@ -25,11 +28,18 @@ impl OvnEngine {
     pub fn get_pragma(&self, name: &str) -> OvnResult<serde_json::Value> {
         self.check_closed()?;
         let pragmas = self.pragmas.lock().unwrap();
-        Ok(pragmas.get(name).cloned().unwrap_or(serde_json::Value::Null))
+        Ok(pragmas
+            .get(name)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null))
     }
 
     /// Handle special pragmas with side effects.
-    pub fn pragma(&self, name: &str, value: Option<&serde_json::Value>) -> OvnResult<serde_json::Value> {
+    pub fn pragma(
+        &self,
+        name: &str,
+        value: Option<&serde_json::Value>,
+    ) -> OvnResult<serde_json::Value> {
         self.check_closed()?;
 
         match name {
@@ -71,7 +81,11 @@ impl OvnEngine {
             // Foreign key pragma
             "foreign_keys" => {
                 if let Some(v) = value {
-                    let mode = if v.as_bool() == Some(true) { "strict" } else { "off" };
+                    let mode = if v.as_bool() == Some(true) {
+                        "strict"
+                    } else {
+                        "off"
+                    };
                     self.set_referential_integrity(mode)?;
                 }
                 let mode = self.integrity_mode.read().clone();
@@ -96,9 +110,7 @@ impl OvnEngine {
             }
 
             // Legacy pragma (backward compatibility)
-            "legacy_mode" => {
-                Ok(serde_json::json!(false))
-            }
+            "legacy_mode" => Ok(serde_json::json!(false)),
 
             // Generic pragma: store/retrieve from pragma map
             _ => {

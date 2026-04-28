@@ -35,23 +35,12 @@ pub struct BackupManifest {
 }
 
 /// Backup options.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BackupOptions {
     pub compress: bool,
     pub encrypt: bool,
     pub password: Option<String>,
     pub collections: Option<Vec<String>>,
-}
-
-impl Default for BackupOptions {
-    fn default() -> Self {
-        Self {
-            compress: false,
-            encrypt: false,
-            password: None,
-            collections: None,
-        }
-    }
 }
 
 /// Restore options.
@@ -115,13 +104,21 @@ impl OvnEngine {
             backup_type: "full".to_string(),
             collections: collections_to_backup.clone(),
             total_size: 0, // Will be updated after copy
-            compression: if options.compress { "lz4".to_string() } else { "none".to_string() },
-            encryption: if options.encrypt { "aes-256-gcm".to_string() } else { "none".to_string() },
+            compression: if options.compress {
+                "lz4".to_string()
+            } else {
+                "none".to_string()
+            },
+            encryption: if options.encrypt {
+                "aes-256-gcm".to_string()
+            } else {
+                "none".to_string()
+            },
             checksum: 0,
         };
 
         // Read the source file
-        let source_data = std::fs::read(&source_path).map_err(|e| OvnError::Io(e))?;
+        let source_data = std::fs::read(&source_path).map_err(OvnError::Io)?;
         let mut backup_data = source_data.clone();
 
         // Apply compression if requested
@@ -145,25 +142,30 @@ impl OvnEngine {
         let total_size = backup_data.len() as u64;
 
         // Write backup file
-        let mut file = File::create(output_path).map_err(|e| OvnError::Io(e))?;
+        let mut file = File::create(output_path).map_err(OvnError::Io)?;
 
         // Write manifest as JSON
-        let manifest_json = serde_json::to_string_pretty(&manifest).map_err(|e| OvnError::JsonError(e))?;
+        let manifest_json = serde_json::to_string_pretty(&manifest).map_err(OvnError::JsonError)?;
         let manifest_len = manifest_json.len() as u32;
-        file.write_all(&manifest_len.to_le_bytes()).map_err(|e| OvnError::Io(e))?;
-        file.write_all(manifest_json.as_bytes()).map_err(|e| OvnError::Io(e))?;
+        file.write_all(&manifest_len.to_le_bytes())
+            .map_err(OvnError::Io)?;
+        file.write_all(manifest_json.as_bytes())
+            .map_err(OvnError::Io)?;
 
         // Write backup data
-        file.write_all(&backup_data).map_err(|e| OvnError::Io(e))?;
+        file.write_all(&backup_data).map_err(OvnError::Io)?;
 
         // Write checksum at end
-        file.write_all(&checksum.to_le_bytes()).map_err(|e| OvnError::Io(e))?;
+        file.write_all(&checksum.to_le_bytes())
+            .map_err(OvnError::Io)?;
 
-        file.sync_all().map_err(|e| OvnError::Io(e))?;
+        file.sync_all().map_err(OvnError::Io)?;
 
         log::info!(
             "Backup created: {} ({} bytes, {} collections)",
-            output_path, total_size, collections_to_backup.len()
+            output_path,
+            total_size,
+            collections_to_backup.len()
         );
 
         Ok(serde_json::json!({
@@ -184,22 +186,25 @@ impl OvnEngine {
         options: RestoreOptions,
     ) -> OvnResult<()> {
         // Read backup file
-        let mut file = File::open(backup_path).map_err(|e| OvnError::Io(e))?;
+        let mut file = File::open(backup_path).map_err(OvnError::Io)?;
         let mut backup_data = Vec::new();
-        file.read_to_end(&mut backup_data).map_err(|e| OvnError::Io(e))?;
+        file.read_to_end(&mut backup_data).map_err(OvnError::Io)?;
 
         // Parse manifest
         if backup_data.len() < 8 {
-            return Err(OvnError::ValidationError("Backup file too small".to_string()));
+            return Err(OvnError::ValidationError(
+                "Backup file too small".to_string(),
+            ));
         }
 
         let manifest_len = u32::from_le_bytes([
-            backup_data[0], backup_data[1], backup_data[2], backup_data[3],
+            backup_data[0],
+            backup_data[1],
+            backup_data[2],
+            backup_data[3],
         ]) as usize;
 
-        let manifest_json = String::from_utf8_lossy(
-            &backup_data[4..4 + manifest_len]
-        );
+        let manifest_json = String::from_utf8_lossy(&backup_data[4..4 + manifest_len]);
         let manifest: BackupManifest = serde_json::from_str(&manifest_json)
             .map_err(|e| OvnError::ValidationError(format!("Invalid backup manifest: {}", e)))?;
 
@@ -223,13 +228,18 @@ impl OvnEngine {
         }
 
         // Write to target path
-        let mut target_file = File::create(target_path).map_err(|e| OvnError::Io(e))?;
-        target_file.write_all(&restored_data).map_err(|e| OvnError::Io(e))?;
-        target_file.sync_all().map_err(|e| OvnError::Io(e))?;
+        let mut target_file = File::create(target_path).map_err(OvnError::Io)?;
+        target_file
+            .write_all(&restored_data)
+            .map_err(OvnError::Io)?;
+        target_file.sync_all().map_err(OvnError::Io)?;
 
         log::info!(
             "Backup restored from '{}' to '{}' ({} collections, {} bytes)",
-            backup_path, target_path, manifest.collections.len(), restored_data.len()
+            backup_path,
+            target_path,
+            manifest.collections.len(),
+            restored_data.len()
         );
 
         Ok(())
@@ -237,17 +247,22 @@ impl OvnEngine {
 
     /// Verify a backup file without restoring it.
     pub fn verify_backup(&self, backup_path: &str) -> OvnResult<VerifyResult> {
-        let mut file = File::open(backup_path).map_err(|e| OvnError::Io(e))?;
+        let mut file = File::open(backup_path).map_err(OvnError::Io)?;
         let mut backup_data = Vec::new();
-        file.read_to_end(&mut backup_data).map_err(|e| OvnError::Io(e))?;
+        file.read_to_end(&mut backup_data).map_err(OvnError::Io)?;
 
         if backup_data.len() < 12 {
-            return Err(OvnError::ValidationError("Backup file too small".to_string()));
+            return Err(OvnError::ValidationError(
+                "Backup file too small".to_string(),
+            ));
         }
 
         // Parse manifest
         let manifest_len = u32::from_le_bytes([
-            backup_data[0], backup_data[1], backup_data[2], backup_data[3],
+            backup_data[0],
+            backup_data[1],
+            backup_data[2],
+            backup_data[3],
         ]) as usize;
 
         let manifest_json = String::from_utf8_lossy(&backup_data[4..4 + manifest_len]);
@@ -295,51 +310,55 @@ impl OvnEngine {
         };
 
         let mut total_docs = 0u64;
-        let mut output = File::create(output_path).map_err(|e| OvnError::Io(e))?;
+        let mut output = File::create(output_path).map_err(OvnError::Io)?;
 
         if format == "json" {
             // Export as JSON array
-            output.write_all(b"[").map_err(|e| OvnError::Io(e))?;
+            output.write_all(b"[").map_err(OvnError::Io)?;
             let mut first = true;
 
             for coll_name in &collections_to_export {
                 let docs = self.find(coll_name, &serde_json::json!({}), None)?;
                 for doc in docs {
                     if !first {
-                        output.write_all(b",").map_err(|e| OvnError::Io(e))?;
+                        output.write_all(b",").map_err(OvnError::Io)?;
                     }
-                    let json = serde_json::to_string(&doc).map_err(|e| OvnError::JsonError(e))?;
-                    output.write_all(json.as_bytes()).map_err(|e| OvnError::Io(e))?;
+                    let json = serde_json::to_string(&doc).map_err(OvnError::JsonError)?;
+                    output.write_all(json.as_bytes()).map_err(OvnError::Io)?;
                     first = false;
                     total_docs += 1;
                 }
             }
 
-            output.write_all(b"]").map_err(|e| OvnError::Io(e))?;
+            output.write_all(b"]").map_err(OvnError::Io)?;
         } else if format == "ndjson" {
             // Export as NDJSON (one JSON object per line)
             for coll_name in &collections_to_export {
                 let docs = self.find(coll_name, &serde_json::json!({}), None)?;
                 for doc in docs {
-                    let json = serde_json::to_string(&doc).map_err(|e| OvnError::JsonError(e))?;
-                    output.write_all(json.as_bytes()).map_err(|e| OvnError::Io(e))?;
-                    output.write_all(b"\n").map_err(|e| OvnError::Io(e))?;
+                    let json = serde_json::to_string(&doc).map_err(OvnError::JsonError)?;
+                    output.write_all(json.as_bytes()).map_err(OvnError::Io)?;
+                    output.write_all(b"\n").map_err(OvnError::Io)?;
                     total_docs += 1;
                 }
             }
         } else {
-            return Err(OvnError::ValidationError(
-                format!("Unsupported export format: {}. Use 'json' or 'ndjson'", format)
-            ));
+            return Err(OvnError::ValidationError(format!(
+                "Unsupported export format: {}. Use 'json' or 'ndjson'",
+                format
+            )));
         }
 
-        output.sync_all().map_err(|e| OvnError::Io(e))?;
+        output.sync_all().map_err(OvnError::Io)?;
 
-        let total_size = std::fs::metadata(output_path).map_err(|e| OvnError::Io(e))?.len();
+        let total_size = std::fs::metadata(output_path).map_err(OvnError::Io)?.len();
 
         log::info!(
             "Exported {} documents to {} ({} bytes, {} collections)",
-            total_docs, output_path, total_size, collections_to_export.len()
+            total_docs,
+            output_path,
+            total_size,
+            collections_to_export.len()
         );
 
         Ok(ExportResult {
@@ -359,31 +378,38 @@ impl OvnEngine {
         self.check_closed()?;
         self.ensure_collection(collection)?;
 
-        let mut file = File::open(input_path).map_err(|e| OvnError::Io(e))?;
+        let mut file = File::open(input_path).map_err(OvnError::Io)?;
         let mut content = String::new();
-        file.read_to_string(&mut content).map_err(|e| OvnError::Io(e))?;
+        file.read_to_string(&mut content).map_err(OvnError::Io)?;
 
         let docs: Vec<serde_json::Value> = if format == "json" {
-            serde_json::from_str(&content).map_err(|e| OvnError::JsonError(e))?
+            serde_json::from_str(&content).map_err(OvnError::JsonError)?
         } else if format == "ndjson" {
-            content.lines()
+            content
+                .lines()
                 .filter(|line| !line.trim().is_empty())
                 .filter_map(|line| serde_json::from_str(line).ok())
                 .collect()
         } else {
-            return Err(OvnError::ValidationError(
-                format!("Unsupported import format: {}. Use 'json' or 'ndjson'", format)
-            ));
+            return Err(OvnError::ValidationError(format!(
+                "Unsupported import format: {}. Use 'json' or 'ndjson'",
+                format
+            )));
         };
 
         let mut imported = 0u64;
         for doc in docs {
-            if let Ok(_) = self.insert(collection, &doc) {
+            if self.insert(collection, &doc).is_ok() {
                 imported += 1;
             }
         }
 
-        log::info!("Imported {} documents to '{}' from {}", imported, collection, input_path);
+        log::info!(
+            "Imported {} documents to '{}' from {}",
+            imported,
+            collection,
+            input_path
+        );
         Ok(imported)
     }
 }

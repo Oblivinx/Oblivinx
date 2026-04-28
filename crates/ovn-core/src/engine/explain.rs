@@ -43,7 +43,8 @@ impl OvnEngine {
         let collections = self.collections.read();
         let (indexes, index_specs) = if let Some(coll) = collections.get(collection) {
             let specs = coll.index_manager.list_indexes();
-            let names: Vec<String> = specs.iter()
+            let names: Vec<String> = specs
+                .iter()
                 .filter(|s| !s.hidden)
                 .map(|s| s.name.clone())
                 .collect();
@@ -54,7 +55,9 @@ impl OvnEngine {
         drop(collections);
 
         // Get collection size
-        let collection_size = self.btree.scan_all()
+        let collection_size = self
+            .btree
+            .scan_all()
             .iter()
             .filter(|e| !e.tombstone)
             .count() as u64;
@@ -164,7 +167,9 @@ impl OvnEngine {
             let results_count = results.len() as u64;
 
             // Count docs examined (all non-tombstone entries)
-            let docs_examined = self.btree.scan_all()
+            let docs_examined = self
+                .btree
+                .scan_all()
                 .iter()
                 .filter(|e| !e.tombstone)
                 .count() as u64;
@@ -188,7 +193,7 @@ impl OvnEngine {
 
             // The chosen plan
             all_plans.push(serde_json::json!({
-                "plan": serde_json::to_value(&format!("{:?}", plan.plan_type)).unwrap_or_default(),
+                "plan": serde_json::to_value(format!("{:?}", plan.plan_type)).unwrap_or_default(),
                 "estimatedCost": plan.estimated_cost,
                 "chosen": true,
             }));
@@ -240,7 +245,9 @@ impl OvnEngine {
         }
 
         // Get collection size
-        let collection_size = self.btree.scan_all()
+        let collection_size = self
+            .btree
+            .scan_all()
             .iter()
             .filter(|e| !e.tombstone)
             .count() as u64;
@@ -282,23 +289,26 @@ impl OvnEngine {
         let collections = self.collections.read();
         if let Some(coll) = collections.get(collection) {
             let indexes = coll.index_manager.list_indexes();
-            Ok(indexes.iter().map(|idx| {
-                serde_json::json!({
-                    "name": idx.name,
-                    "fields": serde_json::Value::Object(idx.fields.iter()
-                        .map(|(f, d)| (f.clone(), serde_json::Value::from(*d)))
-                        .collect()),
-                    "unique": idx.unique,
-                    "text": idx.text,
-                    "hidden": idx.hidden,
-                    // In a real implementation, these would be tracked:
-                    "accessCount": 0,
-                    "lastAccessed": null,
+            Ok(indexes
+                .iter()
+                .map(|idx| {
+                    serde_json::json!({
+                        "name": idx.name,
+                        "fields": serde_json::Value::Object(idx.fields.iter()
+                            .map(|(f, d)| (f.clone(), serde_json::Value::from(*d)))
+                            .collect()),
+                        "unique": idx.unique,
+                        "text": idx.text,
+                        "hidden": idx.hidden,
+                        // In a real implementation, these would be tracked:
+                        "accessCount": 0,
+                        "lastAccessed": null,
+                    })
                 })
-            }).collect())
+                .collect())
         } else {
             Err(crate::error::OvnError::CollectionNotFound {
-                name: collection.to_string()
+                name: collection.to_string(),
             })
         }
     }

@@ -40,6 +40,19 @@ import { Transaction } from './transaction.js';
 import type { OvnConfig, OvnMetrics, OvnVersion, Document } from './types/index.js';
 import type { ViewInfo, RelationDefinition, RelationInfo, ReferentialIntegrityMode, TriggerEvent, TriggerInfo, PragmaName, PragmaValue, AttachedDatabaseInfo, ExplainPlan, ExplainVerbosity, PipelineStage, FilterQuery, EngineInfo, WriteConflictRetryOptions, ConcurrentTransactionOptions } from './types/index.js';
 /**
+ * Cross-platform recovery checkpoint stored inside the `.ovn` file.
+ *
+ * Replaces the legacy temp-file + rename pattern that broke on Linux
+ * when `tmp` and the database lived on different filesystems. The
+ * checkpoint is just a document in the internal `_system` collection,
+ * so it inherits the engine's WAL durability for free.
+ */
+export interface RecoveryCheckpoint {
+    lastCommittedTxid: number;
+    timestampMs: number;
+    collectionStates: Record<string, unknown>;
+}
+/**
  * Class utama Oblivinx3x Database.
  *
  * Mengelola lifecycle sebuah file database `.ovn`,
@@ -326,6 +339,25 @@ export declare class Oblivinx3x {
      * ```
      */
     checkpoint(): Promise<void>;
+    /**
+     * Read the last persisted recovery checkpoint from the internal
+     * `_system` collection. Returns `null` if the database has never
+     * checkpointed before (fresh file).
+     *
+     * The checkpoint is stored *inside* the `.ovn` file as a regular
+     * document, so there are no temp files, no cross-device renames,
+     * and the value survives across platforms (Windows + Ubuntu).
+     *
+     * Used by external workloads (e.g. `wa-job-queue`) that need a
+     * resumable cursor without rolling their own flat-file WAL.
+     */
+    getRecoveryCheckpoint(): Promise<RecoveryCheckpoint | null>;
+    /**
+     * Persist a recovery checkpoint into the internal `_system` collection.
+     * Issues a {@link checkpoint} so the WAL is flushed to disk before
+     * returning — guaranteeing the checkpoint survives an unclean shutdown.
+     */
+    setRecoveryCheckpoint(cp: RecoveryCheckpoint): Promise<void>;
     /**
      * Dapatkan database performance and storage metrics.
      *

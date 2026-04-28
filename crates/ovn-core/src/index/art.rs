@@ -18,7 +18,11 @@ use std::collections::HashMap;
 /// preserves ART semantics (partial key compression) while being safe Rust.
 enum ArtNode {
     /// Leaf node: stores the full key + value.
-    Leaf { key: Vec<u8>, value: Vec<u8>, txid: u64 },
+    Leaf {
+        key: Vec<u8>,
+        value: Vec<u8>,
+        txid: u64,
+    },
     /// Inner node with up to 256 children (indexed by byte).
     Inner {
         /// Compressed path prefix shared by all children.
@@ -44,15 +48,29 @@ impl ArtNode {
     /// Get value for an exact key.
     fn get(&self, key: &[u8], depth: usize) -> Option<(&[u8], u64)> {
         match self {
-            Self::Leaf { key: k, value, txid } => {
-                if k == key { Some((value, *txid)) } else { None }
+            Self::Leaf {
+                key: k,
+                value,
+                txid,
+            } => {
+                if k == key {
+                    Some((value, *txid))
+                } else {
+                    None
+                }
             }
             Self::Inner { prefix, children } => {
                 // Check prefix match
                 let prefix_end = depth + prefix.len();
-                if key.len() < prefix_end { return None; }
-                if &key[depth..prefix_end] != prefix.as_slice() { return None; }
-                if prefix_end == key.len() { return None; } // No exact match at inner node
+                if key.len() < prefix_end {
+                    return None;
+                }
+                if &key[depth..prefix_end] != prefix.as_slice() {
+                    return None;
+                }
+                if prefix_end == key.len() {
+                    return None;
+                } // No exact match at inner node
                 let child_byte = key[prefix_end];
                 children.get(&child_byte)?.get(key, prefix_end + 1)
             }
@@ -62,7 +80,11 @@ impl ArtNode {
     /// Insert a key into this subtree. Returns `true` if a new key was added.
     fn insert(&mut self, key: Vec<u8>, value: Vec<u8>, txid: u64, depth: usize) -> bool {
         match self {
-            Self::Leaf { key: existing_key, value: ev, txid: et } => {
+            Self::Leaf {
+                key: existing_key,
+                value: ev,
+                txid: et,
+            } => {
                 if existing_key == &key {
                     // Update value in-place
                     *ev = value;
@@ -78,7 +100,11 @@ impl ArtNode {
                     children: HashMap::with_capacity(2),
                 };
                 // Re-insert existing leaf
-                if let ArtNode::Inner { children, prefix: pfx } = &mut new_inner {
+                if let ArtNode::Inner {
+                    children,
+                    prefix: pfx,
+                } = &mut new_inner
+                {
                     let depth2 = depth + pfx.len();
                     if existing_key.len() > depth2 {
                         let b = existing_key[depth2];
@@ -119,7 +145,11 @@ impl ArtNode {
     fn remove(&mut self, key: &[u8], depth: usize) -> Option<Vec<u8>> {
         match self {
             Self::Leaf { key: k, value, .. } => {
-                if k == key { Some(value.clone()) } else { None }
+                if k == key {
+                    Some(value.clone())
+                } else {
+                    None
+                }
             }
             Self::Inner { prefix, children } => {
                 let prefix_end = depth + prefix.len();
@@ -264,7 +294,10 @@ impl ArtIndex {
         if let Some(node) = root.as_ref() {
             let mut refs = Vec::new();
             node.collect_all(&mut refs);
-            out = refs.iter().map(|(k, v, t)| (k.to_vec(), v.to_vec(), *t)).collect();
+            out = refs
+                .iter()
+                .map(|(k, v, t)| (k.to_vec(), v.to_vec(), *t))
+                .collect();
         }
         out
     }

@@ -19,7 +19,9 @@ mod tests {
         let backend = MemoryBackend::new();
         let mut header = FileHeader::new(PAGE_SIZE);
         header.set_wal_active(false);
-        backend.write_page(0, PAGE_SIZE, &header.to_bytes()).unwrap();
+        backend
+            .write_page(0, PAGE_SIZE, &header.to_bytes())
+            .unwrap();
         backend
     }
 
@@ -77,7 +79,9 @@ mod tests {
         let backend = MemoryBackend::new();
         // FileHeader::new() sets WAL_ACTIVE=true by default
         let header = FileHeader::new(PAGE_SIZE);
-        backend.write_page(0, PAGE_SIZE, &header.to_bytes()).unwrap();
+        backend
+            .write_page(0, PAGE_SIZE, &header.to_bytes())
+            .unwrap();
 
         let tmp = std::env::temp_dir().join("qa_unclean_ckpt.ovn2");
         let mut engine = RecoveryEngine::new(&tmp);
@@ -113,7 +117,10 @@ mod tests {
 
             let shadow = backend.read_at(SHADOW_OFFSET, 16).unwrap();
             let stored_txid = u64::from_le_bytes(shadow[0..8].try_into().unwrap());
-            assert_eq!(stored_txid, txid, "Shadow must reflect latest checkpoint TxID={txid}");
+            assert_eq!(
+                stored_txid, txid,
+                "Shadow must reflect latest checkpoint TxID={txid}"
+            );
         }
     }
 }

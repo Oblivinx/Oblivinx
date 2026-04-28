@@ -157,11 +157,17 @@ impl RecoveryEngine {
         self.header = Some(header.clone());
 
         if !was_wal_active {
-            self.log_event("info", "WAL_ACTIVE=false: clean shutdown, no recovery needed");
+            self.log_event(
+                "info",
+                "WAL_ACTIVE=false: clean shutdown, no recovery needed",
+            );
             return Ok(self.generate_report(0, 0, started));
         }
 
-        self.log_event("warn", "WAL_ACTIVE=true: unclean shutdown detected, running WAL recovery");
+        self.log_event(
+            "warn",
+            "WAL_ACTIVE=true: unclean shutdown detected, running WAL recovery",
+        );
 
         // ── State: RecoveringWal ──────────────────────────────────────────────
         self.log_event("state_transition", "Checking → RecoveringWal");
@@ -177,7 +183,9 @@ impl RecoveryEngine {
         let wal_size = header.wal_size;
 
         let wal_data = if wal_size > 0 {
-            backend.read_at(wal_offset, wal_size as usize).unwrap_or_default()
+            backend
+                .read_at(wal_offset, wal_size as usize)
+                .unwrap_or_default()
         } else {
             Vec::new()
         };
@@ -204,14 +212,20 @@ impl RecoveryEngine {
         self.log_event("state_transition", "RecoveringWal → RecoveringIdx");
         // Index rebuild from recovered MemTable happens in the engine layer;
         // we signal completion here for the state machine log.
-        self.log_event("info", "Index rebuild triggered (AHIT Tier-0 will be rebuilt on next read)");
+        self.log_event(
+            "info",
+            "Index rebuild triggered (AHIT Tier-0 will be rebuilt on next read)",
+        );
 
         // ── Clear WAL_ACTIVE in header ────────────────────────────────────────
         let mut updated_header = header.clone();
         updated_header.set_wal_active(false);
         backend.write_page(0, page_size, &updated_header.to_bytes())?;
         backend.sync()?;
-        self.log_event("info", "WAL_ACTIVE cleared in Page 0 after successful recovery");
+        self.log_event(
+            "info",
+            "WAL_ACTIVE cleared in Page 0 after successful recovery",
+        );
 
         self.log_event("state_transition", "RecoveringIdx → Warm");
 
@@ -332,15 +346,17 @@ impl RecoveryEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::io::backend::MemoryBackend;
     use crate::format::header::FileHeader;
+    use crate::io::backend::MemoryBackend;
 
     fn make_backend_with_clean_header() -> (MemoryBackend, u32) {
         let backend = MemoryBackend::new();
         let page_size = 4096u32;
         let mut header = FileHeader::new(page_size);
         header.set_wal_active(false);
-        backend.write_page(0, page_size, &header.to_bytes()).unwrap();
+        backend
+            .write_page(0, page_size, &header.to_bytes())
+            .unwrap();
         (backend, page_size)
     }
 
@@ -360,7 +376,9 @@ mod tests {
         let page_size = 4096u32;
         let header = FileHeader::new(page_size);
         // Leave WAL_ACTIVE=true (set in FileHeader::new)
-        backend.write_page(0, page_size, &header.to_bytes()).unwrap();
+        backend
+            .write_page(0, page_size, &header.to_bytes())
+            .unwrap();
 
         let tmp = std::env::temp_dir().join("test_crash_recovery.ovn2");
         let mut engine = RecoveryEngine::new(&tmp);

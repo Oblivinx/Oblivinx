@@ -11,7 +11,7 @@ use crc32fast::Hasher as Crc32Hasher;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use crate::error::{OvnError, OvnResult};
@@ -58,7 +58,9 @@ impl SSTableFooter {
         }
         let magic = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
         if magic != SSTABLE_FILE_MAGIC {
-            return Err(OvnError::SSTableError(format!("Invalid magic: 0x{magic:08X}")));
+            return Err(OvnError::SSTableError(format!(
+                "Invalid magic: 0x{magic:08X}"
+            )));
         }
         Ok(Self {
             magic,
@@ -172,7 +174,9 @@ impl DiskSSTable {
         entries: &[DiskSSTableEntry],
     ) -> OvnResult<Self> {
         if entries.is_empty() {
-            return Err(OvnError::SSTableError("Cannot create SSTable from empty entries".to_string()));
+            return Err(OvnError::SSTableError(
+                "Cannot create SSTable from empty entries".to_string(),
+            ));
         }
 
         let filename = format!("sst_{:06}.sst", id);
@@ -201,7 +205,8 @@ impl DiskSSTable {
             buf.push(if entry.tombstone { 0xFF } else { 0x00 });
 
             hasher.update(&buf);
-            file.write_all(&buf).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+            file.write_all(&buf)
+                .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         }
         let data_end = file.stream_position().unwrap_or(0);
 
@@ -209,7 +214,8 @@ impl DiskSSTable {
         let bloom_offset = data_end;
         let bloom_bytes = bloom.encode();
         hasher.update(&bloom_bytes);
-        file.write_all(&bloom_bytes).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.write_all(&bloom_bytes)
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         let index_offset = file.stream_position().unwrap_or(0);
 
         // Write sparse index (every 16th key for efficient binary search)
@@ -220,7 +226,8 @@ impl DiskSSTable {
             buf.extend_from_slice(&(entry.key.len() as u32).to_le_bytes());
             buf.extend_from_slice(&entry.key);
             hasher.update(&buf);
-            file.write_all(&buf).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+            file.write_all(&buf)
+                .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         }
 
         // Write footer
@@ -234,8 +241,10 @@ impl DiskSSTable {
             checksum,
         };
 
-        file.write_all(&footer.encode()).map_err(|e| OvnError::SSTableError(e.to_string()))?;
-        file.sync_all().map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.write_all(&footer.encode())
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.sync_all()
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
 
         Ok(Self {
             id,
@@ -250,38 +259,53 @@ impl DiskSSTable {
         let filename = format!("sst_{:06}.sst", id);
         let path = directory.join(&filename);
 
-        let mut file = File::open(&path).map_err(|e| OvnError::SSTableError(format!("Cannot open SSTable '{}': {}", filename, e)))?;
-        let file_size = file.metadata().map_err(|e| OvnError::SSTableError(e.to_string()))?.len();
+        let mut file = File::open(&path).map_err(|e| {
+            OvnError::SSTableError(format!("Cannot open SSTable '{}': {}", filename, e))
+        })?;
+        let file_size = file
+            .metadata()
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?
+            .len();
 
         if file_size < 40 {
-            return Err(OvnError::SSTableError(format!("SSTable '{}' too small: {} bytes", filename, file_size)));
+            return Err(OvnError::SSTableError(format!(
+                "SSTable '{}' too small: {} bytes",
+                filename, file_size
+            )));
         }
 
         // Read footer (last 40 bytes)
-        file.seek(SeekFrom::End(-40)).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.seek(SeekFrom::End(-40))
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         let mut footer_buf = [0u8; 40];
-        file.read_exact(&mut footer_buf).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.read_exact(&mut footer_buf)
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         let footer = SSTableFooter::decode(&footer_buf)?;
 
         // Verify checksum
-        file.seek(SeekFrom::Start(0)).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         let mut data = vec![0u8; (footer.bloom_offset) as usize];
-        file.read_exact(&mut data).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.read_exact(&mut data)
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         let mut hasher = Crc32Hasher::new();
         hasher.update(&data);
         let computed = hasher.finalize();
 
         if computed != footer.checksum {
-            return Err(OvnError::SSTableError(
-                format!("SSTable '{}' checksum mismatch: expected 0x{:08X}, got 0x{:08X}", filename, footer.checksum, computed)
-            ));
+            return Err(OvnError::SSTableError(format!(
+                "SSTable '{}' checksum mismatch: expected 0x{:08X}, got 0x{:08X}",
+                filename, footer.checksum, computed
+            )));
         }
 
         // Load bloom filter
-        file.seek(SeekFrom::Start(footer.bloom_offset)).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.seek(SeekFrom::Start(footer.bloom_offset))
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         let bloom_size = footer.index_offset - footer.bloom_offset;
         let mut bloom_buf = vec![0u8; bloom_size as usize];
-        file.read_exact(&mut bloom_buf).map_err(|e| OvnError::SSTableError(e.to_string()))?;
+        file.read_exact(&mut bloom_buf)
+            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
         let (bloom, _) = SSTableBloom::decode(&bloom_buf)?;
 
         Ok(Self {
@@ -312,33 +336,45 @@ impl DiskSSTable {
         while offset < data_end as u64 {
             // Read key length
             let mut len_buf = [0u8; 4];
-            if file.read_exact(&mut len_buf).is_err() { break; }
+            if file.read_exact(&mut len_buf).is_err() {
+                break;
+            }
             offset += 4;
             let key_len = u32::from_le_bytes(len_buf) as usize;
 
             // Read key
             let mut key_buf = vec![0u8; key_len];
-            if file.read_exact(&mut key_buf).is_err() { break; }
+            if file.read_exact(&mut key_buf).is_err() {
+                break;
+            }
             offset += key_len as u64;
 
             // Read value length
-            if file.read_exact(&mut len_buf).is_err() { break; }
+            if file.read_exact(&mut len_buf).is_err() {
+                break;
+            }
             offset += 4;
             let val_len = u32::from_le_bytes(len_buf) as usize;
 
             // Read value
             let mut val_buf = vec![0u8; val_len];
-            if file.read_exact(&mut val_buf).is_err() { break; }
+            if file.read_exact(&mut val_buf).is_err() {
+                break;
+            }
             offset += val_len as u64;
 
             // Read txid and tombstone
             let mut txid_buf = [0u8; 8];
-            if file.read_exact(&mut txid_buf).is_err() { break; }
+            if file.read_exact(&mut txid_buf).is_err() {
+                break;
+            }
             offset += 8;
             let txid = u64::from_le_bytes(txid_buf);
 
             let mut tomb_buf = [0u8; 1];
-            if file.read_exact(&mut tomb_buf).is_err() { break; }
+            if file.read_exact(&mut tomb_buf).is_err() {
+                break;
+            }
             offset += 1;
             let tombstone = tomb_buf[0] == 0xFF;
 
@@ -370,34 +406,48 @@ impl DiskSSTable {
         };
         let data_end = self.footer.bloom_offset as usize;
 
-        if file.seek(SeekFrom::Start(0)).is_err() { return results; };
+        if file.seek(SeekFrom::Start(0)).is_err() {
+            return results;
+        };
         let mut offset = 0u64;
 
         while offset < data_end as u64 {
             let mut len_buf = [0u8; 4];
-            if file.read_exact(&mut len_buf).is_err() { break; }
+            if file.read_exact(&mut len_buf).is_err() {
+                break;
+            }
             offset += 4;
             let key_len = u32::from_le_bytes(len_buf) as usize;
 
             let mut key_buf = vec![0u8; key_len];
-            if file.read_exact(&mut key_buf).is_err() { break; }
+            if file.read_exact(&mut key_buf).is_err() {
+                break;
+            }
             offset += key_len as u64;
 
-            if file.read_exact(&mut len_buf).is_err() { break; }
+            if file.read_exact(&mut len_buf).is_err() {
+                break;
+            }
             offset += 4;
             let val_len = u32::from_le_bytes(len_buf) as usize;
 
             let mut val_buf = vec![0u8; val_len];
-            if file.read_exact(&mut val_buf).is_err() { break; }
+            if file.read_exact(&mut val_buf).is_err() {
+                break;
+            }
             offset += val_len as u64;
 
             let mut txid_buf = [0u8; 8];
-            if file.read_exact(&mut txid_buf).is_err() { break; }
+            if file.read_exact(&mut txid_buf).is_err() {
+                break;
+            }
             offset += 8;
             let txid = u64::from_le_bytes(txid_buf);
 
             let mut tomb_buf = [0u8; 1];
-            if file.read_exact(&mut tomb_buf).is_err() { break; }
+            if file.read_exact(&mut tomb_buf).is_err() {
+                break;
+            }
             offset += 1;
             let tombstone = tomb_buf[0] == 0xFF;
 
@@ -421,6 +471,11 @@ impl DiskSSTable {
     /// Get number of entries.
     pub fn len(&self) -> u64 {
         self.footer.entry_count
+    }
+
+    /// True if the SSTable has no entries.
+    pub fn is_empty(&self) -> bool {
+        self.footer.entry_count == 0
     }
 
     /// Delete the SSTable file.
@@ -449,7 +504,10 @@ impl DiskSSTableManager {
             for entry in entries.flatten() {
                 if let Some(name) = entry.file_name().to_str() {
                     if name.starts_with("sst_") && name.ends_with(".sst") {
-                        if let Some(id_str) = name.strip_prefix("sst_").and_then(|s| s.strip_suffix(".sst")) {
+                        if let Some(id_str) = name
+                            .strip_prefix("sst_")
+                            .and_then(|s| s.strip_suffix(".sst"))
+                        {
                             if let Ok(id) = id_str.parse::<u64>() {
                                 max_id = max_id.max(id);
                             }
@@ -472,19 +530,29 @@ impl DiskSSTableManager {
             return Ok(());
         }
 
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         // Convert to disk entries
-        let disk_entries: Vec<DiskSSTableEntry> = entries.into_iter().map(|e| DiskSSTableEntry {
-            key: e.key,
-            value: e.value,
-            txid: e.txid,
-            tombstone: e.tombstone,
-        }).collect();
+        let disk_entries: Vec<DiskSSTableEntry> = entries
+            .into_iter()
+            .map(|e| DiskSSTableEntry {
+                key: e.key,
+                value: e.value,
+                txid: e.txid,
+                tombstone: e.tombstone,
+            })
+            .collect();
 
         let sstable = DiskSSTable::create_from_entries(id, &self.directory, &disk_entries)?;
 
-        log::info!("Created SSTable {} at {:?} ({} entries)", id, sstable.path, sstable.footer.entry_count);
+        log::info!(
+            "Created SSTable {} at {:?} ({} entries)",
+            id,
+            sstable.path,
+            sstable.footer.entry_count
+        );
 
         self.tables.write().push(sstable);
         Ok(())
@@ -547,9 +615,27 @@ mod tests {
 
     fn make_memtable_entries() -> Vec<MemTableEntry> {
         vec![
-            MemTableEntry { key: b"key_a".to_vec(), value: b"value_a".to_vec(), txid: 1, tombstone: false, collection_id: 1 },
-            MemTableEntry { key: b"key_b".to_vec(), value: b"value_b".to_vec(), txid: 2, tombstone: false, collection_id: 1 },
-            MemTableEntry { key: b"key_c".to_vec(), value: b"value_c".to_vec(), txid: 3, tombstone: false, collection_id: 1 },
+            MemTableEntry {
+                key: b"key_a".to_vec(),
+                value: b"value_a".to_vec(),
+                txid: 1,
+                tombstone: false,
+                collection_id: 1,
+            },
+            MemTableEntry {
+                key: b"key_b".to_vec(),
+                value: b"value_b".to_vec(),
+                txid: 2,
+                tombstone: false,
+                collection_id: 1,
+            },
+            MemTableEntry {
+                key: b"key_c".to_vec(),
+                value: b"value_c".to_vec(),
+                txid: 3,
+                tombstone: false,
+                collection_id: 1,
+            },
         ]
     }
 
@@ -602,7 +688,7 @@ mod tests {
 
         // Reopen manager
         {
-            let mgr2 = DiskSSTableManager::new(&tmp_dir).unwrap();
+            let _mgr2 = DiskSSTableManager::new(&tmp_dir).unwrap();
             // SSTable files exist on disk, manager should scan them
             // In a full implementation, we'd load existing tables here
             assert!(tmp_dir.exists());

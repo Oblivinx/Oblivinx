@@ -46,7 +46,6 @@ impl FieldZoneMap {
         match value {
             ColumnValue::Null => {
                 self.null_count += 1;
-                return;
             }
             val => {
                 if self.min.is_none() {
@@ -86,24 +85,20 @@ impl FieldZoneMap {
         }
 
         // Check lower bound: page max < lower → skip
-        if let (Some(lower_val), Some(ColumnValue::Int64(page_max))) =
+        if let (Some(ColumnValue::Int64(l)), Some(ColumnValue::Int64(page_max))) =
             (lower, &self.max)
         {
-            if let ColumnValue::Int64(l) = lower_val {
-                if page_max < l {
-                    return false;
-                }
+            if page_max < l {
+                return false;
             }
         }
 
         // Check upper bound: page min > upper → skip
-        if let (Some(upper_val), Some(ColumnValue::Int64(page_min))) =
+        if let (Some(ColumnValue::Int64(u)), Some(ColumnValue::Int64(page_min))) =
             (upper, &self.min)
         {
-            if let ColumnValue::Int64(u) = upper_val {
-                if page_min > u {
-                    return false;
-                }
+            if page_min > u {
+                return false;
             }
         }
 
@@ -226,16 +221,10 @@ mod tests {
         fzm.observe(&ColumnValue::Int64(15));
 
         // Page contains [10, 20]: query for [5, 25] should match
-        assert!(fzm.can_match_range(
-            Some(&ColumnValue::Int64(5)),
-            Some(&ColumnValue::Int64(25))
-        ));
+        assert!(fzm.can_match_range(Some(&ColumnValue::Int64(5)), Some(&ColumnValue::Int64(25))));
 
         // Query for [25, 30] should NOT match (page max = 20 < 25)
-        assert!(!fzm.can_match_range(
-            Some(&ColumnValue::Int64(25)),
-            Some(&ColumnValue::Int64(30))
-        ));
+        assert!(!fzm.can_match_range(Some(&ColumnValue::Int64(25)), Some(&ColumnValue::Int64(30))));
     }
 
     #[test]
@@ -247,9 +236,19 @@ mod tests {
         reg.observe(2, "age", &ColumnValue::Int64(70));
 
         // Page 1: [25,40] — query [30,50] should match
-        assert!(reg.can_match_range(1, "age", Some(&ColumnValue::Int64(30)), Some(&ColumnValue::Int64(50))));
+        assert!(reg.can_match_range(
+            1,
+            "age",
+            Some(&ColumnValue::Int64(30)),
+            Some(&ColumnValue::Int64(50))
+        ));
         // Page 2: [60,70] — query [30,50] should NOT match
-        assert!(!reg.can_match_range(2, "age", Some(&ColumnValue::Int64(30)), Some(&ColumnValue::Int64(50))));
+        assert!(!reg.can_match_range(
+            2,
+            "age",
+            Some(&ColumnValue::Int64(30)),
+            Some(&ColumnValue::Int64(50))
+        ));
         // Unknown page — must scan
         assert!(reg.can_match_range(99, "age", Some(&ColumnValue::Int64(0)), None));
     }
@@ -260,9 +259,6 @@ mod tests {
         fzm.observe(&ColumnValue::Null);
         fzm.observe(&ColumnValue::Null);
 
-        assert!(!fzm.can_match_range(
-            Some(&ColumnValue::Int64(0)),
-            Some(&ColumnValue::Int64(100))
-        ));
+        assert!(!fzm.can_match_range(Some(&ColumnValue::Int64(0)), Some(&ColumnValue::Int64(100))));
     }
 }

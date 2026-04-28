@@ -104,7 +104,13 @@ impl<V: Clone> ArcCache<V> {
         if let Some(entry) = g.t1.remove(&key) {
             let val = entry.value.clone();
             g.t1_order.retain(|&k| k != key);
-            g.t2.insert(key, ArcEntry { value: val.clone(), pinned: entry.pinned });
+            g.t2.insert(
+                key,
+                ArcEntry {
+                    value: val.clone(),
+                    pinned: entry.pinned,
+                },
+            );
             g.t2_order.push_front(key);
             g.hits += 1;
             return Some(val);
@@ -131,7 +137,13 @@ impl<V: Clone> ArcCache<V> {
         if g.t1.contains_key(&key) {
             g.t1.remove(&key);
             g.t1_order.retain(|&k| k != key);
-            g.t2.insert(key, ArcEntry { value, pinned: false });
+            g.t2.insert(
+                key,
+                ArcEntry {
+                    value,
+                    pinned: false,
+                },
+            );
             g.t2_order.push_front(key);
             return;
         }
@@ -145,7 +157,13 @@ impl<V: Clone> ArcCache<V> {
             g.p = (g.p + delta).min(cap);
             g.b1.retain(|&k| k != key);
             g.arc_replace(&mut 0, cap, true);
-            g.t2.insert(key, ArcEntry { value, pinned: false });
+            g.t2.insert(
+                key,
+                ArcEntry {
+                    value,
+                    pinned: false,
+                },
+            );
             g.t2_order.push_front(key);
             return;
         }
@@ -158,7 +176,13 @@ impl<V: Clone> ArcCache<V> {
             g.p = g.p.saturating_sub(delta);
             g.b2.retain(|&k| k != key);
             g.arc_replace(&mut 0, cap, false);
-            g.t2.insert(key, ArcEntry { value, pinned: false });
+            g.t2.insert(
+                key,
+                ArcEntry {
+                    value,
+                    pinned: false,
+                },
+            );
             g.t2_order.push_front(key);
             return;
         }
@@ -181,7 +205,13 @@ impl<V: Clone> ArcCache<V> {
             }
         }
 
-        g.t1.insert(key, ArcEntry { value, pinned: false });
+        g.t1.insert(
+            key,
+            ArcEntry {
+                value,
+                pinned: false,
+            },
+        );
         g.t1_order.push_front(key);
     }
 
@@ -252,11 +282,12 @@ impl<V: Clone> ArcInner<V> {
         let t2_len = self.t2.len();
 
         // Try T1 if |T1| > p (or forced)
-        let evict_t1 = !prefer_t2 && t1_len > 0 && (t1_len > self.p || (t1_len == self.p && t2_len > 0));
+        let evict_t1 =
+            !prefer_t2 && t1_len > 0 && (t1_len > self.p || (t1_len == self.p && t2_len > 0));
 
         if evict_t1 {
             if let Some(&victim) = self.t1_order.back() {
-                if !self.t1.get(&victim).map_or(false, |e| e.pinned) {
+                if !self.t1.get(&victim).is_some_and(|e| e.pinned) {
                     self.t1.remove(&victim);
                     self.t1_order.pop_back();
                     // Add to B1 ghost list (cap size to `cap`)
@@ -272,7 +303,7 @@ impl<V: Clone> ArcInner<V> {
 
         // Evict from T2
         if let Some(&victim) = self.t2_order.back() {
-            if !self.t2.get(&victim).map_or(false, |e| e.pinned) {
+            if !self.t2.get(&victim).is_some_and(|e| e.pinned) {
                 self.t2.remove(&victim);
                 self.t2_order.pop_back();
                 self.b2.push_front(victim);
@@ -287,7 +318,7 @@ impl<V: Clone> ArcInner<V> {
         // Fallback: evict oldest unpinned from T1
         for _ in 0..self.t1_order.len() {
             if let Some(&victim) = self.t1_order.back() {
-                if !self.t1.get(&victim).map_or(false, |e| e.pinned) {
+                if !self.t1.get(&victim).is_some_and(|e| e.pinned) {
                     self.t1.remove(&victim);
                     self.t1_order.pop_back();
                     self.b1.push_front(victim);
@@ -352,7 +383,10 @@ mod tests {
 
         // Verify at least one eviction occurred
         let (_, _, evictions) = cache.stats();
-        assert!(evictions >= 1, "Expected at least one eviction, got {evictions}");
+        assert!(
+            evictions >= 1,
+            "Expected at least one eviction, got {evictions}"
+        );
     }
 
     #[test]
@@ -370,7 +404,7 @@ mod tests {
         cache.insert(2, 2);
         cache.pin(1);
         cache.insert(3, 3); // Must evict 2, not 1
-        // Page 1 should still be accessible
+                            // Page 1 should still be accessible
         assert_eq!(cache.get(1), Some(1));
         cache.unpin(1);
     }

@@ -375,6 +375,36 @@ export interface InsertManyResult {
     /** Jumlah dokumen yang berhasil di-insert */
     insertedCount: number;
 }
+/**
+ * Options for {@link Collection.insertMany} bulk inserts.
+ *
+ * Tuning these is most effective for inserts of >50k documents where
+ * the per-call FFI overhead and MemTable contention dominate. Defaults
+ * are calibrated for typical write loads.
+ */
+export interface BulkInsertOptions {
+    /**
+     * Maximum documents per native call. Larger chunks amortize FFI cost;
+     * smaller chunks keep memory bounded. Default: 5000.
+     */
+    chunkSize?: number;
+    /**
+     * `'fast'` → relax fsync between chunks (D0); one fsync at the end.
+     *            Use for cold loads of 50k+ documents.
+     * `'safe'` → group-commit per chunk (current default behaviour).
+     */
+    durability?: 'fast' | 'safe';
+    /**
+     * Continue past per-chunk failures rather than stopping at the first
+     * error. Defaults to `true`.
+     */
+    ordered?: boolean;
+    /**
+     * Per-chunk progress callback — useful for surfacing progress to
+     * end-users during large imports.
+     */
+    onProgress?: (inserted: number, total: number) => void;
+}
 /** Hasil operasi `updateOne()` atau `updateMany()` */
 export interface UpdateResult {
     /** Jumlah dokumen yang cocok dengan filter */

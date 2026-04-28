@@ -106,9 +106,8 @@ pub fn flush_memtable_to_l0(
 
     // ── Step 1: build L0 SSTable (in memory) ────────────────────────────
     let sstable_id = sstable_mgr.next_id();
-    let sstable =
-        crate::storage::sstable::SSTable::from_memtable_entries(sstable_id, entries)
-            .map_err(|e| OvnError::SSTableError(e.to_string()))?;
+    let sstable = crate::storage::sstable::SSTable::from_memtable_entries(sstable_id, entries)
+        .map_err(|e| OvnError::SSTableError(e.to_string()))?;
 
     // ── Step 2: persist SSTable bytes + fsync ────────────────────────────
     // Write SSTable data to the end of the data file.

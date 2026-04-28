@@ -71,6 +71,27 @@ import type {
 import { WriteConflictError } from './errors/index.js';
 
 /**
+ * Cross-platform recovery checkpoint stored inside the `.ovn` file.
+ *
+ * Replaces the legacy temp-file + rename pattern that broke on Linux
+ * when `tmp` and the database lived on different filesystems. The
+ * checkpoint is just a document in the internal `_system` collection,
+ * so it inherits the engine's WAL durability for free.
+ */
+export interface RecoveryCheckpoint {
+  lastCommittedTxid: number;
+  timestampMs: number;
+  collectionStates: Record<string, unknown>;
+}
+
+interface RecoveryCheckpointDoc extends Document {
+  _id: string;
+  lastCommittedTxid: number;
+  timestampMs: number;
+  collectionStates: Record<string, unknown>;
+}
+
+/**
  * Class utama Oblivinx3x Database.
  *
  * Mengelola lifecycle sebuah file database `.ovn`,
@@ -546,6 +567,53 @@ export class Oblivinx3x {
    */
   async checkpoint(): Promise<void> {
     return this.#getMetricsMgr().checkpoint();
+  }
+
+  /**
+   * Read the last persisted recovery checkpoint from the internal
+   * `_system` collection. Returns `null` if the database has never
+   * checkpointed before (fresh file).
+   *
+   * The checkpoint is stored *inside* the `.ovn` file as a regular
+   * document, so there are no temp files, no cross-device renames,
+   * and the value survives across platforms (Windows + Ubuntu).
+   *
+   * Used by external workloads (e.g. `wa-job-queue`) that need a
+   * resumable cursor without rolling their own flat-file WAL.
+   */
+  async getRecoveryCheckpoint(): Promise<RecoveryCheckpoint | null> {
+    const meta = this.collection<RecoveryCheckpointDoc>('_system');
+    const doc = await meta.findOne({ _id: 'recovery_checkpoint' });
+    if (!doc) return null;
+    return {
+      lastCommittedTxid: Number(doc.lastCommittedTxid ?? 0),
+      timestampMs: Number(doc.timestampMs ?? 0),
+      collectionStates: doc.collectionStates ?? {},
+    };
+  }
+
+  /**
+   * Persist a recovery checkpoint into the internal `_system` collection.
+   * Issues a {@link checkpoint} so the WAL is flushed to disk before
+   * returning — guaranteeing the checkpoint survives an unclean shutdown.
+   */
+  async setRecoveryCheckpoint(cp: RecoveryCheckpoint): Promise<void> {
+    const meta = this.collection<RecoveryCheckpointDoc>('_system');
+    const doc: RecoveryCheckpointDoc = {
+      _id: 'recovery_checkpoint',
+      lastCommittedTxid: cp.lastCommittedTxid,
+      timestampMs: cp.timestampMs || Date.now(),
+      collectionStates: cp.collectionStates ?? {},
+    };
+    // Upsert via updateOne with $set + insertOne fallback — _system is small,
+    // so the cost of the extra read is negligible.
+    const existing = await meta.findOne({ _id: doc._id });
+    if (existing) {
+      await meta.updateOne({ _id: doc._id }, { $set: doc });
+    } else {
+      await meta.insertOne(doc);
+    }
+    await this.checkpoint();
   }
 
   /**

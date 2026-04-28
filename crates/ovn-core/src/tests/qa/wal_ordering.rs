@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
 
     use crate::storage::wal::{WalManager, WalRecord, WalRecordType};
@@ -32,8 +32,7 @@ mod tests {
                 .encode(),
             );
             wal_bytes.extend(
-                WalRecord::new(WalRecordType::Commit, txid, 0, [0; 16], txid, Vec::new())
-                    .encode(),
+                WalRecord::new(WalRecordType::Commit, txid, 0, [0; 16], txid, Vec::new()).encode(),
             );
         }
 
@@ -103,10 +102,16 @@ mod tests {
         let txids: std::collections::HashSet<u64> = replayed.iter().map(|r| r.txid).collect();
 
         for txid in 1u64..=7 {
-            assert!(!txids.contains(&txid), "TxID {txid} must be skipped (below checkpoint)");
+            assert!(
+                !txids.contains(&txid),
+                "TxID {txid} must be skipped (below checkpoint)"
+            );
         }
         for txid in 8u64..=10 {
-            assert!(txids.contains(&txid), "TxID {txid} must be replayed (above checkpoint)");
+            assert!(
+                txids.contains(&txid),
+                "TxID {txid} must be replayed (above checkpoint)"
+            );
         }
     }
 
@@ -138,6 +143,9 @@ mod tests {
         // They should be in ascending order (sorted by replay_from_checkpoint)
         let mut sorted = insert_txids.clone();
         sorted.sort_unstable();
-        assert_eq!(insert_txids, sorted, "Replayed records must be in ascending TxID order");
+        assert_eq!(
+            insert_txids, sorted,
+            "Replayed records must be in ascending TxID order"
+        );
     }
 }

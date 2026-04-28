@@ -143,12 +143,12 @@ impl WalRecord {
         let mut buf = Vec::with_capacity(header_size + self.data.len() + 10);
 
         buf.extend_from_slice(&(self.record_type as u32).to_le_bytes()); // 4
-        buf.extend_from_slice(&self.txid.to_le_bytes());                  // 8
-        buf.extend_from_slice(&self.collection_id.to_le_bytes());          // 4
-        buf.extend_from_slice(&self.lsid);                                 // 16
-        buf.extend_from_slice(&self.txn_number.to_le_bytes());             // 8
-        buf.push(self.flags);                                              // 1
-        buf.extend_from_slice(&[0u8; 7]);                                  // 7 reserved
+        buf.extend_from_slice(&self.txid.to_le_bytes()); // 8
+        buf.extend_from_slice(&self.collection_id.to_le_bytes()); // 4
+        buf.extend_from_slice(&self.lsid); // 16
+        buf.extend_from_slice(&self.txn_number.to_le_bytes()); // 8
+        buf.push(self.flags); // 1
+        buf.extend_from_slice(&[0u8; 7]); // 7 reserved
 
         encode_varint(self.data.len() as u64, &mut buf);
         buf.extend_from_slice(&self.data);
@@ -396,7 +396,10 @@ impl WalManager {
     /// - Only applies records from fully-committed transactions (Commit /
     ///   ConcurrentCommit record present for that txid).
     /// - Stops replay at the first CRC error (torn write from crash).
-    pub fn replay_from_checkpoint(data: &[u8], last_checkpoint_txid: u64) -> OvnResult<Vec<WalRecord>> {
+    pub fn replay_from_checkpoint(
+        data: &[u8],
+        last_checkpoint_txid: u64,
+    ) -> OvnResult<Vec<WalRecord>> {
         let mut raw: Vec<WalRecord> = Vec::new();
         let mut pos = 0;
 
@@ -542,20 +545,34 @@ mod tests {
         let mut all_bytes = Vec::new();
 
         // TxID 1: Insert + Commit (before checkpoint)
-        all_bytes.extend(WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"doc1".to_vec()).encode());
-        all_bytes.extend(WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 0, Vec::new()).encode());
+        all_bytes.extend(
+            WalRecord::new(WalRecordType::Insert, 1, 1, [0; 16], 0, b"doc1".to_vec()).encode(),
+        );
+        all_bytes
+            .extend(WalRecord::new(WalRecordType::Commit, 1, 0, [0; 16], 0, Vec::new()).encode());
         // Checkpoint at txid=1 — everything at or below txid 1 is durable
-        all_bytes.extend(WalRecord::new(WalRecordType::Checkpoint, 1, 0, [0; 16], 0, Vec::new()).encode());
+        all_bytes.extend(
+            WalRecord::new(WalRecordType::Checkpoint, 1, 0, [0; 16], 0, Vec::new()).encode(),
+        );
         // TxID 2: Insert + Commit (after checkpoint — should be replayed)
-        all_bytes.extend(WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 0, b"doc2".to_vec()).encode());
-        all_bytes.extend(WalRecord::new(WalRecordType::Commit, 2, 0, [0; 16], 0, Vec::new()).encode());
+        all_bytes.extend(
+            WalRecord::new(WalRecordType::Insert, 2, 1, [0; 16], 0, b"doc2".to_vec()).encode(),
+        );
+        all_bytes
+            .extend(WalRecord::new(WalRecordType::Commit, 2, 0, [0; 16], 0, Vec::new()).encode());
 
         let records = WalManager::replay(&all_bytes).unwrap();
         let txids: HashSet<u64> = records.iter().map(|r| r.txid).collect();
 
         // Only txid=2 should be replayed (txid=1 is at/below checkpoint)
-        assert!(!txids.contains(&1), "TxID 1 should be skipped (at/below checkpoint)");
-        assert!(txids.contains(&2), "TxID 2 should be replayed (after checkpoint)");
+        assert!(
+            !txids.contains(&1),
+            "TxID 1 should be skipped (at/below checkpoint)"
+        );
+        assert!(
+            txids.contains(&2),
+            "TxID 2 should be replayed (after checkpoint)"
+        );
     }
 
     #[test]
@@ -569,7 +586,14 @@ mod tests {
 
     #[test]
     fn test_wal_new_record_type_savepoint() {
-        let record = WalRecord::new(WalRecordType::Savepoint, 5, 0, [0; 16], 0, b"sp_main".to_vec());
+        let record = WalRecord::new(
+            WalRecordType::Savepoint,
+            5,
+            0,
+            [0; 16],
+            0,
+            b"sp_main".to_vec(),
+        );
         let encoded = record.encode();
         let (decoded, _) = WalRecord::decode(&encoded).unwrap();
         assert_eq!(decoded.record_type, WalRecordType::Savepoint);

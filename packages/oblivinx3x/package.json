@@ -1,6 +1,6 @@
 {
   "name": "oblivinx3x",
-  "version": "0.0.6",
+  "version": "0.0.8",
   "description": "Oblivinx3x — High-Performance Embedded Document Database. Hybrid B+/LSM engine with MVCC, ACID transactions, and MongoDB-compatible query language. Zero configuration, single-file, in-process.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -25,7 +25,6 @@
     "build:addon:debug": "node scripts/build-native.cjs --debug",
     "build:rust": "npm run build:addon",
     "build:rust:debug": "npm run build:addon:debug",
-    "install": "npm run build:addon",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json",
     "prepublishOnly": "npm run build:clean",

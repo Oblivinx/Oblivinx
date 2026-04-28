@@ -122,7 +122,7 @@ pub fn ovn_diff_document_versions(mut cx: FunctionContext) -> JsResult<JsString>
         engine.diff_document_versions(&collection, &doc_id, v1, v2)
     })?;
 
-    // Serialize the VersionDiff. modified values are (from, to) tuples; 
+    // Serialize the VersionDiff. modified values are (from, to) tuples;
     // we convert to { from, to } objects for JS consumption.
     let json = serde_json::json!({
         "fromVersion": diff.from_version,
@@ -134,9 +134,7 @@ pub fn ovn_diff_document_versions(mut cx: FunctionContext) -> JsResult<JsString>
         "removed": diff.removed,
     });
 
-    Ok(cx.string(
-        serde_json::to_string(&json).unwrap_or_else(|_| "{}".to_string()),
-    ))
+    Ok(cx.string(serde_json::to_string(&json).unwrap_or_else(|_| "{}".to_string())))
 }
 
 // ─── ovn_rollback_to_version ──────────────────────────────────────────────────

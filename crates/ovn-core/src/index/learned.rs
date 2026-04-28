@@ -151,13 +151,18 @@ impl LearnedIndex {
     pub fn drift_rate(&self) -> f64 {
         let total = self.lookup_count.load(Ordering::Relaxed);
         let misses = self.miss_count.load(Ordering::Relaxed);
-        if total == 0 { 0.0 } else { misses as f64 / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            misses as f64 / total as f64
+        }
     }
 
     /// Whether the model should be rebuilt (drift rate exceeded threshold).
     pub fn needs_rebuild(&self) -> bool {
-        self.dirty || (self.lookup_count.load(Ordering::Relaxed) > 1000
-            && self.drift_rate() > DRIFT_THRESHOLD)
+        self.dirty
+            || (self.lookup_count.load(Ordering::Relaxed) > 1000
+                && self.drift_rate() > DRIFT_THRESHOLD)
     }
 
     /// Mark this index as dirty (forces fallback to binary search until rebuilt).
@@ -190,7 +195,8 @@ impl LearnedIndex {
 
     fn find_segment(&self, key: &[u8]) -> &PgmSegment {
         // Binary search segments by first_key
-        let idx = self.segments
+        let idx = self
+            .segments
             .partition_point(|s| s.first_key.as_slice() <= key);
         let idx = idx.saturating_sub(1).min(self.segments.len() - 1);
         &self.segments[idx]

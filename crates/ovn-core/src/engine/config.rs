@@ -16,11 +16,12 @@ use crate::{
 /// | `D1`        | Group commit: fsync batched (default, 200µs).     | Up to 200µs     |
 /// | `D1Strict`  | fsync after every commit group.                   | Zero            |
 /// | `D2`        | fdatasync+fsync on every single commit.           | Zero (slowest)  |
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DurabilityLevel {
     /// No fsync — maximum throughput, risk of data loss on OS crash.
     D0,
     /// Group commit (default): batch multiple commits into one fsync call.
+    #[default]
     D1,
     /// Group commit with strict per-group fsync.
     D1Strict,
@@ -28,25 +29,14 @@ pub enum DurabilityLevel {
     D2,
 }
 
-impl Default for DurabilityLevel {
-    fn default() -> Self {
-        Self::D1
-    }
-}
-
 /// I/O backend preference. Actual selection is platform-dependent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IoEngineHint {
     /// Use the platform default (io_uring on Linux, IOCP on Windows).
+    #[default]
     Auto,
     /// Force synchronous I/O via std::fs. Portable.
     Sync,
-}
-
-impl Default for IoEngineHint {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 // ── OvnConfig ─────────────────────────────────────────────────────────────────
@@ -137,11 +127,17 @@ impl OvnConfig {
 
     /// Whether group commit is active.
     pub fn is_group_commit(&self) -> bool {
-        matches!(self.durability, DurabilityLevel::D1 | DurabilityLevel::D1Strict)
+        matches!(
+            self.durability,
+            DurabilityLevel::D1 | DurabilityLevel::D1Strict
+        )
     }
 
     /// Whether fsync is required on every commit (or commit group).
     pub fn needs_fsync_on_commit(&self) -> bool {
-        matches!(self.durability, DurabilityLevel::D1Strict | DurabilityLevel::D2)
+        matches!(
+            self.durability,
+            DurabilityLevel::D1Strict | DurabilityLevel::D2
+        )
     }
 }

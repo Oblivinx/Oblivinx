@@ -224,7 +224,10 @@ impl OvnEngine {
                 versions.drain(..to_remove);
                 log::debug!(
                     "Pruned {} old versions from {}.{} (max={})",
-                    to_remove, collection, doc_id, max
+                    to_remove,
+                    collection,
+                    doc_id,
+                    max
                 );
             }
         }
@@ -250,10 +253,7 @@ impl OvnEngine {
                 let mut json = v.document.to_json();
                 if let Some(obj) = json.as_object_mut() {
                     obj.insert("__version".to_string(), serde_json::json!(v.version));
-                    obj.insert(
-                        "__versionedAt".to_string(),
-                        serde_json::json!(v.created_at),
-                    );
+                    obj.insert("__versionedAt".to_string(), serde_json::json!(v.created_at));
                     if let Some(ref author) = v.author {
                         obj.insert("__author".to_string(), serde_json::json!(author));
                     }
@@ -294,13 +294,17 @@ impl OvnEngine {
                         .map(|c| {
                             let mut count = 0;
                             if let Some(obj) = c.as_object() {
-                                if let Some(modified) = obj.get("modified").and_then(|v| v.as_object()) {
+                                if let Some(modified) =
+                                    obj.get("modified").and_then(|v| v.as_object())
+                                {
                                     count += modified.len();
                                 }
                                 if let Some(added) = obj.get("added").and_then(|v| v.as_object()) {
                                     count += added.len();
                                 }
-                                if let Some(removed) = obj.get("removed").and_then(|v| v.as_object()) {
+                                if let Some(removed) =
+                                    obj.get("removed").and_then(|v| v.as_object())
+                                {
                                     count += removed.len();
                                 }
                             }
@@ -353,10 +357,7 @@ impl OvnEngine {
                     for (k, v) in m {
                         if let Some(arr) = v.as_array() {
                             if arr.len() == 2 {
-                                modified.insert(
-                                    k.clone(),
-                                    (arr[0].clone(), arr[1].clone()),
-                                );
+                                modified.insert(k.clone(), (arr[0].clone(), arr[1].clone()));
                             }
                         }
                     }
@@ -396,10 +397,7 @@ impl OvnEngine {
         let target_doc = self
             .get_document_version(collection, doc_id, version)?
             .ok_or_else(|| {
-                OvnError::ValidationError(format!(
-                    "Version {} not found for {}",
-                    version, doc_id
-                ))
+                OvnError::ValidationError(format!("Version {} not found for {}", version, doc_id))
             })?;
 
         // Strip version metadata fields
@@ -417,7 +415,10 @@ impl OvnEngine {
 
         log::info!(
             "Rolled back {}.{} to version {} (new version: {})",
-            collection, doc_id, version, new_version
+            collection,
+            doc_id,
+            version,
+            new_version
         );
 
         Ok(clean_doc)
@@ -444,7 +445,8 @@ impl OvnEngine {
             Ok(())
         } else {
             Err(OvnError::ValidationError(format!(
-                "Version {} not found", version
+                "Version {} not found",
+                version
             )))
         }
     }
@@ -470,9 +472,7 @@ impl OvnEngine {
             .iter()
             .find(|v| v.tag.as_deref() == Some(tag))
             .map(|v| v.version)
-            .ok_or_else(|| {
-                OvnError::ValidationError(format!("Tag '{}' not found", tag))
-            })?;
+            .ok_or_else(|| OvnError::ValidationError(format!("Tag '{}' not found", tag)))?;
         drop(history);
 
         // Rollback to that version
@@ -499,10 +499,7 @@ impl OvnEngine {
                         added.insert(key.clone(), new_val.clone());
                     }
                     Some(old_val) if old_val != new_val => {
-                        modified.insert(
-                            key.clone(),
-                            serde_json::json!([old_val, new_val]),
-                        );
+                        modified.insert(key.clone(), serde_json::json!([old_val, new_val]));
                     }
                     _ => {}
                 }

@@ -11,15 +11,15 @@ use std::time::Duration;
 
 use super::WorkerConfig;
 
-use crate::storage::sstable::SSTableManager;
-use crate::storage::btree::BPlusTree;
-use crate::storage::memtable::MemTable;
-use crate::storage::wal::WalManager;
-use crate::storage::buffer_pool::BufferPool;
-use crate::mvcc::MvccManager;
-use crate::mvcc::change_stream::ChangeStreamEmitter;
-use crate::io::FileBackend;
 use crate::error::OvnResult;
+use crate::io::FileBackend;
+use crate::mvcc::change_stream::ChangeStreamEmitter;
+use crate::mvcc::MvccManager;
+use crate::storage::btree::BPlusTree;
+use crate::storage::buffer_pool::BufferPool;
+use crate::storage::memtable::MemTable;
+use crate::storage::sstable::SSTableManager;
+use crate::storage::wal::WalManager;
 use parking_lot::RwLock;
 
 /// Shared state required by background workers.
@@ -46,13 +46,17 @@ pub struct WorkerSharedState {
     /// TTL index registry (collection -> field -> expireAfterSeconds)
     pub ttl_indexes: Arc<RwLock<Vec<TtlIndexEntry>>>,
     /// Callback for executing deletes (to avoid circular deps)
-    pub delete_expired_callback: Option<Arc<dyn Fn(&str, &[u8]) -> OvnResult<()> + Send + Sync>>,
+    pub delete_expired_callback: Option<DeleteExpiredCallback>,
 }
+
+/// Callback signature used by background workers to delete an expired entry
+/// without taking a hard dependency on the engine module.
+pub type DeleteExpiredCallback = Arc<dyn Fn(&str, &[u8]) -> OvnResult<()> + Send + Sync>;
 
 /// A TTL index entry: collection name, field name, expiration seconds.
 #[derive(Debug, Clone)]
 pub struct TtlIndexEntry {
-    pub collection: String, 
+    pub collection: String,
     pub field: String,
     pub expire_after_seconds: i64,
 }
@@ -189,8 +193,7 @@ fn flush_btree_to_disk(
     }
 
     let current_size = backend.file_size()?;
-    let btree_start =
-        current_size.div_ceil(page_size as u64) * page_size as u64;
+    let btree_start = current_size.div_ceil(page_size as u64) * page_size as u64;
 
     let mut offset = btree_start;
     for entry in &entries {
@@ -202,8 +205,7 @@ fn flush_btree_to_disk(
         buf.extend_from_slice(&entry.txid.to_le_bytes());
         buf.push(if entry.tombstone { 0xFF } else { 0x00 });
 
-        let padded_len =
-            buf.len().div_ceil(page_size as usize) * page_size as usize;
+        let padded_len = buf.len().div_ceil(page_size as usize) * page_size as usize;
         buf.resize(padded_len.max(page_size as usize), 0);
 
         backend.write_at(offset, &buf)?;

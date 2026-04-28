@@ -40,12 +40,10 @@ impl RateLimiter {
         }
 
         if self.query_count >= self.max_qps {
-            return Err(OvnError::QueryError(
-                format!(
-                    "Rate limit exceeded: {} queries per second limit reached",
-                    self.max_qps
-                )
-            ));
+            return Err(OvnError::QueryError(format!(
+                "Rate limit exceeded: {} queries per second limit reached",
+                self.max_qps
+            )));
         }
 
         self.query_count += 1;
@@ -124,12 +122,10 @@ impl OvnEngine {
         let limits = SecurityLimits::default();
 
         if doc_size > limits.max_document_size_bytes as usize {
-            return Err(OvnError::ValidationError(
-                format!(
-                    "Document size {} exceeds maximum {} bytes",
-                    doc_size, limits.max_document_size_bytes
-                )
-            ));
+            return Err(OvnError::ValidationError(format!(
+                "Document size {} exceeds maximum {} bytes",
+                doc_size, limits.max_document_size_bytes
+            )));
         }
 
         Ok(())
@@ -140,12 +136,10 @@ impl OvnEngine {
         let limits = SecurityLimits::default();
 
         if key_size > limits.max_index_key_length as usize {
-            return Err(OvnError::ValidationError(
-                format!(
-                    "Index key size {} exceeds maximum {} bytes",
-                    key_size, limits.max_index_key_length
-                )
-            ));
+            return Err(OvnError::ValidationError(format!(
+                "Index key size {} exceeds maximum {} bytes",
+                key_size, limits.max_index_key_length
+            )));
         }
 
         Ok(())

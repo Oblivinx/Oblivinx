@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::error::OvnResult;
 use crate::format::page::{Page, PageType, SlotEntry, PAGE_HEADER_SIZE};
@@ -96,7 +96,8 @@ impl DiskBPlusTree {
 
         for chunk in entries.chunks(entries_per_page) {
             let mut page = Page::new(PageType::Leaf, page_num, self.page_size);
-            page.header.txid = chunk.last().map(|e| e.txid).unwrap_or(0);
+            page.header
+                .set_full_lsn(chunk.last().map(|e| e.txid).unwrap_or(0));
 
             let payload_len = page.payload.len();
             let mut data_offset = payload_len;
@@ -108,31 +109,33 @@ impl DiskBPlusTree {
                     entry.value.clone()
                 };
                 let len = data.len();
-                if data_offset < len { break; }
+                if data_offset < len {
+                    break;
+                }
                 data_offset -= len;
                 page.payload[data_offset..data_offset + len].copy_from_slice(&data);
 
                 let slot = SlotEntry {
                     doc_offset: data_offset as u16,
                     doc_length: len as u16,
+                    tombstone: entry.tombstone,
                 };
+                let slot_bytes = slot.to_bytes();
                 let slot_offset = i * 4;
                 if slot_offset + 4 <= page.payload.len() {
-                    page.payload[slot_offset..slot_offset + 2]
-                        .copy_from_slice(&slot.doc_offset.to_le_bytes());
-                    page.payload[slot_offset + 2..slot_offset + 4]
-                        .copy_from_slice(&slot.doc_length.to_le_bytes());
+                    page.payload[slot_offset..slot_offset + 4].copy_from_slice(&slot_bytes);
                 }
             }
 
-            page.header.slot_count = chunk.len() as u16;
-            page.header.free_space_offset = data_offset as u16;
+            page.header.record_count = chunk.len() as u32;
+            page.header.free_offset = data_offset as u32;
 
             if let Some(prev) = prev_page_num {
-                page.header.right_sibling = prev as u32;
+                page.header.prev_page = prev;
             }
 
-            self.backend.write_page(page_num, self.page_size, &page.to_bytes())?;
+            self.backend
+                .write_page(page_num, self.page_size, &page.to_bytes())?;
             self.buffer_pool.put_page(page_num, page)?;
 
             prev_page_num = Some(page_num);
@@ -185,7 +188,9 @@ mod tests {
 
         for i in 0..10 {
             let key = format!("key_{:03}", i);
-            disk_tree.insert(make_entry(&key, "value", i as u64)).unwrap();
+            disk_tree
+                .insert(make_entry(&key, "value", i as u64))
+                .unwrap();
         }
 
         assert_eq!(disk_tree.len(), 10);
@@ -208,7 +213,9 @@ mod tests {
 
         for i in 0..20 {
             let key = format!("key_{:03}", i);
-            disk_tree.insert(make_entry(&key, &format!("val_{}", i), i as u64)).unwrap();
+            disk_tree
+                .insert(make_entry(&key, &format!("val_{}", i), i as u64))
+                .unwrap();
         }
 
         let results = disk_tree.range_scan(b"key_005", b"key_010");

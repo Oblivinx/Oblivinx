@@ -14,7 +14,10 @@ mod tests {
     struct Lcg(u64);
     impl Lcg {
         fn next(&mut self) -> u64 {
-            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             self.0
         }
         fn next_usize(&mut self, max: usize) -> usize {
@@ -26,8 +29,15 @@ mod tests {
         let mut buf = Vec::new();
         for txid in 1..=txid_count {
             buf.extend(
-                WalRecord::new(WalRecordType::Insert, txid, 1, [0; 16], txid, b"data".to_vec())
-                    .encode(),
+                WalRecord::new(
+                    WalRecordType::Insert,
+                    txid,
+                    1,
+                    [0; 16],
+                    txid,
+                    b"data".to_vec(),
+                )
+                .encode(),
             );
             buf.extend(
                 WalRecord::new(WalRecordType::Commit, txid, 0, [0; 16], txid, Vec::new()).encode(),
@@ -46,7 +56,9 @@ mod tests {
                 collection_id: 1,
             })
             .collect();
-        SSTable::from_memtable_entries(1, entries).unwrap().to_bytes()
+        SSTable::from_memtable_entries(1, entries)
+            .unwrap()
+            .to_bytes()
     }
 
     /// Fuzz WAL bytes — must never panic, must always return an error or valid records.
@@ -62,9 +74,8 @@ mod tests {
             corrupted[pos] ^= flip;
 
             // Must not panic — either returns Ok (partial valid records) or Err
-            let result = std::panic::catch_unwind(|| {
-                WalManager::replay_from_checkpoint(&corrupted, 0)
-            });
+            let result =
+                std::panic::catch_unwind(|| WalManager::replay_from_checkpoint(&corrupted, 0));
 
             assert!(
                 result.is_ok(),
@@ -139,9 +150,8 @@ mod tests {
             let size = (lcg.next() % 512 + 1) as usize;
             let random_bytes: Vec<u8> = (0..size).map(|_| lcg.next() as u8).collect();
 
-            let result = std::panic::catch_unwind(|| {
-                WalManager::replay_from_checkpoint(&random_bytes, 0)
-            });
+            let result =
+                std::panic::catch_unwind(|| WalManager::replay_from_checkpoint(&random_bytes, 0));
 
             assert!(
                 result.is_ok(),

@@ -14,8 +14,15 @@ mod tests {
         let mut buf = Vec::new();
         for txid in txid_start..=txid_end {
             buf.extend(
-                WalRecord::new(WalRecordType::Insert, txid, 1, [0; 16], txid, format!("doc_{txid}").into_bytes())
-                    .encode(),
+                WalRecord::new(
+                    WalRecordType::Insert,
+                    txid,
+                    1,
+                    [0; 16],
+                    txid,
+                    format!("doc_{txid}").into_bytes(),
+                )
+                .encode(),
             );
             buf.extend(
                 WalRecord::new(WalRecordType::Commit, txid, 0, [0; 16], txid, Vec::new()).encode(),
@@ -78,11 +85,20 @@ mod tests {
         let replayed_txids: HashSet<u64> = replayed.iter().map(|r| r.txid).collect();
 
         for txid in 1u64..=3 {
-            assert!(replayed_txids.contains(&txid), "TxID {txid} should be replayed");
+            assert!(
+                replayed_txids.contains(&txid),
+                "TxID {txid} should be replayed"
+            );
         }
         // 4 and 5 must not appear — 4 is corrupt, 5 is after the corruption point.
-        assert!(!replayed_txids.contains(&4), "Corrupt TxID 4 must not appear");
-        assert!(!replayed_txids.contains(&5), "TxID 5 after corruption must not appear");
+        assert!(
+            !replayed_txids.contains(&4),
+            "Corrupt TxID 4 must not appear"
+        );
+        assert!(
+            !replayed_txids.contains(&5),
+            "TxID 5 after corruption must not appear"
+        );
     }
 
     #[test]
@@ -105,12 +121,16 @@ mod tests {
             .iter()
             .filter(|r| r.txid == 1 && r.record_type == WalRecordType::Insert)
             .collect();
-        let txid2_inserts: Vec<_> = replayed
-            .iter()
-            .filter(|r| r.txid == 2)
-            .collect();
+        let txid2_inserts: Vec<_> = replayed.iter().filter(|r| r.txid == 2).collect();
 
-        assert_eq!(txid1_inserts.len(), 2, "TxID 1 should have 2 Insert records");
-        assert!(txid2_inserts.is_empty(), "TxID 2 (no Commit) must have zero records");
+        assert_eq!(
+            txid1_inserts.len(),
+            2,
+            "TxID 1 should have 2 Insert records"
+        );
+        assert!(
+            txid2_inserts.is_empty(),
+            "TxID 2 (no Commit) must have zero records"
+        );
     }
 }

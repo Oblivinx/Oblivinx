@@ -393,9 +393,13 @@ impl FileHeader {
             let mut hmac = [0u8; 32];
             cursor.read_exact(&mut hmac)?;
 
-            (col, vec, cdc, sec, emb, zon, lrn, aud, blm, hlc, kms, salt, hmac)
+            (
+                col, vec, cdc, sec, emb, zon, lrn, aud, blm, hlc, kms, salt, hmac,
+            )
         } else {
-            (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [0u8; 16], [0u8; 16], [0u8; 32])
+            (
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [0u8; 16], [0u8; 16], [0u8; 32],
+            )
         };
 
         Ok(Self {
@@ -487,7 +491,9 @@ pub fn read_page_0_safe(backend: &dyn FileBackend, page_size: u32) -> OvnResult<
     match FileHeader::from_bytes(&page0) {
         Ok(header) => Ok(header),
         Err(primary_err) => {
-            log::warn!("Page 0 primary read failed ({primary_err}), checking shadow page at 0x0FF0");
+            log::warn!(
+                "Page 0 primary read failed ({primary_err}), checking shadow page at 0x0FF0"
+            );
 
             // Shadow record layout (16 bytes): txid(8) + crc32c(4) + reserved(4)
             let shadow = backend.read_at(SHADOW_OFFSET as u64, 16)?;
@@ -570,13 +576,17 @@ mod tests {
         let header = FileHeader::new(4096);
         let bytes = header.to_bytes();
         // Shadow now stores checkpoint txid (hlc_state) + CRC32C
-        let shadow_txid = u64::from_le_bytes(
-            bytes[SHADOW_OFFSET..SHADOW_OFFSET + 8].try_into().unwrap(),
+        let shadow_txid =
+            u64::from_le_bytes(bytes[SHADOW_OFFSET..SHADOW_OFFSET + 8].try_into().unwrap());
+        assert_eq!(
+            shadow_txid, header.hlc_state,
+            "Shadow must contain hlc_state"
         );
-        assert_eq!(shadow_txid, header.hlc_state, "Shadow must contain hlc_state");
 
         let shadow_crc = u32::from_le_bytes(
-            bytes[SHADOW_OFFSET + 8..SHADOW_OFFSET + 12].try_into().unwrap(),
+            bytes[SHADOW_OFFSET + 8..SHADOW_OFFSET + 12]
+                .try_into()
+                .unwrap(),
         );
         let expected_crc = crc32c(&bytes[SHADOW_OFFSET..SHADOW_OFFSET + 8]);
         assert_eq!(shadow_crc, expected_crc, "Shadow CRC32C must be valid");
