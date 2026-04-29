@@ -252,11 +252,11 @@ impl OvnEngine {
 
         let collection_id = Self::collection_id(collection);
 
-        // Scan all documents
+        // Scan all documents (collection-prefixed keys only).
         let all_entries = self.btree.scan_all();
         let mut docs: Vec<ObeDocument> = all_entries
             .into_iter()
-            .filter(|e| !e.tombstone)
+            .filter(|e| Self::key_in_collection(&e.key, collection_id) && !e.tombstone)
             .filter_map(|e| ObeDocument::decode(&e.value).ok())
             .collect();
 
@@ -275,10 +275,11 @@ impl OvnEngine {
             match stage {
                 AggregateStage::Lookup(config) => {
                     self.ensure_collection(&config.from)?;
+                    let foreign_id = Self::collection_id(&config.from);
                     let foreign_entries = self.btree.scan_all();
                     let foreign_docs: Vec<ObeDocument> = foreign_entries
                         .into_iter()
-                        .filter(|e| !e.tombstone)
+                        .filter(|e| Self::key_in_collection(&e.key, foreign_id) && !e.tombstone)
                         .filter_map(|e| ObeDocument::decode(&e.value).ok())
                         .collect();
 

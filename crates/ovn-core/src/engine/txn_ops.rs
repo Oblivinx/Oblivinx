@@ -196,13 +196,16 @@ impl OvnEngine {
 
         let undo = state.rollback_to_savepoint(name)?;
 
-        // Undo writes by restoring original values
+        // Undo writes by restoring original values.
+        // `key` here is the raw doc id captured at write time; promote to a
+        // collection-prefixed key for B+Tree (matches the insert/update path).
         for (key, original, coll_id) in undo {
             let new_txid = self.mvcc.next_txid();
+            let btree_key = OvnEngine::make_btree_key(coll_id, &key);
             match original {
                 SavepointOriginalValue::Existing(value) => {
                     let _ = self.btree.insert(BTreeEntry {
-                        key: key.clone(),
+                        key: btree_key,
                         value: value.clone(),
                         txid: new_txid,
                         tombstone: false,
@@ -220,7 +223,7 @@ impl OvnEngine {
                 SavepointOriginalValue::New => {
                     // Tombstone the newly inserted key
                     let _ = self.btree.insert(BTreeEntry {
-                        key: key.clone(),
+                        key: btree_key,
                         value: Vec::new(),
                         txid: new_txid,
                         tombstone: true,

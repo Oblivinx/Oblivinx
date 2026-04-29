@@ -45,6 +45,7 @@ use crate::storage::buffer_pool::BufferPool;
 use crate::storage::memtable::{MemTable, MemTableEntry};
 use crate::storage::sstable::SSTableManager;
 use crate::storage::wal::{WalManager, WalRecordType};
+use crate::{FORMAT_VERSION_MAJOR, FORMAT_VERSION_MINOR};
 
 use self::collection::Collection;
 use self::config::OvnConfig;
@@ -143,7 +144,35 @@ impl OvnEngine {
     /// To migrate, call `engine.migrate_v1_to_v2(dest_path)` explicitly.
     pub fn open(path: &str, mut config: OvnConfig) -> OvnResult<Self> {
         let path = PathBuf::from(path);
-        let is_new = !path.exists();
+        let mut is_new = !path.exists();
+
+        // Pre-flight: if the file exists, peek the header version. On a
+        // pre-1.0 minor-version mismatch we auto-recreate (delete + start fresh)
+        // per the project convention — explicit migration tooling lands at v1.0.
+        if !is_new && !config.read_only {
+            if let Ok(file_data) = std::fs::read(&path) {
+                if file_data.len() >= 8 {
+                    let stored_minor = u16::from_le_bytes([file_data[0x0006], file_data[0x0007]]);
+                    let stored_major = u16::from_le_bytes([file_data[0x0004], file_data[0x0005]]);
+                    let is_v2 = stored_major == FORMAT_VERSION_MAJOR;
+                    let mismatch = is_v2 && stored_minor != FORMAT_VERSION_MINOR;
+                    if mismatch {
+                        log::warn!(
+                            "Database '{}' has format v{}.{} but engine is v{}.{}. \
+                             Pre-1.0 policy: deleting old file and starting fresh. \
+                             Back up your data before upgrading the engine in production.",
+                            path.display(),
+                            stored_major,
+                            stored_minor,
+                            FORMAT_VERSION_MAJOR,
+                            FORMAT_VERSION_MINOR,
+                        );
+                        std::fs::remove_file(&path).map_err(OvnError::Io)?;
+                        is_new = true;
+                    }
+                }
+            }
+        }
 
         let backend = Arc::new(OsFileBackend::open(&path, config.read_only)?);
 
@@ -153,8 +182,8 @@ impl OvnEngine {
             let header_bytes = header.to_bytes();
             backend.write_page(0, config.page_size, &header_bytes)?;
 
-            // Write initial Segment Directory to Page 1
-            let seg_dir = SegmentDirectory::with_defaults(2);
+            // Write initial Segment Directory to Page 1 (first_free_page=3: after Header+SegDir+CollectionRegistry)
+            let seg_dir = SegmentDirectory::with_defaults(3);
             let seg_bytes = seg_dir.to_bytes(config.page_size as usize)?;
             backend.write_page(1, config.page_size, &seg_bytes)?;
 
@@ -191,11 +220,11 @@ impl OvnEngine {
 
         let buffer_pool = Arc::new(BufferPool::new(config.buffer_pool_size, config.page_size));
 
-        // Guard: WAL must NEVER start before offset (page_size * 2).
+        // Guard: WAL must NEVER start before offset (page_size * 3).
+        // Pages 0–2 are reserved: 0=Header, 1=SegmentDirectory, 2=CollectionRegistry.
         // Databases created with older buggy builds may have wal_start_offset = 0,
-        // which causes WAL records to overwrite Page 0 (the file header),
-        // corrupting the magic number on next open.
-        let min_wal_offset = config.page_size as u64 * 2;
+        // which causes WAL records to overwrite reserved pages.
+        let min_wal_offset = config.page_size as u64 * 3;
         let wal_offset = if header.wal_start_offset < min_wal_offset {
             if !is_new {
                 log::warn!(
@@ -256,6 +285,7 @@ impl OvnEngine {
 
         if !is_new {
             engine.load_btree_from_disk()?;
+            engine.load_collection_registry()?;
 
             if header.is_wal_active() {
                 log::info!("WAL active flag set -- performing crash recovery");
@@ -276,10 +306,15 @@ impl OvnEngine {
             self.flush_memtable()?;
         }
 
-        self.checkpoint()?;
+        // Flush WAL + buffer pool
+        self.wal.flush(&*self.backend)?;
+        self.buffer_pool.flush_all(&*self.backend)?;
 
         self.flush_sstables_to_disk()?;
         self.flush_btree_to_disk()?;
+
+        // Persist collection registry to Metadata page
+        self.save_collection_registry()?;
 
         self.backend.sync()?;
 
@@ -309,14 +344,38 @@ impl OvnEngine {
         Ok(())
     }
 
-    /// Checkpoint -- flush MemTable and WAL to permanent storage.
+    /// Checkpoint -- flush MemTable, B+Tree, collection registry, and WAL to permanent storage.
     pub fn checkpoint(&self) -> OvnResult<()> {
         self.check_closed()?;
 
+        // Flush memtable → SSTable → BTree
+        if !self.memtable.is_empty() {
+            self.flush_memtable()?;
+        }
+
+        // Flush B+Tree entries to disk pages
+        self.flush_btree_to_disk()?;
+
+        // Persist collection registry
+        self.save_collection_registry()?;
+
+        // Flush buffer pool dirty pages
         self.buffer_pool.flush_all(&*self.backend)?;
 
+        // Flush WAL pending bytes
         self.wal.flush(&*self.backend)?;
 
+        // Write updated Segment Directory to Page 1
+        {
+            let seg_dir = self.segment_dir.lock().unwrap();
+            if let Ok(seg_bytes) = seg_dir.to_bytes(self.config.page_size as usize) {
+                let _ = self
+                    .backend
+                    .write_page(1, self.config.page_size, &seg_bytes);
+            }
+        }
+
+        // Fsync everything
         self.backend.sync()?;
 
         self.mvcc.gc();
@@ -430,7 +489,7 @@ impl OvnEngine {
         let all_entries = self.btree.scan_all();
         let mut docs: Vec<ObeDocument> = all_entries
             .into_iter()
-            .filter(|e| !e.tombstone)
+            .filter(|e| Self::key_in_collection(&e.key, collection_id) && !e.tombstone)
             .filter_map(|e| ObeDocument::decode(&e.value).ok())
             .collect();
 
@@ -452,7 +511,7 @@ impl OvnEngine {
                     let foreign_entries = self.btree.scan_all();
                     let foreign_docs: Vec<ObeDocument> = foreign_entries
                         .into_iter()
-                        .filter(|e| !e.tombstone)
+                        .filter(|e| Self::key_in_collection(&e.key, foreign_id) && !e.tombstone)
                         .filter_map(|e| ObeDocument::decode(&e.value).ok())
                         .collect();
 
@@ -473,7 +532,6 @@ impl OvnEngine {
                                 .collect();
 
                             doc.set(config.as_field.clone(), ObeValue::Array(matched));
-                            let _ = foreign_id;
                             doc
                         })
                         .collect();
@@ -500,10 +558,14 @@ impl OvnEngine {
         self.ensure_collection(collection)?;
 
         let prefix_lower = prefix.to_lowercase();
+        let collection_id = Self::collection_id(collection);
         let all_entries = self.btree.scan_all();
         let mut results = Vec::new();
 
         for entry in all_entries {
+            if !Self::key_in_collection(&entry.key, collection_id) {
+                continue;
+            }
             if entry.tombstone {
                 continue;
             }
@@ -540,12 +602,43 @@ impl OvnEngine {
         &self.path
     }
 
-    fn collection_id(name: &str) -> u32 {
+    pub(crate) fn collection_id(name: &str) -> u32 {
         let mut hash: u32 = 5381;
         for byte in name.bytes() {
             hash = hash.wrapping_mul(33).wrapping_add(byte as u32);
         }
         hash
+    }
+
+    /// Build a collection-prefixed B+Tree key.
+    ///
+    /// Format: `[collection_id (4 bytes LE)][doc_id]`
+    ///
+    /// Collection isolation in the primary B+Tree relies on this prefix —
+    /// without it, `scan_all` cannot distinguish documents across collections,
+    /// which leads to cross-collection leakage on `find()`.
+    /// (See ovnplanning/04-INDEX-ENGINE.md §3 and the multi-collection
+    /// persistence regression test in `tests/integration/crash_recovery.rs`.)
+    pub(crate) fn make_btree_key(collection_id: u32, doc_id: &[u8]) -> Vec<u8> {
+        let mut key = Vec::with_capacity(4 + doc_id.len());
+        key.extend_from_slice(&collection_id.to_le_bytes());
+        key.extend_from_slice(doc_id);
+        key
+    }
+
+    /// Check if a B+Tree key belongs to the given collection.
+    pub(crate) fn key_in_collection(key: &[u8], collection_id: u32) -> bool {
+        key.len() >= 4 && key[0..4] == collection_id.to_le_bytes()
+    }
+
+    /// Strip the collection prefix from a B+Tree key, returning the raw doc_id.
+    /// Falls back to the full key for legacy un-prefixed entries.
+    pub(crate) fn strip_btree_key(key: &[u8]) -> &[u8] {
+        if key.len() >= 4 {
+            &key[4..]
+        } else {
+            key
+        }
     }
 
     fn flush_memtable(&self) -> OvnResult<()> {
@@ -634,7 +727,8 @@ impl OvnEngine {
         let file_size = self.backend.file_size()?;
         let page_size = self.config.page_size as u64;
 
-        let mut page_num = 2u64;
+        // Start from page 3: Page 0=Header, Page 1=SegDir, Page 2=CollectionRegistry
+        let mut page_num = 3u64;
         let mut loaded = 0u64;
 
         while page_num * page_size < file_size {
@@ -691,6 +785,14 @@ impl OvnEngine {
                     ]);
                     let tombstone = page_data[txid_offset + 8] == 0xFF;
 
+                    // Persisted keys are already collection-prefixed.
+                    // Skip legacy keys that lack the prefix to avoid cross-collection
+                    // leakage on engines upgraded from format v2.0 → v2.1.
+                    if key.len() < 4 {
+                        page_num += 1;
+                        continue;
+                    }
+
                     if !value.is_empty() && !tombstone {
                         let btree_entry = crate::storage::btree::BTreeEntry {
                             key,
@@ -735,8 +837,10 @@ impl OvnEngine {
                 WalRecordType::Insert | WalRecordType::Update => {
                     if !record.data.is_empty() {
                         if let Ok(doc) = ObeDocument::decode(&record.data) {
+                            // WAL records carry the original (raw) doc id; promote to a
+                            // collection-prefixed B+Tree key during replay.
                             let btree_entry = crate::storage::btree::BTreeEntry {
-                                key: doc.id.to_vec(),
+                                key: Self::make_btree_key(record.collection_id, &doc.id),
                                 value: record.data.clone(),
                                 txid: record.txid,
                                 tombstone: record.record_type == WalRecordType::Delete,
@@ -757,8 +861,10 @@ impl OvnEngine {
                     }
                 }
                 WalRecordType::Delete => {
+                    // Delete records carry the raw doc id in `data`; promote to
+                    // collection-prefixed key for B+Tree tombstone consistency.
                     let btree_entry = crate::storage::btree::BTreeEntry {
-                        key: record.data.clone(),
+                        key: Self::make_btree_key(record.collection_id, &record.data),
                         value: Vec::new(),
                         txid: record.txid,
                         tombstone: true,
@@ -774,6 +880,132 @@ impl OvnEngine {
         }
 
         Ok(())
+    }
+
+    // ── Collection Registry Persistence ─────────────────────────
+
+    /// The fixed page number for the collection registry (Metadata segment).
+    /// Page 0 = FileHeader, Page 1 = SegmentDirectory, Page 2 = CollectionRegistry.
+    const COLLECTION_REGISTRY_PAGE: u64 = 2;
+
+    /// Magic bytes for the collection registry: 'CREG'
+    const COLLECTION_REGISTRY_MAGIC: [u8; 4] = [0x43, 0x52, 0x45, 0x47];
+
+    /// Persist the collection registry to a dedicated metadata page.
+    ///
+    /// Binary format:
+    /// ```text
+    /// [4 bytes]  Magic 'CREG'
+    /// [4 bytes]  Collection count (u32 LE)
+    /// For each collection:
+    ///   [4 bytes]  Name length (u32 LE)
+    ///   [N bytes]  Name (UTF-8)
+    /// [4 bytes]  CRC32 of all preceding bytes
+    /// ```
+    fn save_collection_registry(&self) -> OvnResult<()> {
+        let collections = self.collections.read();
+        let page_size = self.config.page_size as usize;
+
+        let mut buf = Vec::with_capacity(page_size);
+        buf.extend_from_slice(&Self::COLLECTION_REGISTRY_MAGIC);
+        buf.extend_from_slice(&(collections.len() as u32).to_le_bytes());
+
+        for name in collections.keys() {
+            let name_bytes = name.as_bytes();
+            buf.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
+            buf.extend_from_slice(name_bytes);
+        }
+
+        // CRC32 over everything so far
+        let crc = crc32fast::hash(&buf);
+        buf.extend_from_slice(&crc.to_le_bytes());
+
+        // Pad to page size
+        buf.resize(page_size, 0);
+
+        self.backend
+            .write_page(Self::COLLECTION_REGISTRY_PAGE, self.config.page_size, &buf)?;
+
+        Ok(())
+    }
+
+    /// Load the collection registry from the dedicated metadata page.
+    fn load_collection_registry(&self) -> OvnResult<()> {
+        let page_data = match self
+            .backend
+            .read_page(Self::COLLECTION_REGISTRY_PAGE, self.config.page_size)
+        {
+            Ok(data) => data,
+            Err(_) => return Ok(()), // No registry page yet
+        };
+
+        if page_data.len() < 12 {
+            return Ok(());
+        }
+
+        // Check magic
+        if page_data[0..4] != Self::COLLECTION_REGISTRY_MAGIC {
+            return Ok(()); // Not a registry page (e.g., old format data)
+        }
+
+        let count = u32::from_le_bytes(page_data[4..8].try_into().unwrap_or([0; 4])) as usize;
+
+        let mut pos = 8;
+        let mut names = Vec::with_capacity(count);
+
+        for _ in 0..count {
+            if pos + 4 > page_data.len() {
+                break;
+            }
+            let name_len =
+                u32::from_le_bytes(page_data[pos..pos + 4].try_into().unwrap_or([0; 4])) as usize;
+            pos += 4;
+
+            if pos + name_len > page_data.len() {
+                break;
+            }
+            if let Ok(name) = std::str::from_utf8(&page_data[pos..pos + name_len]) {
+                names.push(name.to_string());
+            }
+            pos += name_len;
+        }
+
+        // Verify CRC32
+        if pos + 4 <= page_data.len() {
+            let stored_crc =
+                u32::from_le_bytes(page_data[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            let computed_crc = crc32fast::hash(&page_data[0..pos]);
+            if stored_crc != 0 && stored_crc != computed_crc {
+                log::warn!(
+                    "Collection registry CRC mismatch: stored=0x{:08X}, computed=0x{:08X}. Skipping.",
+                    stored_crc,
+                    computed_crc
+                );
+                return Ok(());
+            }
+        }
+
+        // Populate collections
+        let mut collections = self.collections.write();
+        for name in names {
+            if !collections.contains_key(&name) {
+                collections.insert(name.clone(), Collection::new(name));
+            }
+        }
+
+        if !collections.is_empty() {
+            log::info!("Loaded {} collection(s) from registry", collections.len());
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for OvnEngine {
+    fn drop(&mut self) {
+        if let Err(e) = self.close() {
+            log::error!("Error during OvnEngine drop: {}", e);
+        }
     }
 }
 

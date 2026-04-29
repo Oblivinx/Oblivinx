@@ -81,9 +81,9 @@ impl OvnEngine {
         };
         self.memtable.insert(entry)?;
 
-        // B+ tree insert
+        // B+ tree insert (collection-prefixed key for isolation)
         let btree_entry = BTreeEntry {
-            key: doc.id.to_vec(),
+            key: Self::make_btree_key(collection_id, &doc.id),
             value: encoded,
             txid,
             tombstone: false,
@@ -249,12 +249,18 @@ impl OvnEngine {
 
         let all_entries = self.btree.scan_all();
         for entry in all_entries {
+            // Collection isolation: skip entries from other collections.
+            if !Self::key_in_collection(&entry.key, collection_id) {
+                continue;
+            }
             if entry.tombstone {
                 continue;
             }
-            // If we have candidate IDs from index, filter by them
+            // If we have candidate IDs from index, filter by them.
+            // Index returns raw doc_ids; entry.key is collection-prefixed.
             if let Some(ref ids) = candidate_ids {
-                if !ids.contains(&entry.key) {
+                let doc_id = Self::strip_btree_key(&entry.key);
+                if !ids.contains(doc_id) {
                     continue;
                 }
             }
@@ -404,6 +410,10 @@ impl OvnEngine {
 
         let all_entries = self.btree.scan_all();
         for entry in all_entries {
+            // Collection isolation: skip entries from other collections.
+            if !Self::key_in_collection(&entry.key, collection_id) {
+                continue;
+            }
             if entry.tombstone {
                 continue;
             }
@@ -427,9 +437,9 @@ impl OvnEngine {
                         );
                         self.wal.append(wal_record, &*self.backend)?;
 
-                        // Update B+ tree
+                        // Update B+ tree (collection-prefixed key)
                         let btree_entry = BTreeEntry {
-                            key: doc.id.to_vec(),
+                            key: Self::make_btree_key(collection_id, &doc.id),
                             value: encoded.clone(),
                             txid,
                             tombstone: false,
@@ -511,6 +521,9 @@ impl OvnEngine {
 
         let all_entries = self.btree.scan_all();
         for entry in all_entries {
+            if !Self::key_in_collection(&entry.key, collection_id) {
+                continue;
+            }
             if entry.tombstone {
                 continue;
             }
@@ -538,7 +551,7 @@ impl OvnEngine {
             self.wal.append(wal_record, &*self.backend)?;
 
             let btree_entry = BTreeEntry {
-                key: doc.id.to_vec(),
+                key: Self::make_btree_key(collection_id, &doc.id),
                 value: encoded.clone(),
                 txid,
                 tombstone: false,
@@ -569,6 +582,9 @@ impl OvnEngine {
         let all_entries = self.btree.scan_all();
 
         for entry in all_entries {
+            if !Self::key_in_collection(&entry.key, collection_id) {
+                continue;
+            }
             if entry.tombstone {
                 continue;
             }
@@ -576,7 +592,7 @@ impl OvnEngine {
                 if evaluate_filter(&filter, &doc) {
                     let txid = self.mvcc.next_txid();
                     let tombstone_entry = BTreeEntry {
-                        key: doc.id.to_vec(),
+                        key: Self::make_btree_key(collection_id, &doc.id),
                         value: Vec::new(),
                         txid,
                         tombstone: true,
@@ -627,6 +643,7 @@ impl OvnEngine {
 
         let to_delete: Vec<Vec<u8>> = all_entries
             .iter()
+            .filter(|e| Self::key_in_collection(&e.key, collection_id))
             .filter(|e| !e.tombstone)
             .filter_map(|e| ObeDocument::decode(&e.value).ok())
             .filter(|doc| evaluate_filter(&filter, doc))
@@ -634,9 +651,14 @@ impl OvnEngine {
             .collect();
 
         for doc_id in to_delete {
-            if let Ok(doc) =
-                ObeDocument::decode(&self.btree.get(&doc_id).map(|e| e.value).unwrap_or_default())
-            {
+            let prefixed_key = Self::make_btree_key(collection_id, &doc_id);
+            if let Ok(doc) = ObeDocument::decode(
+                &self
+                    .btree
+                    .get(&prefixed_key)
+                    .map(|e| e.value)
+                    .unwrap_or_default(),
+            ) {
                 let collections = self.collections.read();
                 if let Some(coll) = collections.get(collection) {
                     coll.index_manager.remove_document(&doc);
@@ -645,7 +667,7 @@ impl OvnEngine {
 
             let txid = self.mvcc.next_txid();
             let tombstone = BTreeEntry {
-                key: doc_id.clone(),
+                key: prefixed_key.clone(),
                 value: Vec::new(),
                 txid,
                 tombstone: true,
@@ -692,6 +714,9 @@ impl OvnEngine {
             let filter = parse_filter(filter_json)?;
             let all_entries = self.btree.scan_all();
             for entry in all_entries {
+                if !Self::key_in_collection(&entry.key, collection_id) {
+                    continue;
+                }
                 if entry.tombstone {
                     continue;
                 }
@@ -704,12 +729,13 @@ impl OvnEngine {
 
             let memtable_entries = self.memtable.entries_for_collection(collection_id);
             for entry in memtable_entries {
+                let prefixed_key = Self::make_btree_key(collection_id, &entry.key);
                 if !entry.tombstone
                     && !self
                         .btree
                         .scan_all()
                         .iter()
-                        .any(|e| e.key == entry.key && !e.tombstone)
+                        .any(|e| e.key == prefixed_key && !e.tombstone)
                 {
                     if let Ok(doc) = ObeDocument::decode(&entry.value) {
                         if evaluate_filter(&filter, &doc) {
@@ -721,6 +747,9 @@ impl OvnEngine {
         } else {
             let all_entries = self.btree.scan_all();
             for entry in all_entries {
+                if !Self::key_in_collection(&entry.key, collection_id) {
+                    continue;
+                }
                 if !entry.tombstone {
                     count += 1;
                 }

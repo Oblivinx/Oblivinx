@@ -539,8 +539,8 @@ mod tests {
         let decoded = FileHeader::from_bytes(&bytes).unwrap();
         assert_eq!(decoded.magic, OVN2_MAGIC);
         assert_eq!(decoded.page_size, 4096);
-        assert_eq!(decoded.version_major, 2);
-        assert_eq!(decoded.version_minor, 0);
+        assert_eq!(decoded.version_major, FORMAT_VERSION_MAJOR);
+        assert_eq!(decoded.version_minor, FORMAT_VERSION_MINOR);
         assert_eq!(decoded.db_uuid, header.db_uuid);
         assert_eq!(decoded.file_version, FileVersion::V2);
         assert_eq!(decoded.hlc_state, header.hlc_state);

@@ -68,9 +68,20 @@ pub const OVN_MAGIC_V1: u32 = 0x4F56_4E58;
 /// Default magic (always points to the current major version).
 pub const OVN_MAGIC: u32 = OVN2_MAGIC;
 
-/// File format version for v2.0.
+/// File format major version. Bumped on incompatible byte-layout changes.
 pub const FORMAT_VERSION_MAJOR: u16 = 2;
-pub const FORMAT_VERSION_MINOR: u16 = 0;
+
+/// File format minor version. Bumped when a behavior change is incompatible
+/// with prior minor versions but stays within the same major track.
+///
+/// History:
+/// - 2.0 — initial v2 "Nova" layout.
+/// - 2.1 — primary B+Tree keys are collection-prefixed
+///   `[collection_id (4 bytes LE)][doc_id]` to enforce collection isolation
+///   across `find/update/delete` after MemTable flush. Engines opening 2.0
+///   files auto-recreate the database (pre-1.0 convention; explicit migration
+///   tooling lands at v1.0).
+pub const FORMAT_VERSION_MINOR: u16 = 1;
 
 /// File format version for v1 (used during compatibility detection only).
 pub const FORMAT_VERSION_MAJOR_V1: u16 = 1;

@@ -138,8 +138,12 @@ impl OvnEngine {
             use crate::index::vector::HnswVectorIndex;
             let mut vector_index = HnswVectorIndex::new(field.to_string());
 
+            let collection_id = Self::collection_id(collection);
             let all_entries = self.btree.scan_all();
             for entry in all_entries {
+                if !Self::key_in_collection(&entry.key, collection_id) {
+                    continue;
+                }
                 if entry.tombstone {
                     continue;
                 }
@@ -186,9 +190,11 @@ impl OvnEngine {
                 let query_embedding = VectorEmbedding::new(query_vector.to_vec());
                 let matches = vector_index.search(&query_embedding, limit);
 
+                let collection_id = Self::collection_id(collection);
                 let mut results = Vec::new();
                 for (doc_id, _) in matches {
-                    if let Some(entry) = self.btree.get(&doc_id) {
+                    let prefixed_key = Self::make_btree_key(collection_id, &doc_id);
+                    if let Some(entry) = self.btree.get(&prefixed_key) {
                         if !entry.tombstone {
                             if let Ok(doc) = ObeDocument::decode(&entry.value) {
                                 results.push(doc.to_json());
@@ -227,8 +233,12 @@ impl OvnEngine {
             use crate::index::geospatial::{GeoPoint, GeoSpatialIndex};
             let mut geo_idx = GeoSpatialIndex::new();
 
+            let collection_id = Self::collection_id(collection);
             let all_entries = self.btree.scan_all();
             for entry in all_entries {
+                if !Self::key_in_collection(&entry.key, collection_id) {
+                    continue;
+                }
                 if entry.tombstone {
                     continue;
                 }
